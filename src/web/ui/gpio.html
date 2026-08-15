@@ -1,0 +1,552 @@
+<!doctype html>
+<html><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>GPIO Reporter Configuration</title>
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial; margin:1rem; background:#f6f6f6; color:#222}
+.card{background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.06); padding:1rem; margin-bottom:1rem}
+.btn{background:#007; color:#fff; border:none; padding:.5rem 1rem; border-radius:6px; cursor:pointer; display:inline-block; margin-right:.5rem}
+.btn:hover{background:#008}
+.btn.danger{background:#c33}
+.btn.danger:hover{background:#d44}
+.btn.success{background:#28a745}
+.btn.success:hover{background:#218838}
+.form-group{margin-bottom:.8rem}
+label{display:block; margin-bottom:.3rem; font-weight:600}
+input,select,textarea{width:100%; padding:.4rem; border:1px solid #ccc; border-radius:4px; box-sizing:border-box}
+input[type="checkbox"]{width:auto; margin-right:.5rem}
+.status{padding:.5rem; border-radius:4px; margin-bottom:.8rem}
+.status.ok{background:#d4edda; color:#155724}
+.status.err{background:#f8d7da; color:#721c24}
+.status.info{background:#d1ecf1; color:#0c5460}
+.tabs{display:flex; gap:.5rem; margin-bottom:1rem}
+.tab{padding:.5rem 1rem; background:#ddd; border:none; border-radius:4px; cursor:pointer}
+.tab.active{background:#007; color:#fff}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.nav-btn{background:#06a; color:#fff; border:none; padding:.6rem 1rem; border-radius:8px; cursor:pointer; text-decoration:none; display:inline-block}
+.nav-btn:hover{background:#07b}
+.form-row{display:flex; gap:1rem; align-items:end}
+.form-row .form-group{flex:1}
+.pin-config{background:#f8f9fa; padding:.8rem; border-radius:6px; margin-bottom:.5rem}
+.pin-label{font-weight:600; color:#495057; margin-bottom:.3rem}
+.disabled{opacity:.5; pointer-events:none}
+.test-section{background:#e3f2fd; padding:1rem; border-radius:6px; margin-top:1rem}
+.alert-preview{display:flex; gap:.5rem; margin:.5rem 0}
+.led-indicator{width:20px; height:20px; border-radius:50%; border:2px solid #666; display:inline-block}
+.led-critical{background:#dc3545}
+.led-warning{background:#ffc107}
+.led-info{background:#17a2b8}
+.led-success{background:#28a745}
+.led-off{background:#6c757d}
+</style>
+
+<div class="card">
+<h1>🔌 GPIO Reporter Configuration</h1>
+<a href="/" class="btn nav-btn">← Dashboard</a>
+</div>
+
+<div id="status"></div>
+
+<div class="tabs">
+<button class="tab active" onclick="showTab('general')">General Settings</button>
+<button class="tab" onclick="showTab('pins')">Pin Configuration</button>
+<button class="tab" onclick="showTab('behavior')">Behavior</button>
+<button class="tab" onclick="showTab('filters')">Filters</button>
+<button class="tab" onclick="showTab('test')">Test & Status</button>
+</div>
+
+<!-- General Settings Tab -->
+<div class="tab-content active" id="general">
+<div class="card">
+<h2>⚙️ General Settings</h2>
+<div class="form-group">
+<label><input type="checkbox" id="gpio_enabled"> Enable GPIO Reporter</label>
+</div>
+<div class="form-group">
+<label for="gpio_format">Output Format</label>
+<select id="gpio_format">
+<option value="JSON">JSON</option>
+<option value="CEF">CEF</option>
+<option value="TEXT">Plain Text</option>
+</select>
+</div>
+<div class="form-group">
+<label for="gpio_verbosity">Verbosity Level</label>
+<select id="gpio_verbosity">
+<option value="REPORTS_ONLY">Reports Only</option>
+<option value="VERBOSE">Verbose</option>
+<option value="DEBUG">Debug</option>
+</select>
+</div>
+<button class="btn success" onclick="saveGeneralConfig()">Save General Settings</button>
+</div>
+</div>
+
+<!-- Pin Configuration Tab -->
+<div class="tab-content" id="pins">
+<div class="card">
+<h2>📍 Pin Configuration</h2>
+<p>Configure GPIO pins for LEDs, buzzer, and buttons:</p>
+
+<div class="pin-config">
+<div class="pin-label">📍 Output Pins (LEDs & Buzzer)</div>
+<div class="form-row">
+<div class="form-group">
+<label for="pin_led_critical">Critical LED (Red)</label>
+<input type="number" id="pin_led_critical" min="0" max="39" value="2">
+</div>
+<div class="form-group">
+<label for="pin_led_warning">Warning LED (Yellow)</label>
+<input type="number" id="pin_led_warning" min="0" max="39" value="4">
+</div>
+<div class="form-group">
+<label for="pin_led_info">Info LED (Green)</label>
+<input type="number" id="pin_led_info" min="0" max="39" value="5">
+</div>
+<div class="form-group">
+<label for="pin_led_success">Success LED (Blue)</label>
+<input type="number" id="pin_led_success" min="0" max="39" value="18">
+</div>
+</div>
+<div class="form-group">
+<label for="pin_buzzer">Buzzer</label>
+<input type="number" id="pin_buzzer" min="0" max="39" value="19">
+</div>
+</div>
+
+<div class="pin-config">
+<div class="pin-label">🔘 Input Pins (Buttons)</div>
+<div class="form-row">
+<div class="form-group">
+<label for="pin_btn_acknowledge">Acknowledge Button</label>
+<input type="number" id="pin_btn_acknowledge" min="0" max="39" value="0">
+</div>
+<div class="form-group">
+<label for="pin_btn_reset">Reset Button</label>
+<input type="number" id="pin_btn_reset" min="0" max="39" value="35">
+</div>
+</div>
+<div class="form-row">
+<div class="form-group">
+<label for="pin_btn_learning">Learning Enable Button</label>
+<input type="number" id="pin_btn_learning" min="0" max="39" value="34">
+</div>
+<div class="form-group">
+<label for="pin_btn_maintenance">Maintenance Button</label>
+<input type="number" id="pin_btn_maintenance" min="0" max="39" value="39">
+</div>
+</div>
+</div>
+
+<button class="btn success" onclick="savePinConfig()">Save Pin Configuration</button>
+</div>
+</div>
+
+<!-- Behavior Tab -->
+<div class="tab-content" id="behavior">
+<div class="card">
+<h2>⚡ Behavior Settings</h2>
+<div class="form-group">
+<label><input type="checkbox" id="buzzer_enabled"> Enable Buzzer for Critical Alerts</label>
+</div>
+<div class="form-group">
+<label for="alert_duration">Alert Duration (ms)</label>
+<input type="number" id="alert_duration" min="1000" max="60000" value="5000">
+</div>
+<div class="form-group">
+<label for="blink_interval">LED Blink Interval (ms)</label>
+<input type="number" id="blink_interval" min="100" max="5000" value="500">
+</div>
+<div class="form-group">
+<label for="debounce_time">Button Debounce Time (ms)</label>
+<input type="number" id="debounce_time" min="10" max="500" value="50">
+</div>
+<button class="btn success" onclick="saveBehaviorConfig()">Save Behavior Settings</button>
+</div>
+</div>
+
+<!-- Filters Tab -->
+<div class="tab-content" id="filters">
+<div class="card">
+<h2>🔍 Event Filters</h2>
+<div class="form-group">
+<label><input type="checkbox" id="filters_enabled"> Enable Event Filtering</label>
+</div>
+<div class="form-group">
+<label><input type="checkbox" id="case_sensitive"> Case Sensitive Matching</label>
+</div>
+<div class="form-group">
+<label for="include_patterns">Include Patterns (one per line)</label>
+<textarea id="include_patterns" rows="4" placeholder="gpio_alert&#10;gpio_critical&#10;gpio_warning&#10;hardware_failure"></textarea>
+</div>
+<div class="form-group">
+<label for="exclude_patterns">Exclude Patterns (one per line)</label>
+<textarea id="exclude_patterns" rows="4" placeholder="debug&#10;verbose"></textarea>
+</div>
+<button class="btn success" onclick="saveFilterConfig()">Save Filter Settings</button>
+</div>
+</div>
+
+<!-- Test & Status Tab -->
+<div class="tab-content" id="test">
+<div class="card">
+<h2>🧪 Test GPIO Controls</h2>
+<div class="test-section">
+<h3>LED Test</h3>
+<p>Test individual LEDs:</p>
+<div class="alert-preview">
+<span class="led-indicator led-critical"></span>
+<button class="btn" onclick="testLED('critical')">Test Critical LED</button>
+</div>
+<div class="alert-preview">
+<span class="led-indicator led-warning"></span>
+<button class="btn" onclick="testLED('warning')">Test Warning LED</button>
+</div>
+<div class="alert-preview">
+<span class="led-indicator led-info"></span>
+<button class="btn" onclick="testLED('info')">Test Info LED</button>
+</div>
+<div class="alert-preview">
+<span class="led-indicator led-success"></span>
+<button class="btn" onclick="testLED('success')">Test Success LED</button>
+</div>
+<div class="alert-preview">
+<span class="led-indicator led-off"></span>
+<button class="btn" onclick="testLED('off')">Turn All LEDs Off</button>
+</div>
+</div>
+
+<div class="test-section">
+<h3>Buzzer Test</h3>
+<button class="btn" onclick="testBuzzer()">Test Buzzer</button>
+</div>
+
+<div class="test-section">
+<h3>Button Status</h3>
+<div id="button_status">Loading button status...</div>
+<button class="btn" onclick="refreshButtonStatus()">Refresh Button Status</button>
+</div>
+</div>
+
+<div class="card">
+<h2>📊 GPIO Reporter Status</h2>
+<div id="reporter_status">Loading status...</div>
+<button class="btn" onclick="refreshStatus()">Refresh Status</button>
+</div>
+</div>
+
+<script>
+
+  (function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionToken = urlParams.get('sid');
+
+    if (sessionToken) {
+        console.log('Session token found');
+
+        // Override fetch to automatically add Bearer token to API calls
+        const originalFetch = window.fetch;
+        if (!window.__apiFetchQueue) {
+            window.__apiFetchQueue = Promise.resolve();
+        }
+        window.fetch = function(url, options = {}) {
+            const isApiCall = typeof url === 'string' && url.startsWith('/api/');
+            if (!isApiCall) {
+                return originalFetch.call(this, url, options);
+            }
+
+            const opts = {...options};
+            opts.headers = {...(options && options.headers) || {}};
+            opts.headers['Authorization'] = 'Bearer ' + sessionToken;
+
+            const runner = () => originalFetch.call(window, url, opts);
+            const queued = window.__apiFetchQueue.then(runner, runner);
+            window.__apiFetchQueue = queued.catch(() => {});
+            return queued;
+        };
+
+        // Update navigation links to include session token
+        document.querySelectorAll('.nav-btn').forEach(link => {
+            const href = link.getAttribute('href');
+            if (href && !href.includes('sid=')) {
+                link.setAttribute('href', href + '?sid=' + encodeURIComponent(sessionToken));
+            }
+        });
+    } else {
+        console.warn('No session token found in URL - API calls may fail');
+    }
+})();
+
+let config = {};
+
+// Tab management
+function showTab(tabName) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
+  document.getElementById(tabName).classList.add('active');
+}
+
+// Load configuration on page load
+async function loadConfig(override) {
+  try {
+    if (override) {
+      config = override;
+      populateForm();
+      showStatus('Configuration loaded successfully', 'ok');
+      return;
+    }
+
+    const response = await fetch('/api/reporting/gpio/config', { cache: 'no-store' });
+    if (response.ok) {
+      config = await response.json();
+      populateForm();
+      showStatus('Configuration loaded successfully', 'ok');
+    } else {
+      showStatus('Failed to load configuration', 'err');
+    }
+  } catch (error) {
+    showStatus('Error loading configuration: ' + error.message, 'err');
+  }
+}
+
+// Populate form fields with current configuration
+function populateForm() {
+  // General settings
+  document.getElementById('gpio_enabled').checked = config.enabled || false;
+  document.getElementById('gpio_format').value = config.format || 'JSON';
+  document.getElementById('gpio_verbosity').value = config.verbosity || 'REPORTS_ONLY';
+
+  // Pin configuration
+  if (config.configuration && config.configuration.pins) {
+    const pins = config.configuration.pins;
+    document.getElementById('pin_led_critical').value = pins.led_critical || 2;
+    document.getElementById('pin_led_warning').value = pins.led_warning || 4;
+    document.getElementById('pin_led_info').value = pins.led_info || 5;
+    document.getElementById('pin_led_success').value = pins.led_success || 18;
+    document.getElementById('pin_buzzer').value = pins.buzzer || 19;
+    document.getElementById('pin_btn_acknowledge').value = pins.btn_acknowledge || 0;
+    document.getElementById('pin_btn_reset').value = pins.btn_reset || 35;
+    document.getElementById('pin_btn_learning').value = pins.btn_learning || 34;
+    document.getElementById('pin_btn_maintenance').value = pins.btn_maintenance || 39;
+  }
+
+  // Behavior settings
+  if (config.configuration && config.configuration.behavior) {
+    const behavior = config.configuration.behavior;
+    document.getElementById('buzzer_enabled').checked = behavior.buzzer_enabled || false;
+    document.getElementById('alert_duration').value = behavior.alert_duration_ms || 5000;
+    document.getElementById('blink_interval').value = behavior.blink_interval_ms || 500;
+    document.getElementById('debounce_time').value = behavior.debounce_ms || 50;
+  }
+
+  // Filter settings
+  if (config.filters) {
+    document.getElementById('filters_enabled').checked = config.filters.enabled || false;
+    document.getElementById('case_sensitive').checked = config.filters.case_sensitive || false;
+    document.getElementById('include_patterns').value = (config.filters.include || []).join('\n');
+    document.getElementById('exclude_patterns').value = (config.filters.exclude || []).join('\n');
+  }
+}
+
+// Save configuration functions
+async function saveGeneralConfig() {
+  const newConfig = {
+    enabled: document.getElementById('gpio_enabled').checked,
+    format: document.getElementById('gpio_format').value,
+    verbosity: document.getElementById('gpio_verbosity').value
+  };
+  await saveConfig(newConfig, 'General settings saved successfully');
+}
+
+async function savePinConfig() {
+  const newConfig = {
+    configuration: {
+      ...config.configuration,
+      pins: {
+        led_critical: parseInt(document.getElementById('pin_led_critical').value),
+        led_warning: parseInt(document.getElementById('pin_led_warning').value),
+        led_info: parseInt(document.getElementById('pin_led_info').value),
+        led_success: parseInt(document.getElementById('pin_led_success').value),
+        buzzer: parseInt(document.getElementById('pin_buzzer').value),
+        btn_acknowledge: parseInt(document.getElementById('pin_btn_acknowledge').value),
+        btn_reset: parseInt(document.getElementById('pin_btn_reset').value),
+        btn_learning: parseInt(document.getElementById('pin_btn_learning').value),
+        btn_maintenance: parseInt(document.getElementById('pin_btn_maintenance').value)
+      }
+    }
+  };
+  await saveConfig(newConfig, 'Pin configuration saved successfully');
+}
+
+async function saveBehaviorConfig() {
+  const newConfig = {
+    configuration: {
+      ...config.configuration,
+      behavior: {
+        buzzer_enabled: document.getElementById('buzzer_enabled').checked,
+        alert_duration_ms: parseInt(document.getElementById('alert_duration').value),
+        blink_interval_ms: parseInt(document.getElementById('blink_interval').value),
+        debounce_ms: parseInt(document.getElementById('debounce_time').value)
+      }
+    }
+  };
+  await saveConfig(newConfig, 'Behavior settings saved successfully');
+}
+
+async function saveFilterConfig() {
+  const includeText = document.getElementById('include_patterns').value;
+  const excludeText = document.getElementById('exclude_patterns').value;
+
+  const newConfig = {
+    filters: {
+      enabled: document.getElementById('filters_enabled').checked,
+      case_sensitive: document.getElementById('case_sensitive').checked,
+      include: includeText ? includeText.split('\n').filter(line => line.trim()) : [],
+      exclude: excludeText ? excludeText.split('\n').filter(line => line.trim()) : []
+    }
+  };
+  await saveConfig(newConfig, 'Filter settings saved successfully');
+}
+
+// Generic save function
+async function saveConfig(newConfig, successMessage) {
+  try {
+    // Merge with existing config
+    const mergedConfig = { ...config, ...newConfig };
+
+    const response = await fetch('/api/reporting/gpio/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mergedConfig)
+    });
+
+    if (response.ok) {
+      config = mergedConfig;
+      showStatus(successMessage, 'ok');
+    } else {
+      showStatus('Failed to save configuration', 'err');
+    }
+  } catch (error) {
+    showStatus('Error saving configuration: ' + error.message, 'err');
+  }
+}
+
+// Test functions
+async function testLED(level) {
+  try {
+    const response = await fetch('/api/reporting/gpio/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'led', level: level })
+    });
+
+    if (response.ok) {
+      showStatus(`LED test (${level}) sent successfully`, 'ok');
+    } else {
+      showStatus('Failed to send LED test command', 'err');
+    }
+  } catch (error) {
+    showStatus('Error testing LED: ' + error.message, 'err');
+  }
+}
+
+async function testBuzzer() {
+  try {
+    const response = await fetch('/api/reporting/gpio/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'buzzer' })
+    });
+
+    if (response.ok) {
+      showStatus('Buzzer test sent successfully', 'ok');
+    } else {
+      showStatus('Failed to send buzzer test command', 'err');
+    }
+  } catch (error) {
+    showStatus('Error testing buzzer: ' + error.message, 'err');
+  }
+}
+
+// Status functions
+async function refreshStatus(override) {
+  try {
+    const status = override || await (async () => {
+      const response = await fetch('/api/reporting/gpio/status', { cache: 'no-store' });
+      if (!response.ok) return null;
+      return await response.json();
+    })();
+    if (status) {
+      document.getElementById('reporter_status').innerHTML = `
+        <div class="status ${status.enabled ? 'ok' : 'err'}">
+          <strong>Status:</strong> ${status.enabled ? 'Enabled' : 'Disabled'}<br>
+          <strong>Events Processed:</strong> ${status.events_processed || 0}<br>
+          <strong>Current LED State:</strong> ${status.current_led || 'OFF'}<br>
+          <strong>Buzzer Active:</strong> ${status.buzzer_active ? 'Yes' : 'No'}
+        </div>
+      `;
+    } else {
+      document.getElementById('reporter_status').innerHTML = '<div class="status err">Failed to load status</div>';
+    }
+  } catch (error) {
+    document.getElementById('reporter_status').innerHTML = `<div class="status err">Error: ${error.message}</div>`;
+  }
+}
+
+async function refreshButtonStatus(override) {
+  try {
+    const buttons = override || await (async () => {
+      const response = await fetch('/api/reporting/gpio/buttons', { cache: 'no-store' });
+      if (!response.ok) return null;
+      return await response.json();
+    })();
+    if (buttons) {
+      let html = '<div class="status info">';
+      html += `<strong>Acknowledge:</strong> ${buttons.acknowledge ? 'PRESSED' : 'Released'}<br>`;
+      html += `<strong>Reset:</strong> ${buttons.reset ? 'PRESSED' : 'Released'}<br>`;
+      html += `<strong>Learning:</strong> ${buttons.learning ? 'PRESSED' : 'Released'}<br>`;
+      html += `<strong>Maintenance:</strong> ${buttons.maintenance ? 'PRESSED' : 'Released'}`;
+      html += '</div>';
+      document.getElementById('button_status').innerHTML = html;
+    } else {
+      document.getElementById('button_status').innerHTML = '<div class="status err">Failed to load button status</div>';
+    }
+  } catch (error) {
+    document.getElementById('button_status').innerHTML = `<div class="status err">Error: ${error.message}</div>`;
+  }
+}
+
+// Utility function
+function showStatus(message, type) {
+  const statusDiv = document.getElementById('status');
+  statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+  setTimeout(() => statusDiv.innerHTML = '', 5000);
+}
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', () => {
+  (async () => {
+    try {
+      let boot = null;
+      try {
+        const r = await fetch('/api/page/bootstrap?name=gpio', { cache: 'no-store' });
+        if (r && r.ok) boot = await r.json();
+      } catch (e) { boot = null; }
+
+      if (boot && boot.data) {
+        await loadConfig(boot.data.gpio_config || null);
+        await refreshStatus(boot.data.gpio_status || null);
+        await refreshButtonStatus(boot.data.gpio_buttons || null);
+      } else {
+        await loadConfig();
+        await refreshStatus();
+        await refreshButtonStatus();
+      }
+    } catch (err) {
+      console.error('GPIO page initial load failed:', err);
+    }
+  })();
+});
+</script>
+</html>

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Private vulnerability report
+    url: https://github.com/il-prof-f-a/ESP32-OT-Security-Assessment/security/advisories/new
+    about: Report exploitable or security-sensitive findings privately.

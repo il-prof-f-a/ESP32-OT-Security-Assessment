@@ -1,0 +1,29 @@
+# Build output
+.pio/
+build/
+compile_commands.json
+/dependencies.lock
+/sdkconfig
+sdkconfig
+sdkconfig.*
+!sdkconfig.defaults
+!sdkconfig.*.defaults
+
+# Editor and Python caches
+.vscode/
+__pycache__/
+*.py[cod]
+
+# Locally generated credentials and TLS material
+.credentials/
+credentials/
+*.key
+*.pem
+*.crt
+*.cer
+components/config_blob/config.json
+src/web/tls_cert.h
+
+# Local test output
+reports/
+test-results/

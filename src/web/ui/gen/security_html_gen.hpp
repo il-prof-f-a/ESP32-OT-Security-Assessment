@@ -1,0 +1,873 @@
+/* auto-generated from security.html */
+#pragma once
+static const char* SECURITY_HTML_GEN = R"HTML(
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Settings - ICS Security Device</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        .card { background: white; border-radius: 12px; padding: 30px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        h1 { color: #2d3748; margin-bottom: 10px; font-size: 28px; }
+        h2 { color: #4a5568; margin: 20px 0 15px; font-size: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+        .subtitle { color: #718096; margin-bottom: 25px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; color: #2d3748; font-weight: 600; }
+        input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; }
+        .checkbox-label { display: flex; align-items: center; gap: 12px; padding: 15px; background: #f7fafc; border-radius: 8px; cursor: pointer; transition: background 0.3s; }
+        .checkbox-label:hover { background: #edf2f7; }
+        .checkbox-label input { margin: 0; }
+        .checkbox-label span { flex: 1; }
+        .info-box { background: #ebf8ff; border-left: 4px solid #3182ce; padding: 15px; border-radius: 6px; margin: 15px 0; }
+        .info-box.warning { background: #fffaf0; border-color: #ed8936; }
+        .info-box.success { background: #f0fff4; border-color: #38a169; }
+        .status-badge { display: inline-block; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; }
+        .status-enabled { background: #c6f6d5; color: #22543d; }
+        .status-disabled { background: #fed7d7; color: #742a2a; }
+        #alerts-list { list-style: none; padding: 0; margin: 0; }
+        .alert-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05); }
+        .alert-card.acknowledged { opacity: 0.75; border-color: #cbd5f5; }
+        .alert-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .alert-title { font-weight: 600; font-size: 1rem; color: #2d3748; }
+        .alert-title.critical { color: #c53030; }
+        .alert-title.warning { color: #b7791f; }
+        .alert-title.info { color: #2c5282; }
+        .alert-meta { font-size: 0.8rem; color: #4a5568; display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 8px; }
+        .alert-meta span { background: rgba(99, 102, 241, 0.08); padding: 4px 8px; border-radius: 6px; }
+        .alert-detail { background: #fff; border: 1px solid #e2e8f0; padding: 8px; border-radius: 6px; font-family: monospace; font-size: 0.75rem; margin-bottom: 8px; white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow-y: auto; }
+        .alert-actions { display: flex; gap: 0.6rem; }
+        .alert-actions button { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; transition: transform 0.2s, box-shadow 0.2s; }
+        .alert-actions button:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(102, 126, 234, 0.35); }
+        .alert-actions button.secondary { background: #718096; }
+        .alert-badge { font-size: 0.7rem; padding: 4px 8px; border-radius: 999px; font-weight: 600; }
+        .alert-badge.pending { background: #fed7d7; color: #822727; }
+        .alert-badge.ack { background: #c6f6d5; color: #22543d; }
+        button { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 12px 30px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600; transition: transform 0.2s, box-shadow 0.2s; }
+        button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        input[type="text"],
+        input[type="number"],
+        input[type="url"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 16px;
+            background: #fff;
+        }
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        .loading { display: none; text-align: center; padding: 20px; }
+        .loading.active { display: block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { display: inline-block; width: 40px; height: 40px; border: 4px solid #e2e8f0; border-top-color: #667eea; border-radius: 50%; animation: spin 1s linear infinite; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>🔒 Security Settings</h1>
+            <p class="subtitle">Manage device security configuration and policies</p>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p style="margin-top: 15px; color: #718096;">Loading...</p>
+            </div>
+
+            <div id="content" style="display:none;">
+                <h2>System Security Status</h2>
+                <div class="form-group">
+                    <label>Secure Boot</label>
+                    <span class="status-badge" id="secure-boot-status">Unknown</span>
+                </div>
+                <div class="form-group">
+                    <label>Secure Boot Policy</label>
+                    <span class="status-badge" id="secure-boot-policy">Unknown</span>
+                </div>
+                <div class="form-group">
+                    <label>Flash Encryption</label>
+                    <span class="status-badge" id="flash-encryption-status">Unknown</span>
+                </div>
+                <div class="form-group">
+                    <label>Flash Encryption Policy</label>
+                    <span class="status-badge" id="flash-encryption-policy">Unknown</span>
+                </div>
+                <div class="form-group">
+                    <label>Certificate Validation Policy</label>
+                    <span class="status-badge" id="cert-validation-policy">Unknown</span>
+                </div>
+                <div class="form-group">
+                    <label>OPC UA Secure Endpoints</label>
+                    <span class="status-badge" id="opcua-enforce-status">Unknown</span>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="opcua-enforce-toggle">
+                        <span><strong>Force secure OPC UA endpoints</strong><br><small style="color:#718096;">Blocca connessioni a endpoint senza crittografia o certificati validi</small></span>
+                    </label>
+                </div>
+                <div class="info-box warning" id="temp-admin-warning" style="display:none;">
+                    <strong>Temporary admin credential active:</strong>
+                    <span id="temp-admin-details"></span>
+                </div>
+                <div class="info-box warning" id="alerts-section" style="display:none;">
+                    <strong>Security Alerts</strong>
+                    <ul id="alerts-list" style="margin-top:10px; list-style:disc; padding-left:20px;"></ul>
+                </div>
+
+                <h2>Fuzzing & Testing Controls</h2>
+                <div class="info-box warning">
+                    ⚠️ <strong>Warning:</strong> Enabling fuzzing allows the device to send potentially malformed packets to network devices for security testing. Only enable in controlled environments.
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="fuzzing-allowed">
+                        <span>
+                            <strong>Allow Fuzzing Operations</strong><br>
+                            <small style="color: #718096;">Permit vulnerability scanning and protocol fuzzing tests</small>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label>Effective Status</label>
+                    <span class="status-badge" id="fuzzing-effective-status">Unknown</span>
+                    <div style="margin-top:6px; color:#718096; font-size:0.9em;" id="fuzzing-block-reason"></div>
+                </div>
+
+                <h3 style="margin-top:18px;">Hardware Interlock (GPIO)</h3>
+                <div class="info-box warning">
+                    <strong>Tip:</strong> You can require a physical switch to be ON before unsafe fuzzing runs.
+                    Recommended wiring: GPIO input with internal pull-up, switch to GND (active-low).
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="fuzzing-gpio-gate-enabled">
+                        <span>
+                            <strong>Enable fuzzing GPIO gate</strong><br>
+                            <small style="color: #718096;">Optional physical interlock for unsafe fuzzing</small>
+                        </span>
+                    </label>
+                </div>
+
+                <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                    <div>
+                        <label for="fuzzing-gpio-num">GPIO number</label>
+                        <input type="number" id="fuzzing-gpio-num" min="0" max="255" value="0">
+                    </div>
+                    <div>
+                        <label class="checkbox-label" style="margin-top: 26px;">
+                            <input type="checkbox" id="fuzzing-gpio-active-high">
+                            <span><strong>Active HIGH</strong><br><small style="color:#718096;">Unchecked = active LOW</small></span>
+                        </label>
+                    </div>
+                    <div>
+                        <label for="fuzzing-gpio-pull-mode">Pull mode</label>
+                        <select id="fuzzing-gpio-pull-mode">
+                            <option value="1">Pull-up</option>
+                            <option value="2">Pull-down</option>
+                            <option value="0">None</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="fuzzing-gpio-gate-required">
+                        <span>
+                            <strong>Require switch ON to allow fuzzing</strong><br>
+                            <small style="color: #718096;">If disabled, gate is informational only</small>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label>Switch state</label>
+                    <span class="status-badge" id="fuzzing-gpio-state">Unknown</span>
+                </div>
+
+                <h2>Alert Policy</h2>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="alert-email-enabled">
+                        <span><strong>Email alerts</strong><br><small style="color:#718096;">Invia notifiche email sugli eventi di sicurezza critici</small></span>
+                    </label>
+                    <label for="alert-email-subject">Email subject</label>
+                    <input type="text" id="alert-email-subject" placeholder="Security Alert">
+                    <label for="alert-email-throttle">Minimum interval between emails (minutes)</label>
+                    <input type="number" id="alert-email-throttle" min="0" max="1440" value="5">
+                    <label for="alert-email-recipients">Recipients (comma separated)</label>
+                    <textarea id="alert-email-recipients" placeholder="example@domain.com, security@domain.com"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="alert-webhook-enabled">
+                        <span><strong>Webhook alerts</strong><br><small style="color:#718096;">Inoltra gli eventi a sistemi SIEM o SOAR tramite webhook</small></span>
+                    </label>
+                    <label for="alert-webhook-url">Webhook URL</label>
+                    <input type="url" id="alert-webhook-url" placeholder="https://example.com/webhook">
+                    <label for="alert-webhook-token">Token / Header</label>
+                    <input type="text" id="alert-webhook-token" placeholder="Bearer ...">
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="alert-gpio-enabled">
+                        <span><strong>GPIO alerts</strong><br><small style="color:#718096;">Attiva buzzer e indicatori hardware sugli allarmi</small></span>
+                    </label>
+                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                        <div>
+                            <label for="alert-gpio-critical">Critical pin</label>
+                            <input type="number" id="alert-gpio-critical" min="0" max="40" value="15">
+                        </div>
+                        <div>
+                            <label for="alert-gpio-warning">Warning pin</label>
+                            <input type="number" id="alert-gpio-warning" min="0" max="40" value="4">
+                        </div>
+                        <div>
+                            <label for="alert-gpio-buzzer">Buzzer pin</label>
+                            <input type="number" id="alert-gpio-buzzer" min="0" max="40" value="14">
+                        </div>
+                    </div>
+                </div>
+
+                <h2>API Key Health</h2>
+                <div class="info-box" id="api-key-summary" style="display:none;"></div>
+                <div class="form-group">
+                    <label>Total API Keys</label>
+                    <span class="status-badge" id="api-key-total">0</span>
+                </div>
+                <div class="form-group">
+                    <label>Enabled</label>
+                    <span class="status-badge" id="api-key-enabled">0</span>
+                </div>
+                <div class="form-group">
+                    <label>Rotation Required</label>
+                    <span class="status-badge" id="api-key-rotation" style="background:#fef5e7; color:#7c4a03;">0</span>
+                </div>
+                <div class="form-group">
+                    <label>Disabled Pending Rotation</label>
+                    <span class="status-badge" id="api-key-disabled" style="background:#fed7d7; color:#742a2a;">0</span>
+                </div>
+                <h2>Rate Limiting & DoS Protection</h2>
+                <div class="info-box">
+                    ℹ️ <strong>Info:</strong> Rate limiting protects the web server from flooding attacks and brute-force authentication attempts. Violators are temporarily blocked with adaptive throttling.
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="ratelimit-enabled">
+                        <span>
+                            <strong>Enable Rate Limiting</strong><br>
+                            <small style="color: #718096;">Activate DoS protection with IP-based request throttling</small>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label>Max Requests per Minute (per client)</label>
+                    <input type="number" id="max-requests-per-minute" min="1" max="600" value="60" style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 6px; font-size: 16px;">
+                    <small style="color: #718096;">Initial rate limit before adaptive reduction (1-600)</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Authentication Failure Threshold</label>
+                    <input type="number" id="auth-failure-threshold" min="1" max="20" value="5" style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 6px; font-size: 16px;">
+                    <small style="color: #718096;">Failed login attempts before 10-minute block (1-20)</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Block Duration (minutes)</label>
+                    <input type="number" id="block-duration-minutes" min="1" max="60" value="10" style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 6px; font-size: 16px;">
+                    <small style="color: #718096;">How long to block violators (1-60 minutes)</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Cooldown Period (hours)</label>
+                    <input type="number" id="cooldown-period-hours" min="1" max="24" value="6" style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 6px; font-size: 16px;">
+                    <small style="color: #718096;">Time without violations to restore original rate limit (1-24 hours)</small>
+                </div>
+
+                <div class="info-box warning">
+                    ⚙️ <strong>Adaptive Throttling:</strong> When a client exceeds the rate limit, their limit is halved and they're blocked for the configured duration. This repeats on each violation until they complete the cooldown period without violations.
+                </div>
+
+                <h2>Rate Limiter Statistics</h2>
+                <div class="form-group">
+                    <label>Total Clients Tracked</label>
+                    <span class="status-badge" id="rl-total-clients" style="background: #e6fffa; color: #234e52;">0</span>
+                </div>
+                <div class="form-group">
+                    <label>Currently Blocked Clients</label>
+                    <span class="status-badge" id="rl-blocked-clients" style="background: #fed7d7; color: #742a2a;">0</span>
+                </div>
+                <div class="form-group">
+                    <label>Total Blocks Issued</label>
+                    <span class="status-badge" id="rl-total-blocks" style="background: #fef5e7; color: #7c4a03;">0</span>
+                </div>
+                <div class="form-group">
+                    <label>Total Requests Blocked</label>
+                    <span class="status-badge" id="rl-requests-blocked" style="background: #fef5e7; color: #7c4a03;">0</span>
+                </div>
+
+                <h2>Manual Client Unblock</h2>
+                <div class="form-group">
+                    <label>Client IP Address</label>
+                    <input type="text" id="unblock-client-ip" placeholder="192.168.1.100" style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 6px; font-size: 16px;">
+                    <small style="color: #718096;">Enter the IP address of the client to unblock</small>
+                </div>
+                <button onclick="unblockClient()" style="background: #ed8936;">🔓 Unblock Client</button>
+
+                <div style="margin-top: 30px; display: flex; gap: 15px;">
+                    <button onclick="saveConfig()">💾 Save Settings</button>
+                    <button onclick="loadConfig()" style="background: #718096;">🔄 Reload</button>
+                </div>
+
+                <div class="info-box success" id="success-message" style="display:none; margin-top: 20px;">
+                    ✅ <span id="success-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+        <script>
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionToken = urlParams.get('sid');
+            window.sessionToken = sessionToken || null;
+
+            if (sessionToken) {
+                const originalFetch = window.fetch;
+                if (!window.__apiFetchQueue) {
+                    window.__apiFetchQueue = Promise.resolve();
+                }
+                window.fetch = function(url, options = {}) {
+                    const isApiCall = typeof url === 'string' && url.startsWith('/api/');
+                    if (!isApiCall) {
+                        return originalFetch.call(this, url, options);
+                    }
+
+                    const opts = {...options};
+                    opts.headers = {...(options && options.headers) || {}};
+                    opts.headers['Authorization'] = 'Bearer ' + sessionToken;
+
+                    const runner = () => originalFetch.call(window, url, opts);
+                    const queued = window.__apiFetchQueue.then(runner, runner);
+                    window.__apiFetchQueue = queued.catch(() => {});
+                    return queued;
+                };
+
+                // Propagate sid to navigation links
+                document.querySelectorAll('.nav-btn').forEach(link => {
+                    const href = link.getAttribute('href');
+                    if (href && !href.includes('sid=')) {
+                        link.setAttribute('href', href + '?sid=' + encodeURIComponent(sessionToken));
+                    }
+                });
+            } else {
+                console.warn('No session token found in URL - API calls may fail');
+            }
+        })();
+
+        function setStatusBadge(id, value, labels) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const enabled = !!value;
+            const trueText = labels && labels.trueText ? labels.trueText : 'Enabled';
+            const falseText = labels && labels.falseText ? labels.falseText : 'Disabled';
+            el.textContent = enabled ? trueText : falseText;
+            el.className = 'status-badge ' + (enabled ? 'status-enabled' : 'status-disabled');
+        }
+
+        function formatMillis(ms) {
+            if (typeof ms !== 'number' || !isFinite(ms) || ms < 0) return 'n/d';
+            if (ms >= 3600000) {
+                return (ms / 3600000).toFixed(1) + 'h';
+            }
+            if (ms >= 60000) {
+                return (ms / 60000).toFixed(1) + 'm';
+            }
+            if (ms >= 1000) {
+                return (ms / 1000).toFixed(1) + 's';
+            }
+            return ms.toFixed(0) + 'ms';
+        }
+
+        function buildMeta(label, value) {
+            const span = document.createElement('span');
+            span.textContent = label + ': ' + value;
+            return span;
+        }
+
+        function renderAlerts(alerts, config) {
+            const container = document.getElementById('alerts-section');
+            const list = document.getElementById('alerts-list');
+            if (!container || !list) return;
+            list.innerHTML = '';
+
+            let tempAlertRef = null;
+
+            if (!Array.isArray(alerts) || !alerts.length) {
+                container.style.display = 'none';
+            } else {
+                container.style.display = 'block';
+                alerts.forEach(alert => {
+                    if (!alert) {
+                        return;
+                    }
+
+                    if (!tempAlertRef && typeof alert.type === 'string' && alert.type.indexOf('security.admin.temp_password') === 0) {
+                        tempAlertRef = alert;
+                    }
+
+                    const severity = (alert.severity || 'info').toLowerCase();
+
+                    const li = document.createElement('li');
+                    li.style.listStyle = 'none';
+
+                    const card = document.createElement('div');
+                    card.className = 'alert-card';
+                    if (alert.acknowledged) {
+                        card.classList.add('acknowledged');
+                    }
+
+                    const header = document.createElement('div');
+                    header.className = 'alert-header';
+
+                    const title = document.createElement('div');
+                    title.className = 'alert-title ' + severity;
+                    title.textContent = `[${severity.toUpperCase()}] ${alert.summary || alert.type || 'Security event'}`;
+                    header.appendChild(title);
+
+                    const badge = document.createElement('span');
+                    badge.className = 'alert-badge ' + (alert.acknowledged ? 'ack' : 'pending');
+                    badge.textContent = alert.acknowledged ? 'ACKNOWLEDGED' : 'PENDING';
+                    header.appendChild(badge);
+
+                    card.appendChild(header);
+
+                    const meta = document.createElement('div');
+                    meta.className = 'alert-meta';
+                    if (alert.id) {
+                        meta.appendChild(buildMeta('ID', alert.id));
+                    }
+                    meta.appendChild(buildMeta('Timestamp', formatMillis(alert.timestamp_ms)));
+                    if (alert.acknowledged) {
+                        meta.appendChild(buildMeta('Ack time', formatMillis(alert.ack_timestamp_ms || 0)));
+                        meta.appendChild(buildMeta('Ack by', alert.acked_by || 'n/d'));
+                    }
+                    card.appendChild(meta);
+
+                    if (alert.detail) {
+                        let detailText = String(alert.detail);
+                        try {
+                            const parsed = JSON.parse(detailText);
+                            detailText = JSON.stringify(parsed, null, 2);
+                        } catch (e) {
+                            // leave original detail text
+                        }
+                        const detailBox = document.createElement('pre');
+                        detailBox.className = 'alert-detail';
+                        detailBox.textContent = detailText;
+                        card.appendChild(detailBox);
+                    }
+
+                    if (alert.id) {
+                        const actions = document.createElement('div');
+                        actions.className = 'alert-actions';
+                        if (!alert.acknowledged) {
+                            const ackBtn = document.createElement('button');
+                            ackBtn.textContent = 'Segna come gestito';
+                            ackBtn.onclick = () => acknowledgeEvent(alert.id, true);
+                            actions.appendChild(ackBtn);
+                        } else {
+                            const undoBtn = document.createElement('button');
+                            undoBtn.textContent = 'Ripristina';
+                            undoBtn.classList.add('secondary');
+                            undoBtn.onclick = () => acknowledgeEvent(alert.id, false);
+                            actions.appendChild(undoBtn);
+                        }
+                        if (actions.children.length) {
+                            card.appendChild(actions);
+                        }
+                    }
+
+                    li.appendChild(card);
+                    list.appendChild(li);
+                });
+            }
+
+            const tempBox = document.getElementById('temp-admin-warning');
+            const tempDetails = document.getElementById('temp-admin-details');
+            if (!tempBox || !tempDetails) return;
+
+            const tempActive = config && config.temporary_admin_active;
+
+            if (tempActive || tempAlertRef) {
+                tempBox.style.display = 'block';
+                if (tempAlertRef && tempAlertRef.detail) {
+                    tempDetails.textContent = tempAlertRef.detail;
+                } else {
+                    tempDetails.textContent = 'rotate immediately via configuration manager.';
+                }
+            } else {
+                tempBox.style.display = 'none';
+                tempDetails.textContent = '';
+            }
+        }
+
+        async function acknowledgeEvent(eventId, ack) {
+            if (!eventId) {
+                return;
+            }
+            try {
+                const response = await fetch('/api/security/events/ack', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ event_id: eventId, ack: ack, actor: 'web-ui' })
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    const message = data && data.message ? data.message : ('HTTP ' + response.status);
+                    throw new Error(message);
+                }
+                await loadConfig();
+                document.getElementById('success-text').textContent = ack ? 'Evento marcato come gestito' : 'Evento riportato in stato aperto';
+                document.getElementById('success-message').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('success-message').style.display = 'none';
+                }, 3000);
+            } catch (error) {
+                alert('Impossibile aggiornare lo stato dell\'evento: ' + error.message);
+            }
+        }
+
+        function updateApiKeyMetrics(metrics) {
+            const total = metrics && metrics.total ? metrics.total : 0;
+            const enabled = metrics && metrics.enabled ? metrics.enabled : 0;
+            const rotation = metrics && metrics.rotation_required ? metrics.rotation_required : 0;
+            const disabled = metrics && metrics.disabled_pending_rotation ? metrics.disabled_pending_rotation : 0;
+
+            document.getElementById('api-key-total').textContent = total;
+            document.getElementById('api-key-enabled').textContent = enabled;
+            document.getElementById('api-key-rotation').textContent = rotation;
+            document.getElementById('api-key-disabled').textContent = disabled;
+
+            const summary = document.getElementById('api-key-summary');
+            if (!summary) return;
+
+            if (rotation > 0 || disabled > 0) {
+                summary.style.display = 'block';
+                summary.style.background = '#fffaf0';
+                summary.style.borderLeftColor = '#ed8936';
+                summary.textContent = 'API key rotation required: ' + rotation + ' pending, ' + disabled + ' disabled.';
+            } else if (total === 0) {
+                summary.style.display = 'block';
+                summary.style.background = '#ebf8ff';
+                summary.style.borderLeftColor = '#3182ce';
+                summary.textContent = 'No API keys provisioned. Create a token to use the REST APIs.';
+            } else {
+                summary.style.display = 'block';
+                summary.style.background = '#f0fff4';
+                summary.style.borderLeftColor = '#38a169';
+                summary.textContent = 'All API keys comply with rotation policies';
+            }
+        }
+
+        async function loadConfig() {
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('content').style.display = 'none';
+            document.getElementById('success-message').style.display = 'none';
+
+            try {
+                let boot = null;
+                try {
+                    const r = await fetch('/api/page/bootstrap?name=security', { cache: 'no-store' });
+                    if (r && r.ok) boot = await r.json();
+                } catch (e) { boot = null; }
+
+                const data = (boot && boot.data && boot.data.security_config)
+                    ? boot.data.security_config
+                    : await (await fetch('/api/security/config', { cache: 'no-store' })).json();
+
+                const config = data.config || {};
+                document.getElementById('fuzzing-allowed').checked = !!config.fuzzing_allowed;
+
+                // Effective fuzzing status (may be blocked by physical switch gate)
+                if (document.getElementById('fuzzing-effective-status')) {
+                    setStatusBadge('fuzzing-effective-status', !!config.fuzzing_allowed_effective, { trueText: 'Allowed', falseText: 'Blocked' });
+                }
+                if (document.getElementById('fuzzing-block-reason')) {
+                    const reason = config.fuzzing_block_reason || '';
+                    document.getElementById('fuzzing-block-reason').textContent = reason ? ('Reason: ' + reason) : '';
+                }
+
+                // Optional GPIO gate controls
+                const gateEnabled = document.getElementById('fuzzing-gpio-gate-enabled');
+                const gateRequired = document.getElementById('fuzzing-gpio-gate-required');
+                const gateGpioNum = document.getElementById('fuzzing-gpio-num');
+                const gateActiveHigh = document.getElementById('fuzzing-gpio-active-high');
+                const gatePullMode = document.getElementById('fuzzing-gpio-pull-mode');
+                const gateState = document.getElementById('fuzzing-gpio-state');
+
+                if (gateEnabled) gateEnabled.checked = !!config.fuzzing_gpio_gate_enabled;
+                if (gateRequired) gateRequired.checked = !!config.fuzzing_gpio_gate_required;
+                if (gateGpioNum) gateGpioNum.value = (typeof config.fuzzing_gpio_num === 'number') ? String(config.fuzzing_gpio_num) : '0';
+                if (gateActiveHigh) gateActiveHigh.checked = !!config.fuzzing_gpio_active_high;
+                if (gatePullMode) gatePullMode.value = (typeof config.fuzzing_gpio_pull_mode === 'number') ? String(config.fuzzing_gpio_pull_mode) : '1';
+                if (gateState) {
+                    setStatusBadge('fuzzing-gpio-state', !!config.fuzzing_gpio_gate_state, { trueText: 'ON', falseText: 'OFF' });
+                }
+
+                setStatusBadge('secure-boot-status', config.secure_boot_enabled);
+                setStatusBadge('secure-boot-policy', config.secure_boot_required, { trueText: 'Required', falseText: 'Optional' });
+                setStatusBadge('flash-encryption-status', config.flash_encryption_enabled);
+                setStatusBadge('flash-encryption-policy', config.flash_encryption_required, { trueText: 'Required', falseText: 'Optional' });
+                setStatusBadge('cert-validation-policy', config.certificate_validation_required, { trueText: 'Required', falseText: 'Optional' });
+                setStatusBadge('opcua-enforce-status', config.opcua_enforce_security, { trueText: 'Enforced', falseText: 'Disabled' });
+
+                const opcuaToggle = document.getElementById('opcua-enforce-toggle');
+                if (opcuaToggle) {
+                    opcuaToggle.checked = !!config.opcua_enforce_security;
+                }
+
+                const policy = config.alert_policy || {};
+                const emailPolicy = policy.email || {};
+                const webhookPolicy = policy.webhook || {};
+                const gpioPolicy = policy.gpio || {};
+
+                const emailEnabled = document.getElementById('alert-email-enabled');
+                const emailSubject = document.getElementById('alert-email-subject');
+                const emailThrottle = document.getElementById('alert-email-throttle');
+                const emailRecipients = document.getElementById('alert-email-recipients');
+                if (emailEnabled) emailEnabled.checked = !!emailPolicy.enabled;
+                if (emailSubject) emailSubject.value = emailPolicy.subject || 'Security Alert';
+                if (emailThrottle) emailThrottle.value = typeof emailPolicy.throttle_minutes === 'number' ? emailPolicy.throttle_minutes : 5;
+                if (emailRecipients) {
+                    emailRecipients.value = Array.isArray(emailPolicy.recipients)
+                        ? emailPolicy.recipients.join(', ')
+                        : '';
+                }
+
+                const webhookEnabled = document.getElementById('alert-webhook-enabled');
+                const webhookUrl = document.getElementById('alert-webhook-url');
+                const webhookToken = document.getElementById('alert-webhook-token');
+                if (webhookEnabled) webhookEnabled.checked = !!webhookPolicy.enabled;
+                if (webhookUrl) webhookUrl.value = webhookPolicy.url || '';
+                if (webhookToken) webhookToken.value = webhookPolicy.token || '';
+
+                const gpioEnabled = document.getElementById('alert-gpio-enabled');
+                const gpioCritical = document.getElementById('alert-gpio-critical');
+                const gpioWarning = document.getElementById('alert-gpio-warning');
+                const gpioBuzzer = document.getElementById('alert-gpio-buzzer');
+                if (gpioEnabled) gpioEnabled.checked = !!gpioPolicy.enabled;
+                if (gpioCritical) gpioCritical.value = typeof gpioPolicy.critical_pin === 'number' ? gpioPolicy.critical_pin : 15;
+                if (gpioWarning) gpioWarning.value = typeof gpioPolicy.warning_pin === 'number' ? gpioPolicy.warning_pin : 4;
+                if (gpioBuzzer) gpioBuzzer.value = typeof gpioPolicy.buzzer_pin === 'number' ? gpioPolicy.buzzer_pin : 14;
+
+                renderAlerts(data.alerts || [], config);
+                updateApiKeyMetrics(data.api_key_metrics || {});
+
+                const rlData = (boot && boot.data && boot.data.ratelimit)
+                    ? boot.data.ratelimit
+                    : await (await fetch('/api/security/ratelimit', { cache: 'no-store' })).json();
+
+                if (rlData.success) {
+                    document.getElementById('ratelimit-enabled').checked = rlData.config.enabled;
+                    document.getElementById('max-requests-per-minute').value = rlData.config.max_requests_per_minute;
+                    document.getElementById('auth-failure-threshold').value = rlData.config.auth_failure_threshold;
+                    document.getElementById('block-duration-minutes').value = Math.floor(rlData.config.block_duration_ms / 60000);
+                    document.getElementById('cooldown-period-hours').value = Math.floor(rlData.config.cooldown_period_ms / 3600000);
+
+                    document.getElementById('rl-total-clients').textContent = rlData.stats.total_clients;
+                    document.getElementById('rl-blocked-clients').textContent = rlData.stats.blocked_clients;
+                    document.getElementById('rl-total-blocks').textContent = rlData.stats.total_blocks_issued;
+                    document.getElementById('rl-requests-blocked').textContent = rlData.stats.total_requests_blocked;
+                }
+            } catch (error) {
+                console.error('Failed to load config:', error);
+                alert('Failed to load security configuration');
+            } finally {
+                document.getElementById('loading').classList.remove('active');
+                document.getElementById('content').style.display = 'block';
+            }
+        }
+
+        async function saveConfig() {
+            try {
+                const opcuaToggle = document.getElementById('opcua-enforce-toggle');
+                const emailEnabled = document.getElementById('alert-email-enabled');
+                const emailSubject = document.getElementById('alert-email-subject');
+                const emailThrottle = document.getElementById('alert-email-throttle');
+                const emailRecipients = document.getElementById('alert-email-recipients');
+                const webhookEnabled = document.getElementById('alert-webhook-enabled');
+                const webhookUrl = document.getElementById('alert-webhook-url');
+                const webhookToken = document.getElementById('alert-webhook-token');
+                const gpioEnabled = document.getElementById('alert-gpio-enabled');
+                const gpioCritical = document.getElementById('alert-gpio-critical');
+                const gpioWarning = document.getElementById('alert-gpio-warning');
+                const gpioBuzzer = document.getElementById('alert-gpio-buzzer');
+
+                const fuzzGateEnabled = document.getElementById('fuzzing-gpio-gate-enabled');
+                const fuzzGateRequired = document.getElementById('fuzzing-gpio-gate-required');
+                const fuzzGateGpioNum = document.getElementById('fuzzing-gpio-num');
+                const fuzzGateActiveHigh = document.getElementById('fuzzing-gpio-active-high');
+                const fuzzGatePullMode = document.getElementById('fuzzing-gpio-pull-mode');
+
+                const sanitizeNumber = (element, min, max, fallback) => {
+                    if (!element) return fallback;
+                    const value = parseInt(element.value, 10);
+                    if (Number.isNaN(value)) return fallback;
+                    if (value < min) return min;
+                    if (value > max) return max;
+                    return value;
+                };
+
+                const config = {
+                    fuzzing_allowed: document.getElementById('fuzzing-allowed').checked,
+                    fuzzing_gpio_gate_enabled: fuzzGateEnabled ? fuzzGateEnabled.checked : false,
+                    fuzzing_gpio_gate_required: fuzzGateRequired ? fuzzGateRequired.checked : false,
+                    fuzzing_gpio_num: sanitizeNumber(fuzzGateGpioNum, 0, 255, 0),
+                    fuzzing_gpio_active_high: fuzzGateActiveHigh ? fuzzGateActiveHigh.checked : false,
+                    fuzzing_gpio_pull_mode: fuzzGatePullMode ? sanitizeNumber(fuzzGatePullMode, 0, 2, 1) : 1,
+                    secure_boot: document.getElementById('secure-boot-policy').textContent === 'Required',
+                    flash_encryption: document.getElementById('flash-encryption-policy').textContent === 'Required',
+                    certificate_validation: document.getElementById('cert-validation-policy').textContent === 'Required',
+                    opcua_enforce_security: opcuaToggle ? opcuaToggle.checked : false
+                };
+
+                const recipients = emailRecipients
+                    ? emailRecipients.value.split(',').map(r => r.trim()).filter(r => r.length > 0)
+                    : [];
+
+                const alertPolicy = {
+                    email: {
+                        enabled: emailEnabled ? emailEnabled.checked : false,
+                        subject: emailSubject ? emailSubject.value.trim() : 'Security Alert',
+                        throttle_minutes: sanitizeNumber(emailThrottle, 0, 1440, 5),
+                        recipients: recipients
+                    },
+                    webhook: {
+                        enabled: webhookEnabled ? webhookEnabled.checked : false,
+                        url: webhookUrl ? webhookUrl.value.trim() : '',
+                        token: webhookToken ? webhookToken.value.trim() : ''
+                    },
+                    gpio: {
+                        enabled: gpioEnabled ? gpioEnabled.checked : false,
+                        critical_pin: sanitizeNumber(gpioCritical, 0, 255, 15),
+                        warning_pin: sanitizeNumber(gpioWarning, 0, 255, 4),
+                        buzzer_pin: sanitizeNumber(gpioBuzzer, 0, 255, 14)
+                    }
+                };
+
+                config.alert_policy = alertPolicy;
+
+                const response = await fetch('/api/security/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                if (!response.ok) {
+                    const text = await response.text();
+                    alert('Error saving security settings: ' + text);
+                    return;
+                }
+
+                const data = await response.json();
+                if (data.success === false) {
+                    alert('Error: ' + (data.message || 'security update failed'));
+                    return;
+                }
+
+                document.getElementById('success-text').textContent = 'Security settings saved successfully';
+                document.getElementById('success-message').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('success-message').style.display = 'none';
+                }, 3000);
+
+                const rlConfig = {
+                    enabled: document.getElementById('ratelimit-enabled').checked,
+                    max_requests_per_minute: parseInt(document.getElementById('max-requests-per-minute').value, 10),
+                    auth_failure_threshold: parseInt(document.getElementById('auth-failure-threshold').value, 10),
+                    block_duration_ms: parseInt(document.getElementById('block-duration-minutes').value, 10) * 60000,
+                    cooldown_period_ms: parseInt(document.getElementById('cooldown-period-hours').value, 10) * 3600000
+                };
+
+                const rlResponse = await fetch('/api/security/ratelimit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(rlConfig)
+                });
+
+                const rlData = await rlResponse.json();
+                if (!rlData.success) {
+                    alert('Error saving rate limiter: ' + rlData.message);
+                }
+            } catch (error) {
+                console.error('Failed to save config:', error);
+                alert('Failed to save security configuration');
+            }
+        }
+
+        async function unblockClient() {
+            const clientIp = document.getElementById('unblock-client-ip').value.trim();
+
+            if (!clientIp) {
+                alert('Please enter a client IP address');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/security/unblock', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ client_id: clientIp })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('success-text').textContent = 'Client ' + clientIp + ' unblocked successfully';
+                    document.getElementById('success-message').style.display = 'block';
+                    document.getElementById('unblock-client-ip').value = '';
+                    setTimeout(() => {
+                        document.getElementById('success-message').style.display = 'none';
+                    }, 3000);
+
+                    loadConfig();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+        } catch (error) {
+            console.error('Failed to unblock client:', error);
+            alert('Failed to unblock client');
+        }
+        }
+
+        const opcuaToggleInit = document.getElementById('opcua-enforce-toggle');
+        if (opcuaToggleInit) {
+            opcuaToggleInit.addEventListener('change', () => {
+                setStatusBadge('opcua-enforce-status', opcuaToggleInit.checked, { trueText: 'Enforced', falseText: 'Disabled' });
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', loadConfig);
+    </script>
+</body>
+</html>
+
+)HTML";
+
+// Compile-time size constant (actual content length)
+static constexpr size_t SECURITY_HTML_GEN_SIZE = 47991;

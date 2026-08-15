@@ -1,0 +1,1248 @@
+/* auto-generated from dashboard.html */
+#pragma once
+static const char* DASHBOARD_HTML_GEN = R"HTML(
+<!doctype html>
+<html lang="it">
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ESP32 OT Security - Dashboard</title>
+<style>
+body{font-family:system-ui,Segoe UI,Arial;margin:1rem;background:#f6f6f6}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem}
+.card{background:#fff;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.08);padding:1rem}
+h1{font-size:1.2rem;margin:.2rem 0 1rem}
+h2{font-size:1rem;margin:.2rem 0 .6rem}
+pre{background:#111;color:#eee;padding:.6rem;border-radius:8px;overflow:auto;white-space:pre-wrap}
+.btn{background:#0a7;color:#fff;border:none;padding:.6rem .9rem;border-radius:10px;cursor:pointer}
+.row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+small{color:#666}
+.kv{display:grid;grid-template-columns:8rem 1fr;gap:.2rem .5rem;font-family:ui-monospace,monospace}
+.kv div:nth-child(odd){color:#666}
+.mono{font-family:ui-monospace,monospace}
+.nav{background:#fff;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.08);padding:1rem;margin-bottom:1rem}
+.nav h1{margin-bottom:1rem}
+.nav-buttons{display:flex;gap:.5rem;flex-wrap:wrap}
+.nav-btn{background:#06a;color:#fff;border:none;padding:.6rem 1rem;border-radius:8px;cursor:pointer;text-decoration:none;display:inline-block}
+.nav-btn:hover{background:#07b}
+.spinner{width:20px;height:20px;border:2px solid #f3f3f3;border-top:2px solid #007;border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+.status{padding:.5rem;border-radius:4px;margin-bottom:.8rem}
+.status.ok{background:#d4edda;color:#155724}
+.status.err{background:#f8d7da;color:#721c24}
+.download-progress{background:#e3f2fd;color:#0277bd;border-left:4px solid #007}
+.fixed-card{min-height:320px;display:flex;flex-direction:column}
+.scroll-pre{max-height:220px;overflow:auto}
+.list-grid{display:grid;grid-template-columns:1fr auto;gap:.25rem .5rem}
+.ok{color:#0a7}
+.warn{color:#b33}
+</style>
+<div class="nav">
+<h1>🏭 ESP32 OT Security Dashboard</h1>
+<div class="nav-buttons">
+<a href="/protocols" class="nav-btn">🔌 Configurazione Protocolli</a>
+<a href="/scanner" class="nav-btn">🔍 Protocol Discovery</a>
+<a href="/vulnerability-scanner" class="nav-btn">🛡️ Vulnerability Scanner</a>
+<a href="/fuzzing" class="nav-btn">⚠️ Fuzzing (Offensive)</a>
+<a href="/ids" class="nav-btn">🛡️ Intrusion Detection System</a>
+<a href="/signatures" class="nav-btn">🔍 CVE Signatures</a>
+<a href="/network-presence" class="nav-btn">🔍 Network Presence</a>
+<a href="/audit" class="nav-btn">🛡️ Audit Manager</a>
+<a href="/reporting" class="nav-btn">📊 Reporting</a>
+<a href="/logging" class="nav-btn">📋 Logging</a>
+<a href="/gpio" class="nav-btn">🔌 GPIO Reporter</a>
+<a href="/serial" class="nav-btn">🖥️ Monitor Seriale</a>
+<a href="/network" class="nav-btn">🌐 Network tools</a>
+<a href="/diagnostics" class="nav-btn">🧪 Diagnostica</a>
+</div>
+</div>
+<div class="grid">
+  <div class="card">
+    <h1>🧭 Stato</h1>
+    <div id="status" class="kv mono"></div>
+    <div class="row" style="margin-top:.6rem">
+      <button class="btn" onclick="refresh()">Aggiorna</button>
+      <button class="btn" style="background:#b33" onclick="reboot()">Riavvia</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>🔌 Plugin</h2>
+    <div id="plugins" class="mono list-grid"></div>
+  </div>
+  <div class="card">
+    <h2>🛡️ IDS</h2>
+    <div id="ids" class="mono list-grid"></div>
+  </div>
+  <div class="card">
+    <h2>🌐 Network Info</h2>
+    <div id="network_info" class="kv mono"></div>
+    <small>Stato connettività e parametri rete attivi</small>
+  </div>
+  <div class="card fixed-card">
+    <h2>⚙️ Config (JSON)</h2>
+    <pre id="cfg" class="scroll-pre"></pre>
+    <div class="row">
+      <button class="btn" onclick="save()">Salva</button>
+      <button class="btn" onclick="saveToNVSandFS()" style="margin-left:.5rem;background:#28a745">💾 Salva Completo</button>
+      <button class="btn" onclick="exportConfig()" style="margin-left:.5rem">📥 Esporta</button>
+      <button class="btn" onclick="document.getElementById('importFile').click()" style="margin-left:.5rem">📤 Importa</button>
+      <button class="btn" onclick="loadEmbeddedConfig()" style="margin-left:.5rem;background:#dc3545">🔄 Carica Config Embedded</button>
+    </div>
+    <div id="save-status" style="margin-top:1rem"></div>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importConfig(event)">
+    <small>Esporta/Importa l'intera configurazione come file JSON</small>
+  </div>
+  <div class="card fixed-card">
+    <h2>🗒️ System Logs</h2>
+    <pre id="logs" class="scroll-pre"></pre>
+    <div class="row">
+      <button class="btn" onclick="loadLogs()">Aggiorna Log</button>
+    </div>
+    <div class="row" style="margin-top:0.5rem;">
+      <button class="btn" onclick="downloadLogFile('app.log')" style="background:#28a745">📥 App</button>
+      <button class="btn" onclick="downloadLogFile('network.log')" style="background:#28a745">📥 Network</button>
+      <button class="btn" onclick="downloadLogFile('security.log')" style="background:#28a745">📥 Security</button>
+      <button class="btn" onclick="downloadLogFile('access.log')" style="background:#28a745">📥 Access</button>
+    </div>
+    <small>Log sistema: visualizzazione ultime righe + download completo</small>
+  </div>
+  <div class="card fixed-card">
+    <h2>📊 Event Logs</h2>
+    <div style="margin-bottom:1rem;">
+      <strong>File Reporter Events:</strong>
+      <div class="row" style="margin-top:0.5rem;">
+        <button class="btn" onclick="downloadLogFile('fuzzing_events.log')" style="background:#007acc">📥 Fuzzing</button>
+        <button class="btn" onclick="downloadLogFile('ids_events.log')" style="background:#007acc">📥 IDS</button>
+        <button class="btn" onclick="downloadLogFile('vulnerability_scanner.log')" style="background:#007acc">📥 Scanner</button>
+        <button class="btn" onclick="downloadLogFile('scanner_events.log')" style="background:#007acc">📥 Scan Events</button>
+        <button class="btn" onclick="downloadLogFile('audit_events.log')" style="background:#007acc">📥 Audit</button>
+        <button class="btn" onclick="downloadLogFile('gpio_events.log')" style="background:#007acc">📥 GPIO</button>
+      </div>
+    </div>
+    <small>Event logs: file completi generati dai reporter e tool di sicurezza</small>
+  </div>
+  <div class="card fixed-card">
+    <h2>🔒 Access Log</h2>
+    <pre id="accesslogs" class="scroll-pre"></pre>
+    <div class="row">
+      <button class="btn" onclick="loadAccessLogs()">Aggiorna Access Log</button>
+    </div>
+    <small>Log degli accessi HTTP/HTTPS per sicurezza</small>
+  </div>
+  <div class="card fixed-card">
+    <h2>🧪 Scanner Jobs</h2>
+    <pre id="jobs" class="scroll-pre"></pre>
+    <div class="row">
+      <button class="btn" onclick="loadJobs()">Aggiorna jobs</button>
+    </div>
+    <small>Gestione anche via API: GET/POST/DELETE /api/scanner/jobs, POST /api/scanner/run?id=ID</small>
+  </div>
+  <div class="card" style="display:none">
+    <h2>🔎 Protocol Discovery</h2>
+    <div class="row">
+      <input id="s7t" class="mono" placeholder="192.168.0.10:102" style="flex:1;min-width:12rem;padding:.4rem;border:1px solid #ccc;border-radius:8px">
+      <button class="btn" onclick="mbscan()">Modbus Discovery</button>
+      <button class="btn" onclick="s7scan()">S7 Scan</button>
+      <button class="btn" onclick="pnscan()">PROFINET Identify</button>
+      <input id="tout" class="mono" placeholder="timeout ms (1500)" style="width:12rem;padding:.4rem;border:1px solid #ccc;border-radius:8px">
+      <button class="btn" onclick="enip()">ENIP Discovery</button>
+      <input id="uat" class="mono" placeholder="opcua ip:port (es. 192.168.0.10:4840)" style="width:16rem;padding:.4rem;border:1px solid #ccc;border-radius:8px;margin-left:.6rem">
+      <button class="btn" onclick="ua()">OPC UA HEL</button>
+    </div>
+    <pre id="disc"></pre>
+  </div>
+
+  <div class="card" style="display:none">
+    <h2>🧨 Fuzzing (safe mode)</h2>
+    <div class="row">
+      <select id="fzproto" class="mono" style="padding:.4rem;border:1px solid #ccc;border-radius:8px">
+        <option value="1">MODBUS_TCP</option>
+        <option value="2">S7_COMM</option>
+        <option value="3">OPC_UA</option>
+        <option value="4">ETHERNET_IP</option>
+        <option value="5">PROFINET</option>
+      </select>
+      <input id="fztarget" class="mono" placeholder="target (es. 192.168.0.10:502)" style="flex:1;min-width:16rem;padding:.4rem;border:1px solid #ccc;border-radius:8px">
+      <input id="fzrate" class="mono" placeholder="rate/s (20)" style="width:9rem;padding:.4rem;border:1px solid #ccc;border-radius:8px">
+      <input id="fzmax" class="mono" placeholder="max cases (500)" style="width:11rem;padding:.4rem;border:1px solid #ccc;border-radius:8px">
+      <button class="btn" onclick="fzCreate()">Crea job</button>
+      <button class="btn" onclick="fzList()">Lista</button>
+    </div>
+    <div class="row">
+      <input id="fzid" class="mono" placeholder="job id" style="width:8rem;padding:.4rem;border:1px solid #ccc;border-radius:8px">
+      <button class="btn" onclick="fzRun()">Run</button>
+      <button class="btn" onclick="fzStop()">Stop All</button>
+    </div>
+    <pre id="fzz"></pre>
+  </div>
+
+  <div class="card" style="display:none">
+    <h2>📈 Advanced IDS Stats</h2>
+    <div class="row mono">
+      <div>pps: <span id="pps">0</span></div>
+      <div>dropped: <span id="dropped">0</span></div>
+      <div>ring: <span id="ring">0</span>/<span id="ring_slots">0</span></div>
+    </div>
+    <canvas id="ids_chart_pps" width="560" height="160" style="width:100%;max-width:620px;border:1px solid #ddd;border-radius:8px"></canvas>
+    <canvas id="ids_chart_drop" width="560" height="80" style="width:100%;max-width:620px;border:1px solid #ddd;border-radius:8px;margin-top:.6rem"></canvas>
+    <div class="row" style="margin-top:.5rem">
+      <button class="btn" onclick="idsStatsOnce()">Aggiorna statistiche</button>
+      <button class="btn" style="background:#555" onclick="idsChartsClear()">Pulisci grafici</button>
+    </div>
+  </div>
+
+  <div class="card" style="display:none">
+    <h2>🧾 Signatures DB</h2>
+    <div class="row mono">
+      <input type="file" id="sigfile" accept=".json" style="border:1px solid #ccc;border-radius:8px;padding:.4rem">
+      <button class="btn" onclick="uploadSig()">Upload</button>
+      <button class="btn" onclick="reloadSig()">Reload</button>
+    </div>
+    <small>Il file verrà salvato in <code>/data/signatures.json</code> e caricato nell’IDS.</small>
+  </div>
+
+  <div class="card">
+    <h2>📝 Event Format</h2>
+    <div class="row mono">
+      <label><input type="radio" name="fmt" value="JSON"> JSON</label>
+      <label><input type="radio" name="fmt" value="CEF"> CEF</label>
+      <label><input type="radio" name="fmt" value="LEEF"> LEEF</label>
+      <label><input type="radio" name="fmt" value="CEE"> CEE</label>
+      <button class="btn" onclick="saveFmt()">Salva</button>
+    </div>
+  </div>
+
+  <div class="card" style="display:none">
+    <h2>🛡️ Advanced IDS</h2>
+    <div class="row">
+      <label class="mono">Modbus max/s <input id="ids_mb" type="text" style="width:6rem;padding:.4rem;border:1px solid #ccc;border-radius:8px"></label>
+      <label class="mono">S7 max/s <input id="ids_s7" type="text" style="width:6rem;padding:.4rem;border:1px solid #ccc;border-radius:8px"></label>
+      <label class="mono">ENIP max/s <input id="ids_en" type="text" style="width:6rem;padding:.4rem;border:1px solid #ccc;border-radius:8px"></label>
+      <label class="mono">PN max/s <input id="ids_pn" type="text" style="width:6rem;padding:.4rem;border:1px solid #ccc;border-radius:8px"></label>
+      <label class="mono">OPCUA max/s <input id="ids_ua" type="text" style="width:6rem;padding:.4rem;border:1px solid #ccc;border-radius:8px"></label>
+      <label class="mono">Replay ms <input id="ids_rw" type="text" style="width:8rem;padding:.4rem;border:1px solid #ccc;border-radius:8px"></label>
+    </div>
+    <div class="row" style="margin-top:.4rem">
+      <button class="btn" onclick="idsLoad()">Carica</button>
+      <button class="btn" onclick="idsSave()">Salva</button>
+      <button class="btn" onclick="idsLive()">Aggiorna Live</button>
+    </div>
+    <small style="color:#666;margin-top:.5rem;display:block">Nota: Configurazioni specifiche per protocollo (es. Modbus) sono ora gestite nella pagina IDS avanzato</small>
+    <pre id="ids_stats"></pre>
+  </div>
+
+  <div class="card" style="display:none">
+    <h2>🛰️ Reporting</h2>
+    <div class="row">
+      <button class="btn" onclick="rpLoad()">Carica canali</button>
+      <button class="btn" onclick="rpFlush()">Flush coda</button>
+      <span id="rpQueued" class="mono"></span>
+    </div>
+    <div id="rpTable"></div>
+  </div>
+
+  <div class="card" style="display:none">
+    <h2>🧩 Reporting Endpoints</h2>
+    <p class="mono">Configura destinazioni (MQTT, Webhook, Email, File) e salva su NVS.</p>
+    <textarea id="reCfg" style="width:100%;height:180px;font-family:ui-monospace,monospace"></textarea>
+    <div class="row">
+      <button class="btn" onclick="reLoad()">Carica</button>
+      <button class="btn" onclick="reSave()">Salva & Applica</button>
+    </div>
+  </div>
+
+  <div class="card" style="display:none">
+    <h2>🗄️ Log Retention</h2>
+    <div class="row">
+      <label class="mono">Dir <input id="lr_dir" type="text" style="width:16rem;padding:.4rem;border:1px solid #ccc;border-radius:8px"></label>
+      <label class="mono">Quota MB <input id="lr_mb" type="text" style="width:6rem;padding:.4rem;border:1px solid #ccc;border-radius:8px"></label>
+      <label class="mono">Max giorni <input id="lr_days" type="text" style="width:6rem;padding:.4rem;border:1px solid #ccc;border-radius:8px"></label>
+      <label class="mono">Periodo min <input id="lr_per" type="text" style="width:6rem;padding:.4rem;border:1px solid #ccc;border-radius:8px"></label>
+    </div>
+    <div class="row" style="margin-top:.4rem">
+      <button class="btn" onclick="lrLoad()">Carica</button>
+      <button class="btn" onclick="lrSave()">Salva</button>
+      <button class="btn" onclick="lrRun()">Esegui ora</button>
+    </div>
+  </div>
+</div>
+<script>
+// Extract session token from URL and add to all API calls
+(function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionToken = urlParams.get('sid');
+
+    if (sessionToken) {
+        console.log('Session token found');
+
+        // Override fetch to automatically add Bearer token to API calls
+        const originalFetch = window.fetch;
+        if (!window.__apiFetchQueue) {
+            window.__apiFetchQueue = Promise.resolve();
+        }
+        window.fetch = function(url, options = {}) {
+            const isApiCall = typeof url === 'string' && url.startsWith('/api/');
+            if (!isApiCall) {
+                return originalFetch.call(this, url, options);
+            }
+
+            const opts = {...options};
+            opts.headers = {...(options && options.headers) || {}};
+            opts.headers['Authorization'] = 'Bearer ' + sessionToken;
+            console.log('Adding Bearer token to API call (queued)');
+
+            const runner = () => originalFetch.call(window, url, opts);
+            const queued = window.__apiFetchQueue.then(runner, runner);
+            window.__apiFetchQueue = queued.catch(() => {});
+            return queued;
+        };
+
+        // Update navigation links to include session token
+        document.querySelectorAll('.nav-btn').forEach(link => {
+            const href = link.getAttribute('href');
+            if (href && !href.includes('sid=')) {
+                link.setAttribute('href', href + '?sid=' + encodeURIComponent(sessionToken));
+            }
+        });
+    } else {
+        console.warn('No session token found in URL - API calls may fail');
+    }
+})();
+
+async function lrLoad(override){
+  const c = override || await fetch('/api/logs/retention',{headers:{'X-API-Key':window.apiKey||''}}).then(r=>r.json());
+  document.getElementById('lr_dir').value = c.dir || '/data/logs';
+  document.getElementById('lr_mb').value  = c.max_mb || 16;
+  document.getElementById('lr_days').value= c.max_days || 14;
+  document.getElementById('lr_per').value = c.period_min || 30;
+}
+async function lrSave(){
+  const c = {
+    dir: document.getElementById('lr_dir').value || '/data/logs',
+    max_mb: parseInt(document.getElementById('lr_mb').value||'16',10),
+    max_days: parseInt(document.getElementById('lr_days').value||'14',10),
+    period_min: parseInt(document.getElementById('lr_per').value||'30',10)
+  };
+  const r = await fetch('/api/logs/retention',{method:'POST',headers:{'Content-Type':'application/json','X-API-Key':window.apiKey||''},body:JSON.stringify(c)}).then(r=>r.text());
+  alert(r);
+}
+async function lrRun(){
+  const r = await fetch('/api/logs/retention/run',{method:'POST',headers:{'X-API-Key':window.apiKey||''}}).then(r=>r.text());
+  alert(r);
+}
+// inizializzazione via bootstrapDashboard()
+
+async function reLoad(override){
+  const o = override || await fetch('/api/report/endpoints').then(r=>r.json()).catch(_=>({}));
+  if (!o.mqtt && !o.webhook && !o.email && !o.file) {
+    // template
+    Object.assign(o, {
+      mqtt: { uri:"mqtts://user:pass@broker:8883", client_id:"tpoe-pro", topic:"ics/events", qos:1, retain:false, ca_pem:"" },
+      webhook: { url:"https://example.com/api/events", header:"Authorization: Bearer TOKEN", content_type:"text/plain", timeout_ms:3000 },
+      email: { host:"smtp.example.com", port:465, tls:true, username:"user", password:"pass", from:"ics@example.com", to:"soc@example.com", subject:"ICS Alert", timeout_ms:5000 },
+      file: { path:"/data/events.log", rotate_bytes:1048576, max_files:5 }
+    });
+  }
+  document.getElementById('reCfg').value = JSON.stringify(o, null, 2);
+}
+async function reSave(){
+  const txt = document.getElementById('reCfg').value;
+  let obj=null;
+  try{ obj = JSON.parse(txt); }catch(e){ alert('JSON non valido'); return; }
+  const r = await fetch('/api/report/endpoints',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(obj)}).then(r=>r.text());
+  alert(r);
+}
+// inizializzazione via bootstrapDashboard()
+
+async function rpLoad(overrideCfg, overrideEndpoints, overrideQ){
+  const cfg = overrideCfg || await fetch('/api/report/channels').then(r=>r.json()).catch(_=>({}));
+  const endpoints = overrideEndpoints || await fetch('/api/report/endpoints').then(r=>r.json()).catch(_=>({}));
+  const q = overrideQ || await fetch('/api/report/queue').then(r=>r.json()).catch(_=>({queued:0}));
+
+  document.getElementById('rpQueued').textContent = 'Queued: '+(q.queued||0);
+
+  // Lista di tutti i reporter possibili
+  const allReporters = ['mqtt', 'webhook', 'email', 'file'];
+
+  let html = '<table style="width:100%;border-collapse:collapse"><tr><th style="text-align:left">Canale</th><th>Formato</th><th>Abilitato</th><th>Configurato</th><th>Azione</th></tr>';
+
+  for (const name of allReporters) {
+    const c = cfg[name] || {enabled: false, format: 0}; // Default se non presente
+    const hasEndpoint = endpoints[name] && Object.keys(endpoints[name]).length > 0;
+
+    const sel=`
+      <select id="fmt_${name}">
+        <option value="0" ${c.format==0?'selected':''}>JSON</option>
+        <option value="1" ${c.format==1?'selected':''}>CEE</option>
+        <option value="2" ${c.format==2?'selected':''}>LEEF</option>
+        <option value="3" ${c.format==3?'selected':''}>CEF</option>
+      </select>`;
+    const chk=`<input type="checkbox" id="en_${name}" ${c.enabled?'checked':''}>`;
+    const status = hasEndpoint ? '<span style="color:green">✓</span>' : '<span style="color:red">✗</span>';
+    const btn=`<button class="btn" onclick="rpSave('${name}')">Salva</button>`;
+
+    html += `<tr><td class="mono">${name}</td><td>${sel}</td><td style="text-align:center">${chk}</td><td style="text-align:center">${status}</td><td>${btn}</td></tr>`;
+  }
+  html += '</table>';
+  html += '<small style="margin-top:1rem;display:block;"><strong>Nota:</strong> Per configurare gli endpoint, usare la sezione "Reporting config" sopra. ✓ = configurato, ✗ = non configurato.</small>';
+  document.getElementById('rpTable').innerHTML = html;
+}
+async function rpSave(name){
+  const fmt = parseInt(document.getElementById('fmt_'+name).value,10);
+  const en  = document.getElementById('en_'+name).checked;
+  const r = await fetch('/api/report/channels',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel:name,format:fmt,enabled:en})}).then(r=>r.text());
+  alert(r);
+  rpLoad();
+}
+async function rpFlush(){
+  const r = await fetch('/api/report/flush',{method:'POST'}).then(r=>r.json());
+  alert('Flushed '+r.flushed);
+  rpLoad();
+}
+// inizializzazione via bootstrapDashboard()
+
+async function idsLoad(){
+  const c = await fetch('/api/ids/advanced/config').then(r=>r.json());
+  document.getElementById('ids_mb').value = c.max_per_sec_modbus;
+  document.getElementById('ids_s7').value = c.max_per_sec_s7;
+  document.getElementById('ids_en').value = c.max_per_sec_enip;
+  document.getElementById('ids_pn').value = c.max_per_sec_pn;
+  document.getElementById('ids_ua').value = c.max_per_sec_opcua;
+  document.getElementById('ids_rw').value = c.replay_window_ms;
+  // alert_modbus_broadcast_write moved to IDS page
+  idsLive();
+}
+async function idsSave(){
+  const c = {
+    max_per_sec_modbus: parseInt(document.getElementById('ids_mb').value||'50',10),
+    max_per_sec_s7: parseInt(document.getElementById('ids_s7').value||'40',10),
+    max_per_sec_enip: parseInt(document.getElementById('ids_en').value||'60',10),
+    max_per_sec_pn: parseInt(document.getElementById('ids_pn').value||'40',10),
+    max_per_sec_opcua: parseInt(document.getElementById('ids_ua').value||'30',10),
+    replay_window_ms: parseInt(document.getElementById('ids_rw').value||'5000',10),
+    // alert_modbus_broadcast_write moved to IDS page - removed from payload
+  };
+  const r = await fetch('/api/ids/advanced/config',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify(c)}).then(r=>r.text());
+  alert(r);
+}
+async function idsLive(){
+  const s = await fetch('/api/ids/advanced/stats').then(r=>r.json()).catch(_=>({}));
+  document.getElementById('ids_stats').textContent = JSON.stringify(s,null,2);
+}
+// idsLoad() non automatico: per ridurre fan-out iniziale, usare il bottone "Carica"
+
+async function fzCreate(){
+  const p  = parseInt(document.getElementById('fzproto').value,10);
+  const t  = document.getElementById('fztarget').value.trim();
+  const r  = parseInt(document.getElementById('fzrate').value||'20',10);
+  const m  = parseInt(document.getElementById('fzmax').value||'500',10);
+  const body = {protocol:p, target:t, rate_per_sec:r, max_cases:m, safe_mode:true};
+  const res = await fetch('/api/fuzz/jobs',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)}).then(r=>r.text());
+  document.getElementById('fzz').textContent = res;
+}
+async function fzList(){
+  const res = await fetch('/api/fuzz/jobs').then(r=>r.text());
+  document.getElementById('fzz').textContent = res;
+}
+async function fzRun(){
+  const id = parseInt(document.getElementById('fzid').value||'0',10);
+  const res = await fetch('/api/fuzz/run?id='+id,{method:'POST'}).then(r=>r.text());
+  document.getElementById('fzz').textContent = res;
+}
+async function fzStop(){
+  const res = await fetch('/api/fuzz/stop',{method:'POST'}).then(r=>r.text());
+  document.getElementById('fzz').textContent = res;
+}
+
+const PROTOCOL_NAMES = {
+  1: 'Modbus TCP',
+  2: 'S7 Communication',
+  3: 'OPC UA',
+  4: 'EtherNet/IP',
+  5: 'PROFINET'
+};
+
+function esc(v){
+  return String(v == null ? '' : v)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+function prettyKey(key){
+  if(!key) return '';
+  const map = {
+    total_packets: 'Pacchetti Totali',
+    alerts: 'Alert',
+    dropped: 'Pacchetti Scartati',
+    suspicious: 'Sospetti',
+    blocked: 'Bloccati',
+    replay: 'Replay',
+    anomalies: 'Anomalie',
+    enabled: 'Abilitato',
+    active: 'Attivo'
+  };
+  if(map[key]) return map[key];
+  return key.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function boolText(v){
+  if(v === true) return '✅ Si';
+  if(v === false) return '❌ No';
+  return String(v == null ? 'N/A' : v);
+}
+
+function protocolName(value){
+  if(typeof value === 'number' && PROTOCOL_NAMES[value]) return PROTOCOL_NAMES[value];
+  if(typeof value === 'string'){
+    const s = value.toLowerCase();
+    if(s.includes('modbus')) return 'Modbus TCP';
+    if(s.includes('s7')) return 'S7 Communication';
+    if(s.includes('opc')) return 'OPC UA';
+    if(s.includes('ethernet') || s.includes('enip')) return 'EtherNet/IP';
+    if(s.includes('profinet') || s === 'pn') return 'PROFINET';
+  }
+  return String(value == null ? 'N/A' : value);
+}
+
+function renderPluginsInfo(plugins){
+  const el = document.getElementById('plugins');
+  if(!el) return;
+  const rows = [];
+
+  if(Array.isArray(plugins)){
+    plugins.forEach((p, idx) => {
+      rows.push(`<div>${esc('Plugin ' + (idx + 1))}</div><div class="ok">${esc(protocolName(p))}</div>`);
+    });
+  } else if(plugins && typeof plugins === 'object'){
+    Object.entries(plugins).forEach(([k,v]) => {
+      const name = protocolName(k);
+      if(v && typeof v === 'object'){
+        const state = (v.enabled === false || v.active === false) ? '❌ Disabilitato' : '✅ Attivo';
+        rows.push(`<div>${esc(name)}</div><div>${esc(state)}</div>`);
+      } else {
+        rows.push(`<div>${esc(name)}</div><div>${esc(boolText(v))}</div>`);
+      }
+    });
+  }
+
+  if(rows.length === 0){
+    rows.push('<div>Nessun plugin</div><div class="warn">N/A</div>');
+  }
+  el.innerHTML = rows.join('');
+}
+
+function renderIdsInfo(ids){
+  const el = document.getElementById('ids');
+  if(!el) return;
+  const rows = [];
+  const base = (ids && typeof ids === 'object') ? ids : {};
+
+  ['enabled','active','total_packets','alerts','blocked','suspicious','dropped'].forEach(k => {
+    if(base[k] !== undefined){
+      rows.push(`<div>${esc(prettyKey(k))}</div><div>${esc(boolText(base[k]))}</div>`);
+    }
+  });
+
+  const perProto = base.per_protocol || base.protocols || null;
+  if(perProto && typeof perProto === 'object'){
+    Object.entries(perProto).forEach(([k,v]) => {
+      const name = protocolName(k);
+      if(v && typeof v === 'object'){
+        const val = (v.alerts ?? v.count ?? v.total ?? JSON.stringify(v));
+        rows.push(`<div>${esc(name + ' Alerts')}</div><div>${esc(val)}</div>`);
+      } else {
+        rows.push(`<div>${esc(name)}</div><div>${esc(v)}</div>`);
+      }
+    });
+  }
+
+  if(rows.length === 0){
+    rows.push('<div>IDS</div><div class="warn">N/A</div>');
+  }
+  el.innerHTML = rows.join('');
+}
+
+async function updateNetworkInfo(statusObj, overrideWifi){
+  const netKv = document.getElementById('network_info');
+  if(!netKv) return;
+
+  const st = statusObj || {};
+  const net = st.network || {};
+  const eth = net.eth || {};
+  const wifiNet = net.wifi || {};
+
+  let wifi = overrideWifi || null;
+  if(!wifi){
+    try {
+      wifi = await fetch('/api/wifi/status').then(r => r.json());
+    } catch(_) {
+      wifi = {};
+    }
+  }
+
+  netKv.innerHTML = '';
+  const add=(k,v)=>{ netKv.insertAdjacentHTML('beforeend', `<div>${esc(k)}</div><div>${esc(v)}</div>`); };
+  add('Ethernet IP', eth.ip || 'N/A');
+  add('Ethernet Link', boolText(eth.link_up));
+  add('Ethernet MAC', eth.mac || 'N/A');
+  add('WiFi Mode', wifi.mode || wifiNet.mode || 'N/A');
+  add('WiFi Status', wifi.status || wifiNet.status || 'N/A');
+  add('WiFi IP', wifi.ip || wifiNet.ip || 'N/A');
+  add('WiFi STA Connessa', boolText(wifi.sta_connected));
+  add('WiFi AP Attivo', boolText(wifi.ap_active));
+}
+
+async function refresh(overrideStatus, overrideConfig, overrideWifi){
+  const st = overrideStatus || await fetch('/api/status').then(r=>r.json());
+  const kv = document.getElementById('status');
+  const net = st.network || {};
+  const eth = net.eth || {};
+  const wifi = net.wifi || {};
+  const ids = st.ids || {};
+  kv.innerHTML = '';
+  const add=(k,v)=>{kv.insertAdjacentHTML('beforeend',`<div>${k}</div><div>${v}</div>`)};
+  add('uptime', (st.uptime_s ?? 0)+' s');
+  add('eth_ip', eth.ip || '');
+  add('wifi_ip', wifi.ip || '');
+  add('packets', ids.total_packets ?? 0);
+  add('alerts', ids.alerts ?? 0);
+  renderPluginsInfo(st.plugins || {});
+  renderIdsInfo(ids);
+
+  // Update network connectivity view
+  await updateNetworkInfo(st, overrideWifi);
+
+  const cfg = overrideConfig || await fetch('/api/config').then(r=>r.json());
+  document.getElementById('cfg').textContent = JSON.stringify(cfg, null, 2);
+}
+async function save(){
+  try{
+    const text = document.getElementById('cfg').textContent;
+    const obj = JSON.parse(text);
+    const r = await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(obj)});
+    alert(await r.text());
+    refresh();
+  }catch(e){ alert('JSON non valido: '+e.message); }
+}
+
+async function loadEmbeddedConfig(){
+  if (!confirm('⚠️ Vuoi caricare la configurazione embedded? Questa operazione sovrascriverà tutte le modifiche personalizzate salvate.')) {
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/config/reset-to-defaults', {method: 'POST'});
+    const message = await response.text();
+
+    if (response.ok) {
+      alert('✅ ' + message + '\n\nRiavvia il dispositivo per applicare completamente la configurazione caricata.');
+      refresh(); // Reload config to show new defaults
+    } else {
+      alert('❌ Errore: ' + message);
+    }
+  } catch(e) {
+    alert('❌ Errore durante il reset: ' + e.message);
+  }
+}
+
+async function exportConfig(){
+  try {
+    console.log('Starting config export...');
+    const response = await fetch('/api/config/export');
+    console.log('Export response status:', response.status, response.statusText);
+    if (!response.ok) {
+      alert('Errore durante l\\\\esportazione: ' + response.status + ' ' + response.statusText);
+      return;
+    }
+
+    // Create download
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+
+    // Extract filename from Content-Disposition header
+    const contentDisp = response.headers.get('Content-Disposition');
+    let filename = 'esp32-security-config.json';
+    if (contentDisp) {
+      const matches = contentDisp.match(/filename="(.+)"/);
+      if (matches && matches[1]) filename = matches[1];
+    }
+
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    alert('✅ Configurazione esportata come: ' + filename);
+  } catch(e) {
+    console.error('Export error:', e);
+    alert('❌ Errore durante l\\\\esportazione: ' + e.message + '\\\\nControlla la console per dettagli.');
+  }
+}
+
+async function importConfig(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  if (!file.name.toLowerCase().endsWith('.json')) {
+    alert('❌ Seleziona un file JSON valido');
+    return;
+  }
+
+  if (!confirm('⚠️ L\\\\importazione sostituirà l\\\\intera configurazione corrente. Continuare?')) {
+    event.target.value = ''; // Reset file input
+    return;
+  }
+
+  try {
+    const fileContent = await file.text();
+
+    // Validate JSON format first
+    JSON.parse(fileContent);
+
+    const response = await fetch('/api/config/import', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: fileContent
+    });
+
+    const result = await response.json();
+
+    if (response.ok && result.success) {
+      alert('✅ ' + result.message + '\\\\nDimensione: ' + result.size + ' bytes');
+      refresh(); // Reload the current config display
+    } else {
+      alert('❌ Errore durante l\\\\importazione: ' + (result.message || response.statusText));
+    }
+  } catch(e) {
+    console.error('Import error:', e);
+    if (e instanceof SyntaxError) {
+      alert('❌ File JSON non valido: ' + e.message);
+    } else {
+      alert('❌ Errore durante l\\\\importazione: ' + e.message);
+    }
+  } finally {
+    event.target.value = ''; // Reset file input for next use
+  }
+}
+
+async function reboot(){
+  if(!confirm('Riavviare il dispositivo?')) return;
+  await fetch('/api/reboot', {method:'POST'});
+}
+
+async function saveToNVSandFS() {
+  try {
+    const statusDiv = document.getElementById('save-status');
+    statusDiv.innerHTML = '<div style="color:#007;font-weight:bold;padding:.5rem;background:#e3f2fd;border:1px solid #007;border-radius:4px">⏳ Salvando configurazione completa (NVS + LittleFS)...</div>';
+
+    // Get current configuration from the text editor
+    const configText = document.getElementById('cfg').textContent;
+
+    // Validate JSON
+    let configObj;
+    try {
+      configObj = JSON.parse(configText);
+    } catch(e) {
+      throw new Error('JSON non valido: ' + e.message);
+    }
+
+    // Save to NVS and LittleFS using POST to /api/config
+    const saveResponse = await fetch('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(configObj)
+    });
+
+    if (!saveResponse.ok) {
+      throw new Error('Errore HTTP ' + saveResponse.status + ': ' + saveResponse.statusText);
+    }
+
+    const result = await saveResponse.text();
+
+    if (result === 'OK') {
+      statusDiv.innerHTML = '<div style="color:#28a745;font-weight:bold;padding:.5rem;background:#d4edda;border:1px solid #28a745;border-radius:4px">✅ Configurazione salvata con successo su NVS e LittleFS!<br><small>La configurazione sarà caricata automaticamente al prossimo riavvio.</small></div>';
+    } else {
+      throw new Error('Risposta inaspettata dal server: ' + result);
+    }
+
+    // Auto-hide success message after 8 seconds
+    setTimeout(() => {
+      statusDiv.innerHTML = '';
+    }, 8000);
+
+  } catch(e) {
+    const statusDiv = document.getElementById('save-status');
+    statusDiv.innerHTML = '<div style="color:#dc3545;font-weight:bold;padding:.5rem;background:#f8d7da;border:1px solid #dc3545;border-radius:4px">❌ Errore nel salvataggio completo:<br>' + e.message + '</div>';
+    console.error('SaveToNVSandFS error:', e);
+
+    // Keep error message longer
+    setTimeout(() => {
+      statusDiv.innerHTML = '';
+    }, 10000);
+  }
+}
+
+async function updateWiFiStatus(override){
+  // Backward compatibility shim: WiFi card replaced by Network Info card.
+  return updateNetworkInfo(null, override);
+}
+
+async function connectWiFi(){
+  const ssidEl = document.getElementById('wifi_ssid');
+  const pwdEl = document.getElementById('wifi_password');
+  if (!ssidEl || !pwdEl) {
+    alert('La gestione WiFi è stata rimossa dalla dashboard. Usa la pagina Network.');
+    return;
+  }
+  const ssid = ssidEl.value.trim();
+  const password = pwdEl.value;
+
+  if (!ssid) {
+    alert('Inserisci il nome della rete WiFi (SSID)');
+    return;
+  }
+
+  if (confirm(`Salvare le credenziali WiFi per la rete "${ssid}" e riavviare il dispositivo?\n\nIl dispositivo si riavvierà e si connetterà alla nuova rete.`)) {
+    try {
+      const btn = document.querySelector('button[onclick="connectWiFi()"]');
+      if (btn) {
+        btn.textContent = 'Salvataggio...';
+        btn.disabled = true;
+      }
+
+      const response = await fetch('/api/wifi/connect', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          ssid: ssid,
+          password: password,
+          timeout: 10
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Errore nel salvataggio delle credenziali');
+      }
+
+      const result = await response.json();
+
+      // Gestione del nuovo comportamento: salvataggio + riavvio
+      if (result.success && result.message === 'wifi_credentials_saved_rebooting') {
+        alert(
+          `✓ Credenziali WiFi salvate con successo!\n\n`
+          `Il dispositivo si sta riavviando e si connetterà alla rete "${ssid}".\n\n`
+          `ISTRUZIONI:\n`
+          `1. Il riavvio richiederà circa 10-15 secondi\n`
+          `2. Connettiti alla stessa rete WiFi (${ssid}) dal tuo computer/smartphone\n`
+          `3. Trova l'indirizzo IP del dispositivo:\n`
+          `   - Controlla il router/DHCP server\n`
+          `   - Usa uno scanner di rete (es. Fing, Advanced IP Scanner)\n`
+          `4. Accedi al web server: http://[IP_DISPOSITIVO]/\n\n`
+          `La pagina si ricaricherà automaticamente tra qualche secondo.`
+        );
+
+        document.getElementById('wifi_ssid').value = '';
+        document.getElementById('wifi_password').value = '';
+
+        // Attendi qualche secondo prima di ricaricare la pagina
+        // Questo dà tempo al dispositivo di riavviarsi
+        setTimeout(() => {
+          location.reload();
+        }, 3000);
+
+        return;
+      }
+
+      // Fallback per compatibilità con vecchio comportamento (se esiste)
+      if (result.success) {
+        alert(`Operazione completata con successo!`);
+        document.getElementById('wifi_ssid').value = '';
+        document.getElementById('wifi_password').value = '';
+        if (btn) {
+          btn.textContent = 'Connetti';
+          btn.disabled = false;
+        }
+      } else {
+        alert(`Operazione fallita: ${result.message || 'Errore sconosciuto'}`);
+        if (btn) {
+          btn.textContent = 'Connetti';
+          btn.disabled = false;
+        }
+      }
+
+    } catch(e) {
+      alert('Errore durante il salvataggio: ' + e.message);
+      const btn = document.querySelector('button[onclick="connectWiFi()"]');
+      if (btn) {
+        btn.textContent = 'Connetti';
+        btn.disabled = false;
+      }
+    }
+  }
+}
+async function loadLogs(){
+  const txt = await fetch('/api/logs?name=app.log&tail=20').then(r=>r.text());
+  document.getElementById('logs').textContent = txt;
+}
+async function loadAccessLogs(){
+  try {
+    const logs = await fetch('/api/logs/access?limit=20').then(r=>r.json());
+    let output = '';
+    logs.forEach(log => {
+      output += `${log.timestamp} ${log.client_ip} ${log.method} ${log.uri} [${log.response_code}] ${log.auth_status} ${log.is_https ? 'HTTPS' : 'HTTP'}\n`;
+    });
+    document.getElementById('accesslogs').textContent = output || 'Nessun log di accesso';
+  } catch(e) {
+    document.getElementById('accesslogs').textContent = 'Errore nel caricamento access log: ' + e.message;
+  }
+}
+async function loadJobs(){
+  try {
+    const response = await fetch('/api/scanner/jobs');
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    const js = await response.json();
+    document.getElementById('jobs').textContent = JSON.stringify(js, null, 2);
+  } catch (e) {
+    document.getElementById('jobs').textContent = `Scanner API Error: ${e.message}\n(Scanner may be disabled in configuration)`;
+  }
+}
+async function s7scan(){
+  const t = document.getElementById('s7t').value.trim();
+  const res = await fetch('/api/discovery/s7?target='+encodeURIComponent(t), {method:'POST'}).then(r=>r.text());
+  document.getElementById('disc').textContent = res;
+}
+async function mbscan(){
+  const t = document.getElementById('s7t').value.trim() || '192.168.1.0/24';
+  const res = await fetch('/api/discovery/modbus?target='+encodeURIComponent(t), {method:'POST'}).then(r=>r.text());
+  document.getElementById('disc').textContent = res;
+}
+async function pnscan(){
+  const res = await fetch('/api/discovery/profinet', {method:'POST'}).then(r=>r.text());
+  document.getElementById('disc').textContent = res;
+}
+async function enip(){
+  const to = document.getElementById('tout').value.trim() || '1500';
+  const res = await fetch('/api/discovery/enip?timeout_ms='+encodeURIComponent(to), {method:'POST'}).then(r=>r.text());
+  document.getElementById('disc').textContent = res;
+}
+
+function ua(){
+  const target = document.getElementById('uat').value.trim();
+  const tout = parseInt(document.getElementById('tout').value||"1500",10);
+  fetch(`/api/discovery/opcua?target=${encodeURIComponent(target)}&timeout=${tout}`, {method:'POST'})
+    .then(r=>r.json()).then(j=>{
+      const pre = document.getElementById('disc');
+      pre.textContent += `OPCUA ${j.ip}:${j.port} → ${j.ok?'ACK':'NO-ACK'}\n`;
+    }).catch(e=>alert("OPCUA error: "+e.message));
+}
+
+// Global download state management
+let isDownloadInProgress = false;
+
+// Download log file function with loading animation and navigation blocking
+async function downloadLogFile(logName) {
+  // Prevent concurrent downloads
+  if (isDownloadInProgress) {
+    alert('⚠️ Un download è già in corso. Attendere il completamento prima di scaricarne un altro.');
+    return;
+  }
+
+  try {
+    console.log('📥 Downloading ' + logName + '...');
+
+    // Set download state and block navigation
+    isDownloadInProgress = true;
+    showDownloadProgress(logName, true);
+    disableDownloadButtons(true);
+
+    // Create download via fetch and blob to handle authentication
+    const url = '/api/logs/download?name=' + encodeURIComponent(logName);
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error('Download failed: HTTP ' + response.status + ' - ' + response.statusText);
+    }
+
+    // Get blob and create download link
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    // Extract filename from Content-Disposition header if available
+    const contentDisposition = response.headers.get('Content-Disposition');
+    let filename = logName;
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=(["']*)(.+?)\1/);
+      if (filenameMatch) {
+        filename = filenameMatch[2];
+      }
+    }
+
+    // Trigger download
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Cleanup blob URL
+    setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+
+    console.log('✅ Successfully downloaded: ' + filename);
+
+    // Show success message and restore UI
+    showDownloadProgress('✅ Downloaded ' + filename, false);
+    setTimeout(() => {
+      showDownloadProgress('', false);
+    }, 3000);
+
+  } catch (e) {
+    console.error('Download error:', e);
+    showDownloadProgress('❌ Download failed: ' + e.message, false);
+    setTimeout(() => {
+      showDownloadProgress('', false);
+    }, 5000);
+  } finally {
+    // Always restore UI state
+    isDownloadInProgress = false;
+    disableDownloadButtons(false);
+  }
+}
+
+// Show download progress with loading animation
+function showDownloadProgress(message, isLoading) {
+  const progressDiv = document.getElementById('download-progress') || createProgressDiv();
+
+  if (message) {
+    progressDiv.style.display = 'block';
+    if (isLoading) {
+      progressDiv.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="spinner"></div>
+          <span>📥 Downloading ${message}...</span>
+        </div>
+      `;
+      progressDiv.className = 'status download-progress';
+    } else {
+      progressDiv.innerHTML = message;
+      progressDiv.className = message.includes('❌') ? 'status err' : 'status ok';
+    }
+  } else {
+    progressDiv.style.display = 'none';
+  }
+}
+
+// Create progress indicator div
+function createProgressDiv() {
+  const progressDiv = document.createElement('div');
+  progressDiv.id = 'download-progress';
+  progressDiv.style.display = 'none';
+  progressDiv.style.position = 'fixed';
+  progressDiv.style.top = '20px';
+  progressDiv.style.right = '20px';
+  progressDiv.style.zIndex = '9999';
+  progressDiv.style.padding = '15px';
+  progressDiv.style.borderRadius = '8px';
+  progressDiv.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+  progressDiv.style.maxWidth = '400px';
+  document.body.appendChild(progressDiv);
+  return progressDiv;
+}
+
+// Disable/enable download buttons to prevent concurrent downloads
+function disableDownloadButtons(disabled) {
+  const downloadButtons = document.querySelectorAll('button[onclick*="downloadLogFile"]');
+  downloadButtons.forEach(button => {
+    if (disabled) {
+      button.disabled = true;
+      button.style.opacity = '0.5';
+      button.style.cursor = 'not-allowed';
+      button.title = 'Download in progress...';
+    } else {
+      button.disabled = false;
+      button.style.opacity = '1';
+      button.style.cursor = 'pointer';
+      button.title = '';
+    }
+  });
+}
+
+async function loadDashboardSequentially() {
+  try {
+    await refresh();
+    await loadLogs();
+    await loadAccessLogs();
+    await loadJobs();
+    await idsStatsOnce();
+  } catch (err) {
+    console.error('Dashboard initial load failed:', err);
+  }
+}
+// Inizializzazione tramite bootstrap (1 sola chiamata).
+async function loadDashboardBootstrap() {
+  try {
+    const r = await fetch('/api/page/bootstrap?name=dashboard', { cache: 'no-store' });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (_) {
+    return null;
+  }
+}
+
+async function bootstrapDashboard() {
+  try {
+    const boot = await loadDashboardBootstrap();
+    if (boot && boot.data) {
+      await refresh(
+        boot.data.status || null,
+        boot.data.config || null,
+        boot.data.wifi_status || null
+      );
+      return;
+    }
+  } catch (err) {
+    console.error('Dashboard bootstrap failed:', err);
+  }
+
+  // Fallback legacy (retrocompatibilita')
+  try {
+    await refresh();
+  } catch (err) {
+    console.error('Dashboard legacy initial load failed:', err);
+  }
+}
+bootstrapDashboard();
+
+// --- Advanced IDS charts ---
+const idsCharts = (() => {
+  const ppsEl   = document.getElementById('pps');
+  const dropEl  = document.getElementById('dropped');
+  const ringEl  = document.getElementById('ring');
+  const slotsEl = document.getElementById('ring_slots');
+  const c1 = document.getElementById('ids_chart_pps').getContext('2d');
+  const c2 = document.getElementById('ids_chart_drop').getContext('2d');
+
+  const maxPts = 120;
+  let xs = [], ys_pps = [], ys_drop = [];
+  let last = null;
+
+  function drawLine(ctx, data, color){
+    const W = ctx.canvas.width, H = ctx.canvas.height;
+    ctx.clearRect(0,0,W,H);
+    ctx.beginPath();
+    if (data.length > 0){
+      const max = Math.max(1, ...data);
+      for (let i=0;i<data.length;i++){
+        const x = i*(W/Math.max(1,(maxPts-1)));
+        const y = H - (data[i]/max)*H;
+        i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+      }
+    }
+    ctx.strokeStyle = color || '#0a7';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  async function once(){
+    try{
+      const r = await fetch('/api/ids/advanced/stats', {headers:{'X-API-Key':window.API_KEY||''}});
+      if (!r.ok) throw new Error('http '+r.status);
+      const j = await r.json();
+      const e = j.engine || {};
+      const now = Date.now();
+
+      let pps = 0, drop_delta = 0;
+      if (last){
+        const dt = (now - last.t)/1000;
+        pps = dt>0 ? Math.max(0, ( (e.dispatched||0) - last.disp )/dt) : 0;
+        drop_delta = (e.dropped||0) - last.drop;
+      }
+      last = { t: now, disp: e.dispatched||0, drop: e.dropped||0 };
+
+      // KPI
+      ppsEl.textContent   = pps.toFixed(1);
+      dropEl.textContent  = String(e.dropped||0);
+      ringEl.textContent  = String(e.in_ring||0);
+      slotsEl.textContent = String(e.ring_slots||0);
+
+      // Serie e grafici
+      xs.push(now); ys_pps.push(pps); ys_drop.push(drop_delta);
+      if (xs.length > maxPts){ xs.shift(); ys_pps.shift(); ys_drop.shift(); }
+      drawLine(c1, ys_pps,  '#0a7');
+      drawLine(c2, ys_drop, '#c33');
+    }catch(e){
+      console.error('idsStatsOnce error:', e);
+    }
+  }
+
+  function clear(){
+    xs = []; ys_pps = []; ys_drop = []; last = null;
+    drawLine(c1, [], '#0a7');  // pulisci canvas
+    drawLine(c2, [], '#c33');
+    ppsEl.textContent = '0';
+    dropEl.textContent = '0';
+    ringEl.textContent = '0';
+    slotsEl.textContent = '0';
+  }
+
+  return { once, clear };
+})();
+
+// Handler per i pulsanti
+function idsStatsOnce(){ return idsCharts.once(); }
+function idsChartsClear(){ idsCharts.clear(); }
+
+// --- Event format UI ---
+(async function(){
+  try{
+    const r = await fetch('/api/report/format', {headers:{'X-API-Key':window.API_KEY||''}});
+    if (r.ok){
+      const j = await r.json();
+      const fmt = j.event_format || 'JSON';
+      const radios = document.querySelectorAll('input[name="fmt"]');
+      radios.forEach(r=>{ if (r.value===fmt) r.checked=true; });
+    }
+  }catch(e){}
+})();
+
+async function saveFmt(){
+  try{
+    const radios = document.querySelectorAll('input[name="fmt"]');
+    let v = 'JSON';
+    radios.forEach(r=>{ if (r.checked) v=r.value; });
+    const r = await fetch('/api/report/format', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-API-Key':window.API_KEY||''},
+      body: JSON.stringify({event_format:v})
+    });
+    alert(r.ok?'Formato salvato':'Errore salvataggio');
+  }catch(e){ alert('Errore: '+e.message); }
+}
+
+async function uploadSig(){
+  const f = document.getElementById('sigfile').files[0];
+  if (!f){ alert('Seleziona un file JSON'); return; }
+  const txt = await f.text();
+  const r = await fetch('/api/ids/signatures', {method:'POST', headers:{'X-API-Key':window.API_KEY||'','Content-Type':'application/json'}, body: txt});
+  alert(r.ok ? 'Signatures caricate' : 'Errore upload');
+}
+async function reloadSig(){
+  const r = await fetch('/api/ids/signatures', {method:'POST', headers:{'X-API-Key':window.API_KEY||'','Content-Type':'application/json'}, body: '{"reload":true}'});
+  alert(r.ok ? 'Signatures ricaricate' : 'Errore reload');
+}
+</script>
+</html>
+
+)HTML";
+
+// Compile-time size constant (actual content length)
+static constexpr size_t DASHBOARD_HTML_GEN_SIZE = 50094;

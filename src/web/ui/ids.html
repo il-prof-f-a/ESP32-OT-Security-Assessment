@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IDS • Allowlist & Policy</title>
+  <style>
+ /* Baseline “GIUSTO” (coerente con protocols / scanner / reporting) */
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial; margin:1rem; background:#f6f6f6; color:#222}
+
+/* Layout / card */
+.container{max-width:1100px;margin:0 auto}
+.card{background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.06); padding:1rem; margin-bottom:1rem}
+.full-width{grid-column:1 / -1}
+
+/* Tipografia */
+h1{font-size:1.4rem;margin:0 0 1rem 0}
+h2{font-size:1.15rem;margin:0 0 .5rem 0}
+label{display:block;margin-bottom:.3rem;font-weight:600;color:#333}
+.muted{color:#666}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Consolas,Monaco,monospace; font-size:12px; background:#f8f9fa; padding:.1rem .3rem; border-radius:4px; color:#222}
+
+/* Form */
+.form-group{margin-bottom:.8rem}
+input,select,textarea{width:100%; padding:.45rem .6rem; border:1px solid #ccc; border-radius:4px; background:#fff; color:#222}
+input[type="checkbox"],input[type="radio"]{width:auto}
+.switch{display:inline-flex; align-items:center; gap:.5rem}
+
+/* Bottoni */
+.btn{background:#007; color:#fff; border:none; padding:.5rem 1rem; border-radius:6px; cursor:pointer; display:inline-block; margin-right:.5rem}
+.btn:hover{background:#008}
+.btn.small{font-size:.9rem; padding:.35rem .7rem; border-radius:5px}
+.btn.ghost{background:transparent; color:#333; border:1px solid #bbb}
+.btn.danger{background:#c33}
+.btn.danger:hover{background:#d44}
+.nav-btn{background:#06a; color:#fff; border:none; padding:.6rem 1rem; border-radius:8px; text-decoration:none; display:inline-block}
+.nav-btn:hover{background:#07b}
+
+/* Tabelle */
+table{width:100%; border-collapse:collapse}
+th,td{padding:.5rem; text-align:left; border-bottom:1px solid #eee}
+th{background:#f8f9fa; color:#333}
+
+/* Blocchi di stato */
+.status{padding:.5rem;border-radius:4px;margin-bottom:.8rem}
+.status.ok{background:#d4edda;color:#155724}
+.status.err{background:#f8d7da;color:#721c24}
+.pill{display:inline-flex; gap:.5rem; align-items:center; padding:.25rem .5rem; border-radius:999px; background:#eef5ff; border:1px solid #cfe8ff; color:#113}
+
+/* Sezioni/righe */
+.grid{display:grid; gap:16px}
+.row{display:flex; gap:12px; flex-wrap:wrap; align-items:center}
+.section-title{display:flex; align-items:center; gap:.5rem; margin-bottom:.5rem}
+.right{margin-left:auto}
+
+/* "Statistiche" stile coerente */
+.stat{display:flex; gap:.6rem; align-items:center; background:#f8f9fa; border:1px solid #e6e6e6; border-radius:10px; padding:.5rem .6rem}
+.stat .v{font-size:1.25rem; font-weight:600}
+
+/* Toast minimale chiaro */
+.toast{position:fixed; right:16px; bottom:16px; background:#fff; color:#222222; border:1px solid #ddd; border-radius:10px; padding:10px 12px; box-shadow:0 10px 20px rgba(0,0,0,.08); display:none}
+.toast.show{display:block}
+
+/* Dettagli */
+details{border:1px dashed #bcd; border-radius:12px; padding:10px; background:#fff}
+summary{cursor:pointer; color:#333}
+
+  </style>
+</head>
+<body>
+<div class="card">
+<h1>IDS • Allowlist & Policy <span id="dirtyMark" class="muted" style="margin-left:8px"></span></h1>
+<a href="/" class="btn nav-btn">← Dashboard</a>
+</div>
+
+  <!-- IDS Modules Control -->
+  <section class="card" style="margin: 20px auto; max-width: 1100px;">
+    <div class="section-title"><span class="tag">Moduli IDS</span></div>
+    <div class="row" style="gap: 20px;">
+      <div class="switch"><input id="idsEnabled" type="checkbox"/> <label for="idsEnabled">IDS Generale (Packet Analysis)</label></div>
+      <div class="switch"><input id="networkPresenceEnabled" type="checkbox"/> <label for="networkPresenceEnabled">Network Presence Monitor</label></div>
+      <button class="btn primary" onclick="saveIDSModules()">💾 Salva Moduli</button>
+    </div>
+
+    <!-- Protocol Specific Settings -->
+    <div class="section-title" style="margin-top: 16px;"><span class="tag">Impostazioni Protocollo</span></div>
+
+    <!-- Modbus Settings -->
+    <div style="background:#f8f9fa; border:1px solid #e0e0e0; border-radius:8px; padding:12px; margin-bottom:12px;">
+      <h4 style="margin:0 0 8px 0; color:#333">Modbus TCP</h4>
+      <div class="row" style="gap: 20px;">
+        <div class="switch"><input id="modbusAlertBroadcast" type="checkbox"/> <label for="modbusAlertBroadcast">Alert Broadcast Write</label></div>
+      </div>
+    </div>
+
+    <!-- S7 Settings -->
+    <div style="background:#f8f9fa; border:1px solid #e0e0e0; border-radius:8px; padding:12px; margin-bottom:12px;">
+      <h4 style="margin:0 0 8px 0; color:#333">S7 Communication</h4>
+      <div class="row" style="gap: 20px; flex-wrap: wrap;">
+        <div class="switch"><input id="s7DetectNonTLS" type="checkbox"/> <label for="s7DetectNonTLS">Detect Non-TLS Communications</label></div>
+        <div class="switch"><input id="s7DetectStop" type="checkbox"/> <label for="s7DetectStop">Detect STOP CPU Commands</label></div>
+        <div class="switch"><input id="s7DetectRecon" type="checkbox"/> <label for="s7DetectRecon">Detect Reconnaissance (SZL Reads)</label></div>
+        <div class="switch"><input id="s7DetectWriteStorm" type="checkbox"/> <label for="s7DetectWriteStorm">Detect Write Storms</label></div>
+        <div class="switch"><input id="s7DetectBruteForce" type="checkbox"/> <label for="s7DetectBruteForce">Detect Brute Force</label></div>
+      </div>
+      <div class="row" style="margin-top:8px; gap:16px;">
+        <div style="flex:1">
+          <label style="font-size:0.9rem">Max Writes/60s</label>
+          <input id="s7MaxWrites" type="number" placeholder="50" style="width:100px">
+        </div>
+        <div style="flex:1">
+          <label style="font-size:0.9rem">Max Reads/30s</label>
+          <input id="s7MaxReads" type="number" placeholder="100" style="width:100px">
+        </div>
+      </div>
+    </div>
+
+    <!-- PROFINET Settings -->
+    <div style="background:#f8f9fa; border:1px solid #e0e0e0; border-radius:8px; padding:12px; margin-bottom:12px;">
+      <h4 style="margin:0 0 8px 0; color:#333">PROFINET</h4>
+      <div class="row" style="gap: 20px; flex-wrap: wrap;">
+        <div class="switch"><input id="pnDetectSpoofing" type="checkbox"/> <label for="pnDetectSpoofing">Detect DCP Spoofing</label></div>
+        <div class="switch"><input id="pnDetectConfigChanges" type="checkbox"/> <label for="pnDetectConfigChanges">Detect Config Changes (DCP Set)</label></div>
+        <div class="switch"><input id="pnDetectTopology" type="checkbox"/> <label for="pnDetectTopology">Detect Topology Changes</label></div>
+        <div class="switch"><input id="pnDetectHelloFlood" type="checkbox"/> <label for="pnDetectHelloFlood">Detect Hello Flooding</label></div>
+        <div class="switch"><input id="pnDetectXIDReuse" type="checkbox"/> <label for="pnDetectXIDReuse">Detect XID Reuse (Replay)</label></div>
+      </div>
+      <div class="row" style="margin-top:8px; gap:16px;">
+        <div style="flex:1">
+          <label style="font-size:0.9rem">Max Identify Responses/30s</label>
+          <input id="pnMaxIdentify" type="number" placeholder="20" style="width:100px">
+        </div>
+        <div style="flex:1">
+          <label style="font-size:0.9rem">Max Config Changes/120s</label>
+          <input id="pnMaxConfig" type="number" placeholder="5" style="width:100px">
+        </div>
+      </div>
+    </div>
+
+    <!-- EtherNet/IP Settings -->
+    <div style="background:#f8f9fa; border:1px solid #e0e0e0; border-radius:8px; padding:12px; margin-bottom:12px;">
+      <h4 style="margin:0 0 8px 0; color:#333">EtherNet/IP (CIP)</h4>
+      <div class="row" style="gap: 20px; flex-wrap: wrap;">
+        <div class="switch"><input id="enipDetectSessionFlood" type="checkbox"/> <label for="enipDetectSessionFlood">Detect Session Flooding</label></div>
+        <div class="switch"><input id="enipDetectRRDataStorm" type="checkbox"/> <label for="enipDetectRRDataStorm">Detect SendRRData Storm</label></div>
+        <div class="switch"><input id="enipDetectWriteStorm" type="checkbox"/> <label for="enipDetectWriteStorm">Detect Write Storm (CIP)</label></div>
+        <div class="switch"><input id="enipDetectRecon" type="checkbox"/> <label for="enipDetectRecon">Detect Reconnaissance</label></div>
+        <div class="switch"><input id="enipDetectErrors" type="checkbox"/> <label for="enipDetectErrors">Detect Error Patterns</label></div>
+      </div>
+      <div class="row" style="margin-top:8px; gap:16px;">
+        <div style="flex:1">
+          <label style="font-size:0.9rem">Max Sessions/60s</label>
+          <input id="enipMaxSessions" type="number" placeholder="10" style="width:100px">
+        </div>
+        <div style="flex:1">
+          <label style="font-size:0.9rem">Max SendRRData/30s</label>
+          <input id="enipMaxRRData" type="number" placeholder="50" style="width:100px">
+        </div>
+        <div style="flex:1">
+          <label style="font-size:0.9rem">Max Writes/120s</label>
+          <input id="enipMaxWrites" type="number" placeholder="5" style="width:100px">
+        </div>
+        <div style="flex:1">
+          <label style="font-size:0.9rem">Max Discovery/60s</label>
+          <input id="enipMaxDiscovery" type="number" placeholder="20" style="width:100px">
+        </div>
+      </div>
+    </div>
+
+    <button class="btn primary" onclick="saveProtocolSettings()">💾 Salva Impostazioni Protocollo</button>
+  </section>
+  <main class="grid">
+
+    <!-- Left: Allowlist editor -->
+    <section class="card">
+      <div class="row" style="justify-content:space-between">
+        <div class="switch"><input id="enabled" type="checkbox"/> <label for="enabled">Allowlist attiva</label></div>
+        <div class="row">
+          <label for="action" style="margin-right:6px">Azione predefinita</label>
+          <select id="action">
+            <option value="alert">Alert (log + continua)</option>
+            <option value="drop">Drop (blocca e logga)</option>
+            <option value="ignore">Ignore (nessun log speciale)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="section-title"><span class="tag">Lista globale</span></div>
+      <div class="row">
+        <div style="flex:1">
+          <label>IP permessi (IPv4 o CIDR)</label>
+          <table>
+            <thead><tr><th>Indirizzo</th><th class="right">Azioni</th></tr></thead>
+            <tbody id="ipGlobalTbody"></tbody>
+          </table>
+          <button class="btn small" onclick="addRow('ipGlobalTbody','ip')">+ Aggiungi IP/CIDR</button>
+        </div>
+        <div style="flex:1">
+          <label>MAC permessi (es. 00:11:22:33:44:55 o wildcard AA:BB:CC:*:*:*)</label>
+          <table>
+            <thead><tr><th>MAC</th><th class="right">Azioni</th></tr></thead>
+            <tbody id="macGlobalTbody"></tbody>
+          </table>
+          <button class="btn small" onclick="addRow('macGlobalTbody','mac')">+ Aggiungi MAC</button>
+        </div>
+      </div>
+
+      <div class="section-title"><span class="tag">Per protocollo</span></div>
+      <details open>
+        <summary>Configura eccezioni per protocollo (override / aggiunte)</summary>
+        <div class="row" style="margin-top:10px;gap:10px">
+          <select id="catalogProto" style="flex:1;min-width:220px">
+            <option value="">Seleziona protocollo dal catalogo…</option>
+          </select>
+          <button class="btn small" onclick="addProtocolFromCatalog()">+ Aggiungi dal catalogo</button>
+          <span class="muted" style="font-size:12px">oppure</span>
+          <input id="newProtoName" type="text" placeholder="Nome protocollo manuale (es. modbus, s7, opcua)" style="flex:1;min-width:220px"/>
+          <button class="btn small" onclick="addProtocol()">+ Aggiungi manuale</button>
+          <button class="btn small ghost" onclick="reloadProtocolCatalog()">↺ Aggiorna catalogo</button>
+        </div>
+        <div id="protoSuggestions" class="row" style="margin-top:6px"></div>
+
+        <div id="protocols"></div>
+      </details>
+
+      <div class="row" style="margin-top:16px;justify-content:space-between">
+        <div class="flex">
+          <button class="btn" onclick="reloadFromDevice()">↺ Ricarica</button>
+          <button class="btn ghost" onclick="showJson()">{} JSON</button>
+        </div>
+        <div class="flex">
+          <button class="btn danger" onclick="revertLocal()">Annulla</button>
+          <button class="btn primary" onclick="saveToDevice()">💾 Salva</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: Tools / Tester -->
+    <aside class="card">
+      <div class="section-title"><span class="tag">Strumenti</span></div>
+      <div class="row">
+        <div style="flex:1">
+          <label>Test rapido – IP/MAC di esempio</label>
+          <input id="testValue" type="search" placeholder="192.168.1.10 oppure 00:11:22:33:44:55"/>
+          <div class="row" style="margin-top:8px">
+            <button class="btn small" onclick="runTest()">Esegui test con configurazione corrente</button>
+            <span id="testResult" class="pill muted">In attesa…</span>
+          </div>
+          <p class="muted" style="font-size:13px;margin-top:8px">Il test avviene lato client con regole equivalenti a quelle del firmware (IPv4/CIDR, MAC con wildcard per byte).</p>
+        </div>
+      </div>
+
+      <div class="section-title"><span class="tag">Statistiche IDS</span></div>
+      <div class="row">
+        <div class="flex" id="statsRow">
+          <span class="pill"><span class="ok">●</span> allowed: <b id="statAllowed">–</b></span>
+          <span class="pill"><span class="warn">●</span> alert: <b id="statAlert">–</b></span>
+          <span class="pill"><span class="bad">●</span> dropped: <b id="statDropped">–</b></span>
+        </div>
+        <button class="btn small right" onclick="refreshStats()">Aggiorna</button>
+      </div>
+
+      <div class="section-title" style="margin-top: 16px;"><span class="tag">Dispositivi Riconosciuti</span></div>
+      <div style="margin-bottom: 8px;">
+        <button class="btn small" onclick="loadLearnedDevices()">↺ Aggiorna Lista</button>
+        <button class="btn small ghost" onclick="clearAllLearned()">🗑️ Pulisci Tutto</button>
+      </div>
+      <table id="learnedDevicesTable" style="width: 100%; font-size: 12px;">
+        <thead>
+          <tr>
+            <th>IP/MAC</th>
+            <th>Tipo</th>
+            <th>Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="learnedDevicesBody">
+          <tr><td colspan="3" class="muted">Caricamento...</td></tr>
+        </tbody>
+      </table>
+
+      <details style="margin-top:12px">
+        <summary>Pattern ammessi (aiuto)</summary>
+        <ul>
+          <li>IPv4 o <span class="mono">IPv4/CIDR</span> (es. <span class="mono">10.0.0.0/24</span>)</li>
+          <li>MAC <span class="mono">AA:BB:CC:DD:EE:FF</span> con wildcard per byte, es. <span class="mono">AA:BB:CC:*:*:*</span></li>
+        </ul>
+      </details>
+    </aside>
+
+  </main>
+
+  <div id="toast" class="toast">Salvato</div>
+
+  <script>
+    // Extract session token from URL and add to all API calls
+(function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionToken = urlParams.get('sid');
+
+    if (sessionToken) {
+        console.log('Session token found');
+
+        // Override fetch to automatically add Bearer token to API calls
+        const originalFetch = window.fetch;
+        if (!window.__apiFetchQueue) {
+            window.__apiFetchQueue = Promise.resolve();
+        }
+        window.fetch = function(url, options = {}) {
+            const isApiCall = typeof url === 'string' && url.startsWith('/api/');
+            if (!isApiCall) {
+                return originalFetch.call(this, url, options);
+            }
+
+            const opts = {...options};
+            opts.headers = {...(options && options.headers) || {}};
+            opts.headers['Authorization'] = 'Bearer ' + sessionToken;
+
+            const runner = () => originalFetch.call(window, url, opts);
+            const queued = window.__apiFetchQueue.then(runner, runner);
+            window.__apiFetchQueue = queued.catch(() => {});
+            return queued;
+        };
+
+        // Update navigation links to include session token
+        document.querySelectorAll('.nav-btn').forEach(link => {
+            const href = link.getAttribute('href');
+            if (href && !href.includes('sid=')) {
+                link.setAttribute('href', href + '?sid=' + encodeURIComponent(sessionToken));
+            }
+        });
+    } else {
+        console.warn('No session token found in URL - API calls may fail');
+    }
+})();
+
+    // ---- Utilities ----
+    const $ = (sel, root=document) => root.querySelector(sel);
+    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+    const MAC_RE = /^([0-9a-fA-F]{2}|\*)(:([0-9a-fA-F]{2}|\*)){5}$/;
+    const IPV4_RE = /^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)(?:\/(?:3[0-2]|[12]?\d))?$/;
+
+    let serverMode = 'auto'; // 'whitelist' | 'allowlist'
+    const API = {
+      whitelist: { get: '/api/whitelist', post: '/api/whitelist' },      // nuovo
+      allowlist: { get: '/api/allowlist', put:  '/api/allowlist' }       // legacy
+    };
+
+    let __BOOTSTRAP = null;
+    async function ensureBootstrap(){
+      if(__BOOTSTRAP) return __BOOTSTRAP;
+      try{
+        const r = await fetch('/api/page/bootstrap?name=ids', { cache: 'no-store' });
+        if(!r.ok) return null;
+        __BOOTSTRAP = await r.json();
+        // If bootstrap worked, we assume new whitelist API is present.
+        serverMode = 'whitelist';
+        return __BOOTSTRAP;
+      }catch(_){
+        return null;
+      }
+    }
+
+    async function detectApi(){
+      if (serverMode !== 'auto') return serverMode;
+      try {
+        const r = await fetch(API.whitelist.get, { method: 'GET' });
+        if (r.ok) { serverMode = 'whitelist'; return serverMode; }
+      } catch(e){}
+      // fallback
+      serverMode = 'allowlist';
+      return serverMode;
+    }
+
+    function serverToModel(j){
+      // Supporta sia { ip_whitelist: {...} } (nuovo) sia {...} "piatto" (legacy)
+      const wl = (j && typeof j === 'object' && j.ip_whitelist) ? j.ip_whitelist : (j || {});
+      const out = {
+        enabled: wl.enabled ?? true,
+        action:  wl.action  ?? 'alert',
+        ip:      Array.isArray(wl.ip)  ? wl.ip  : [],
+        mac:     Array.isArray(wl.mac) ? wl.mac : [],
+        per_protocol: {}
+      };
+
+      // Caso 1: struttura simile alla tua (per_protocol già presente)
+      if (wl.per_protocol && typeof wl.per_protocol === 'object') {
+        for (const k of Object.keys(wl.per_protocol)) {
+          const p = wl.per_protocol[k] || {};
+          out.per_protocol[k] = {
+            ip:  Array.isArray(p.ip)  ? p.ip  : [],
+            mac: Array.isArray(p.mac) ? p.mac : []
+          };
+        }
+      }
+
+      // Caso 2: struttura "protocols": [{protocol, allowed_IP_sources, allowed_MAC_sources, ...}]
+      if (Array.isArray(wl.protocols)) {
+        wl.protocols.forEach(p => {
+          const name = (p.protocol || '').toString();
+          if (!name) return;
+          out.per_protocol[name] = {
+            ip:  Array.isArray(p.allowed_IP_sources) ? p.allowed_IP_sources : [],
+            mac: Array.isArray(p.allowed_macs)    ? p.allowed_macs    : []
+          };
+          // Se serve, puoi mappare default_deny => action, ma lasciamo invariato
+        });
+      }
+
+      return normalizeModel(out);
+    }
+
+    // Converte model UI -> body server
+    function modelToServerBody(m){
+      const nm = normalizeModel(m);
+
+      if (serverMode === 'whitelist') {
+        // Nuovo endpoint: incapsula in { ip_whitelist: {...} }
+        // e, per compatibilità, esporta sia per_protocol che la lista "protocols" derivata.
+        const protocols = Object.keys(nm.per_protocol||{}).map(name => ({
+          protocol: name,
+          enabled: true,
+          default_deny: (nm.action === 'drop'),        // euristica: se action=drop, default_deny=true
+          allowed_IP_sources: (nm.per_protocol[name]?.ip)  || [],
+          allowed_MAC_sources: (nm.per_protocol[name]?.mac) || []
+        }));
+
+        const body = {
+          ip_whitelist: {
+            enabled: nm.enabled,
+            action:  nm.action,       // se il firmware lo ignora, non fa danni
+            ip:      nm.ip,
+            mac:     nm.mac,
+            per_protocol: nm.per_protocol,
+            protocols
+          }
+        };
+        return JSON.stringify(body);
+      }
+
+      // Legacy endpoint: JSON piatto come già usavi
+      const body = {
+        enabled: nm.enabled,
+        action:  nm.action,
+        ip:      nm.ip,
+        mac:     nm.mac,
+        per_protocol: nm.per_protocol
+      };
+      return JSON.stringify(body);
+    }
+
+    function toCIDR(ip, mask){return ip+"/"+mask}
+    function ipToInt(ip){return ip.split('.').reduce((a,b)=> (a<<8) + (+b), 0)>>>0}
+    function cidrContains(cidr, ip){
+      const [net, pfx] = cidr.split('/');
+      const mask = pfx? (0xFFFFFFFF << (32-parseInt(pfx)))>>>0 : 0xFFFFFFFF;
+      return (ipToInt(ip) & mask) === (ipToInt(net) & mask);
+    }
+    function macMatch(pattern, mac){
+      const p = pattern.toUpperCase().split(':'), m = mac.toUpperCase().split(':');
+      if(p.length!==6 || m.length!==6) return false;
+      for(let i=0;i<6;i++){ if(p[i]!=="*" && p[i]!==m[i]) return false; }
+      return true;
+    }
+
+    function toast(msg){const t=$('#toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 1600)}
+    // ---- Protocol catalog (id:name) ----
+    let protocolCatalog = {}; // es. {"1":"Modbus TCP","2":"S7 Communication",...}
+    function catalogNames(){ return Object.values(protocolCatalog||{}); }
+    function slug(n){ return (n||'').toString().trim(); }
+
+    async function loadProtocolCatalog(){
+      try{
+        const boot = await ensureBootstrap();
+        if (boot && boot.data && boot.data.protocols) {
+          protocolCatalog = boot.data.protocols;
+          renderProtoCatalogControls();
+          return;
+        }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(()=>controller.abort(), 1500);
+        const r = await fetch('/api/protocols', { signal: controller.signal, cache: 'no-store' });
+        clearTimeout(timeoutId);
+        if(!r.ok) throw new Error('GET /api/protocols failed');
+        const j = await r.json();
+        // Accetta sia {"1":"Modbus"} che [{id:1,name:"Modbus"}] o ["Modbus",...]
+        let map = {};
+        if(Array.isArray(j)){
+          j.forEach((it,idx)=>{
+            if(typeof it === 'string') map[String(idx+1)] = it;
+            else if(it && typeof it === 'object') map[String(it.id ?? idx+1)] = it.name ?? it.label ?? String(it.proto ?? idx+1);
+          });
+        } else if(j && typeof j === 'object') {
+          map = j;
+        }
+        if(!Object.keys(map).length) throw new Error('catalogo vuoto');
+        protocolCatalog = map;
+      }catch(e){
+        // Fallback predefinito (in linea con altre pagine):
+        protocolCatalog = {"1":"Modbus TCP","2":"S7 Communication","3":"PROFINET","4":"EtherNet/IP","5":"OPC UA"};
+      }
+      renderProtoCatalogControls();
+    }
+
+    function renderProtoCatalogControls(){
+      const sel = $('#catalogProto');
+      if(!sel) return;
+      sel.innerHTML = '<option value="">Seleziona protocollo dal catalogo…</option>'
+        Object.entries(protocolCatalog).map(([id,name])=>`<option value="${id}">${name}</option>`).join('');
+      // Suggerimenti rapidi: protocolli del catalogo non ancora presenti
+      const existing = new Set(Object.keys(model.per_protocol||{}).map(slug));
+      const suggestions = Object.values(protocolCatalog).filter(n=>!existing.has(slug(n)));
+      const cont = $('#protoSuggestions');
+      cont.innerHTML = suggestions.length? '<label class="muted" style="font-size:12px">Suggerimenti:</label>' : '';
+      suggestions.slice(0,10).forEach(name=>{
+        const b = document.createElement('button');
+        b.className='btn small'; b.textContent = '+ '+name; b.onclick = ()=>{ addProtocolName(name); };
+        cont.appendChild(b);
+      });
+    }
+
+    function addProtocolFromCatalog(){
+      const sel = $('#catalogProto');
+      const id = sel.value; if(!id) return toast('Seleziona un protocollo');
+      const name = protocolCatalog[id];
+      addProtocolName(name);
+    }
+
+    function addProtocolName(name){
+      const n = slug(name);
+      if(!n) return;
+      if(!model.per_protocol) model.per_protocol = {};
+      if(model.per_protocol[n]) { toast('Protocollo già presente'); return; }
+      model.per_protocol[n] = {ip:[], mac:[]};
+      markDirty(); render();
+    }
+
+    async function reloadProtocolCatalog(){ await loadProtocolCatalog(); }
+
+    // ---- Local model ----
+    let model = {
+      enabled:true,
+      action:"alert",
+      ip:[],
+      mac:[],
+      per_protocol:{}
+    };
+    let pristine = true;
+    function markDirty(d=true){pristine=!d; $('#dirtyMark').innerHTML = d? '<span class="dirty-dot"></span> modifiche non salvate' : ''}
+    window.addEventListener('beforeunload', (e)=>{ if(!pristine){ e.preventDefault(); e.returnValue=''; } });
+
+    // ---- Rendering ----
+    function render(){
+      renderProtoCatalogControls();
+      $('#enabled').checked = !!model.enabled;
+      $('#action').value = model.action || 'alert';
+
+      renderList($('#ipGlobalTbody'), model.ip, 'ip');
+      renderList($('#macGlobalTbody'), model.mac, 'mac');
+
+      const protoRoot = $('#protocols');
+      protoRoot.innerHTML = '';
+      const names = Object.keys(model.per_protocol||{});
+      if(!names.length){ protoRoot.innerHTML = '<p class="muted">Nessun protocollo configurato.</p>'; return; }
+      names.sort().forEach(name=>{
+        const sec = document.createElement('section');
+        sec.className='card'; sec.style.marginTop='12px';
+        sec.innerHTML = `
+          <div class="row" style="justify-content:space-between">
+            <div class="tag">${name}</div>
+            <button class="btn small danger" data-del-proto="${name}">Rimuovi protocollo</button>
+          </div>
+          <div class="row">
+            <div style="flex:1">
+              <label>IP (${name})</label>
+              <table><thead><tr><th>Indirizzo</th><th class="right">Azioni</th></tr></thead><tbody id="ip-${name}"></tbody></table>
+              <button class="btn small" data-add-ip="${name}">+ Aggiungi IP/CIDR</button>
+            </div>
+            <div style="flex:1">
+              <label>MAC (${name})</label>
+              <table><thead><tr><th>MAC</th><th class="right">Azioni</th></tr></thead><tbody id="mac-${name}"></tbody></table>
+              <button class="btn small" data-add-mac="${name}">+ Aggiungi MAC</button>
+            </div>
+          </div>`;
+        protoRoot.appendChild(sec);
+        const p = model.per_protocol[name] || {ip:[],mac:[]};
+        renderList($('#ip-'+name), p.ip||[], 'ip', name);
+        renderList($('#mac-'+name), p.mac||[], 'mac', name);
+      });
+
+      // Wire buttons for dynamic sections
+      $$('#protocols [data-add-ip]').forEach(b=> b.onclick = ()=>{ addRow('ip-'+b.dataset.addIp, 'ip', b.dataset.addIp) });
+      $$('#protocols [data-add-mac]').forEach(b=> b.onclick = ()=>{ addRow('mac-'+b.dataset.addMac, 'mac', b.dataset.addMac) });
+      $$('#protocols [data-del-proto]').forEach(b=> b.onclick = ()=>{ delete model.per_protocol[b.dataset.delProto]; markDirty(); render(); });
+    }
+
+    function renderList(tbody, arr, kind, proto){
+      tbody.innerHTML='';
+      arr.forEach((val, idx)=>{
+        const tr = document.createElement('tr');
+        const inputId = `${proto||'global'}-${kind}-${idx}`;
+        tr.innerHTML = `
+          <td><input class="mono" type="text" id="${inputId}" value="${val}"/></td>
+          <td class="right">
+            <span class="muted mono" id="hint-${inputId}"></span>
+            <button class="btn small danger" data-remove="${idx}">Rimuovi</button>
+          </td>`;
+        tbody.appendChild(tr);
+
+        const input = $('#'+inputId);
+        const hint = $('#hint-'+inputId);
+        input.oninput = ()=>{ arr[idx] = input.value.trim(); validateField(input, hint, kind); markDirty(); };
+        input.onblur = ()=>{ validateField(input, hint, kind, true) };
+        validateField(input, hint, kind);
+        tr.querySelector('[data-remove]').onclick = ()=>{ arr.splice(idx,1); markDirty(); render(); };
+      });
+    }
+
+    function addRow(tbodyId, kind, proto){
+      const arr = proto? (model.per_protocol[proto] ||= {ip:[],mac:[]})[kind] : model[kind];
+      arr.push(''); markDirty(); render();
+      const inputs = $$('#'+tbodyId+' input'); if(inputs.length) inputs[inputs.length-1].focus();
+    }
+
+    function addProtocol(){
+      const name = $('#newProtoName').value.trim();
+      if(!name) return toast('Inserisci un nome protocollo');
+      addProtocolName(name);
+      $('#newProtoName').value='';
+    }
+
+    function validateField(input, hint, kind, strict=false){
+      const v = input.value.trim();
+      if(!v){ hint.textContent = strict? 'obbligatorio o rimuovere' : ''; input.style.borderColor = '#394350'; return false; }
+      let ok=false;
+      if(kind==='ip') ok = IPV4_RE.test(v);
+      if(kind==='mac') ok = MAC_RE.test(v);
+      hint.textContent = ok? '' : (kind==='ip'? 'IPv4[/CIDR] non valido' : 'MAC non valido (* ammesso per byte)');
+      input.style.borderColor = ok? '#2a333f' : '#6b2a2e';
+      return ok;
+    }
+
+    function normalizeModel(m){
+      const out = JSON.parse(JSON.stringify(m));
+      out.ip = (out.ip||[]).map(s=>s.trim()).filter(Boolean);
+      out.mac = (out.mac||[]).map(s=>s.trim().toUpperCase()).filter(Boolean);
+      if(out.per_protocol){
+        Object.keys(out.per_protocol).forEach(k=>{
+          const p = out.per_protocol[k]||{};
+          p.ip = (p.ip||[]).map(s=>s.trim()).filter(Boolean);
+          p.mac = (p.mac||[]).map(s=>s.trim().toUpperCase()).filter(Boolean);
+          out.per_protocol[k] = p;
+        });
+      }
+      out.action = out.action||'alert';
+      out.enabled = !!out.enabled;
+      return out;
+    }
+
+    function showJson(){
+      const j = JSON.stringify(normalizeModel(model), null, 2);
+      const w = window.open('', 'json', 'width=720,height=640');
+      w.document.write('<pre style="margin:0;padding:16px;background:#0b0f14;color:#e6edf3">'+
+                       j.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))+
+                       '</pre>');
+      w.document.title='allowlist.json';
+    }
+
+    // ---- Device I/O ----
+    async function reloadFromDevice(){
+      try{
+        const boot = await ensureBootstrap();
+        if (boot && boot.data && boot.data.config) {
+          const cfg = boot.data.config || {};
+          const ipwl = cfg.ip_whitelist || {};
+          model = serverToModel({ ip_whitelist: ipwl });
+          markDirty(false); render(); toast('Configurazione caricata (bootstrap)');
+          return;
+        }
+        await detectApi();
+        const url = (serverMode === 'whitelist') ? API.whitelist.get : API.allowlist.get;
+        const r = await fetch(url);
+        if(!r.ok) throw new Error('GET failed');
+        const j = await r.json();
+        model = serverToModel(j);
+        markDirty(false); render(); toast('Configurazione caricata');
+      }catch(e){
+        toast('Errore caricamento: '+e.message);
+      }
+    }
+
+    async function saveToDevice(){
+      // Validate prima di salvare
+      const fields = $$('#ipGlobalTbody input, #macGlobalTbody input, #protocols input[type="text"]');
+      for(const el of fields){
+        const id = el.id;
+        const kind = id.includes('-ip-')? 'ip' : id.includes('-mac-')? 'mac' : null;
+        if(!kind) continue;
+        if(!validateField(el, $('#hint-'+id), kind, true)){
+          return toast('Correggi i campi evidenziati');
+        }
+      }
+
+      try{
+        await detectApi();
+        const body = modelToServerBody({
+          enabled: $('#enabled').checked,
+          action:  $('#action').value,
+          ip: model.ip, mac: model.mac, per_protocol: model.per_protocol
+        });
+
+        let ok=false;
+        if (serverMode === 'whitelist') {
+          const r = await fetch(API.whitelist.post, { method:'POST', headers:{'Content-Type':'application/json'}, body });
+          ok = r.ok;
+        } else {
+          const r = await fetch(API.allowlist.put,  { method:'PUT',  headers:{'Content-Type':'application/json'}, body });
+          ok = r.ok;
+        }
+
+        if(!ok) throw new Error('Save failed');
+        markDirty(false); toast('Salvato');
+      }catch(e){
+        toast('Errore salvataggio: '+e.message);
+      }
+    }
+
+
+    function revertLocal(){ reloadFromDevice(); }
+
+    async function refreshStats(){
+      try{
+        const boot = await ensureBootstrap();
+        if (boot && boot.data && boot.data.ids_stats) {
+          const j = boot.data.ids_stats;
+          $('#statAllowed').textContent = j.allowed ?? j.packets_analyzed ?? '0';
+          $('#statAlert').textContent   = j.alert   ?? j.alerts_generated ?? '0';
+          $('#statDropped').textContent = j.dropped ?? '0';
+          return;
+        }
+
+        const r = await fetch('/api/ids/stats', { cache: 'no-store' });
+        if(!r.ok) throw new Error('GET stats failed');
+        const j = await r.json();
+        $('#statAllowed').textContent = j.allowed ?? j.packets_analyzed ?? '0';
+        $('#statAlert').textContent   = j.alert   ?? j.alerts_generated ?? '0';
+        $('#statDropped').textContent = j.dropped ?? '0';
+      }catch(e){ toast('Errore stats: '+e.message) }
+    }
+
+    // ---- Tester ----
+    function runTest(){
+      const v = $('#testValue').value.trim();
+      const tag = $('#testResult');
+      if(!v){ tag.className='pill muted'; tag.textContent='Inserisci un valore'; return; }
+      const cfg = normalizeModel(model);
+      const verdict = simulate(cfg, v);
+      tag.className = 'pill ' + (verdict==='allow'?'ok':verdict==='alert'?'warn':'bad');
+      tag.textContent = verdict.toUpperCase();
+    }
+
+    function simulate(cfg, value){
+      const isMac = value.includes(':');
+      const isIp  = !isMac;
+      const inGlobal = () => {
+        if(isMac){ return (cfg.mac||[]).some(p=>macMatch(p, value)); }
+        if(isIp){ return (cfg.ip||[]).some(p=>cidrContains(p, value)); }
+        return false;
+      }
+      const inAnyProto = () => {
+        for(const k of Object.keys(cfg.per_protocol||{})){
+          const p = cfg.per_protocol[k]||{};
+          if(isMac && (p.mac||[]).some(x=>macMatch(x, value))) return true;
+          if(isIp  && (p.ip||[]).some(x=>cidrContains(x, value))) return true;
+        }
+        return false;
+      }
+      const allowed = inGlobal() || inAnyProto();
+      if(allowed) return 'allow';
+      if(cfg.action==='drop') return 'drop';
+      if(cfg.action==='alert') return 'alert';
+      return 'allow';
+    }
+
+    // ---- Wire global controls ----
+    $('#enabled').onchange = ()=>{ model.enabled = $('#enabled').checked; markDirty(); };
+    $('#action').onchange  = ()=>{ model.action  = $('#action').value;   markDirty(); };
+
+    // ---- IDS Modules Management ----
+    async function loadIDSModules() {
+      try {
+        const boot = await ensureBootstrap();
+        if (boot && boot.data) {
+          const idsConfig = boot.data.ids_config || {};
+          document.getElementById('idsEnabled').checked = !!idsConfig.enabled;
+
+          const npConfig = boot.data.presence_config || {};
+          document.getElementById('networkPresenceEnabled').checked = !!npConfig.enabled;
+
+          const config = boot.data.config || {};
+
+          // Modbus
+          const modbusAlert = config?.ids?.protocol_specific?.modbus?.alert_broadcast_write;
+          document.getElementById('modbusAlertBroadcast').checked = !!modbusAlert;
+
+          // S7
+          const s7Config = config?.ids?.protocol_specific?.s7 || {};
+          document.getElementById('s7DetectNonTLS').checked = s7Config.detect_non_tls !== false;
+          document.getElementById('s7DetectStop').checked = s7Config.detect_stop_commands !== false;
+          document.getElementById('s7DetectRecon').checked = s7Config.detect_reconnaissance !== false;
+          document.getElementById('s7DetectWriteStorm').checked = s7Config.detect_write_storms !== false;
+          document.getElementById('s7DetectBruteForce').checked = s7Config.detect_brute_force !== false;
+          document.getElementById('s7MaxWrites').value = s7Config.max_writes_per_60s || '50';
+          document.getElementById('s7MaxReads').value = s7Config.max_reads_per_30s || '100';
+
+          // PROFINET
+          const pnConfig = config?.ids?.protocol_specific?.profinet || {};
+          document.getElementById('pnDetectSpoofing').checked = pnConfig.detect_dcp_spoofing !== false;
+          document.getElementById('pnDetectConfigChanges').checked = pnConfig.detect_config_changes !== false;
+          document.getElementById('pnDetectTopology').checked = pnConfig.detect_topology_changes !== false;
+          document.getElementById('pnDetectHelloFlood').checked = pnConfig.detect_hello_flooding !== false;
+          document.getElementById('pnDetectXIDReuse').checked = pnConfig.detect_xid_reuse !== false;
+          document.getElementById('pnMaxIdentify').value = pnConfig.max_identify_responses_per_30s || '20';
+          document.getElementById('pnMaxConfig').value = pnConfig.max_config_changes_per_120s || '5';
+
+          // EtherNet/IP
+          const enipConfig = config?.ids?.protocol_specific?.ethernetip || {};
+          document.getElementById('enipDetectSessionFlood').checked = enipConfig.detect_session_flooding !== false;
+          document.getElementById('enipDetectRRDataStorm').checked = enipConfig.detect_rrdata_storm !== false;
+          document.getElementById('enipDetectWriteStorm').checked = enipConfig.detect_write_storm !== false;
+          document.getElementById('enipDetectRecon').checked = enipConfig.detect_reconnaissance !== false;
+          document.getElementById('enipDetectErrors').checked = enipConfig.detect_error_patterns !== false;
+          document.getElementById('enipMaxSessions').value = enipConfig.max_sessions_per_60s || '10';
+          document.getElementById('enipMaxRRData').value = enipConfig.max_rrdata_per_30s || '50';
+          document.getElementById('enipMaxWrites').value = enipConfig.max_writes_per_120s || '5';
+          document.getElementById('enipMaxDiscovery').value = enipConfig.max_discovery_per_60s || '20';
+
+          return;
+        }
+
+        // Load IDS general config
+        const idsResponse = await fetch('/api/ids/config');
+        if (idsResponse.ok) {
+          const idsConfig = await idsResponse.json();
+          document.getElementById('idsEnabled').checked = !!idsConfig.enabled;
+        }
+
+        // Load network presence config
+        const npResponse = await fetch('/api/network-presence/config');
+        if (npResponse.ok) {
+          const npConfig = await npResponse.json();
+          document.getElementById('networkPresenceEnabled').checked = !!npConfig.enabled;
+        }
+
+        // Load protocol specific configs
+        const configResponse = await fetch('/api/config');
+        if (configResponse.ok) {
+          const config = await configResponse.json();
+
+          // Modbus
+          const modbusAlert = config?.ids?.protocol_specific?.modbus?.alert_broadcast_write;
+          document.getElementById('modbusAlertBroadcast').checked = !!modbusAlert;
+
+          // S7
+          const s7Config = config?.ids?.protocol_specific?.s7 || {};
+          document.getElementById('s7DetectNonTLS').checked = s7Config.detect_non_tls !== false;
+          document.getElementById('s7DetectStop').checked = s7Config.detect_stop_commands !== false;
+          document.getElementById('s7DetectRecon').checked = s7Config.detect_reconnaissance !== false;
+          document.getElementById('s7DetectWriteStorm').checked = s7Config.detect_write_storms !== false;
+          document.getElementById('s7DetectBruteForce').checked = s7Config.detect_brute_force !== false;
+          document.getElementById('s7MaxWrites').value = s7Config.max_writes_per_60s || '50';
+          document.getElementById('s7MaxReads').value = s7Config.max_reads_per_30s || '100';
+
+          // PROFINET
+          const pnConfig = config?.ids?.protocol_specific?.profinet || {};
+          document.getElementById('pnDetectSpoofing').checked = pnConfig.detect_dcp_spoofing !== false;
+          document.getElementById('pnDetectConfigChanges').checked = pnConfig.detect_config_changes !== false;
+          document.getElementById('pnDetectTopology').checked = pnConfig.detect_topology_changes !== false;
+          document.getElementById('pnDetectHelloFlood').checked = pnConfig.detect_hello_flooding !== false;
+          document.getElementById('pnDetectXIDReuse').checked = pnConfig.detect_xid_reuse !== false;
+          document.getElementById('pnMaxIdentify').value = pnConfig.max_identify_responses_per_30s || '20';
+          document.getElementById('pnMaxConfig').value = pnConfig.max_config_changes_per_120s || '5';
+
+          // EtherNet/IP
+          const enipConfig = config?.ids?.protocol_specific?.ethernetip || {};
+          document.getElementById('enipDetectSessionFlood').checked = enipConfig.detect_session_flooding !== false;
+          document.getElementById('enipDetectRRDataStorm').checked = enipConfig.detect_rrdata_storm !== false;
+          document.getElementById('enipDetectWriteStorm').checked = enipConfig.detect_write_storm !== false;
+          document.getElementById('enipDetectRecon').checked = enipConfig.detect_reconnaissance !== false;
+          document.getElementById('enipDetectErrors').checked = enipConfig.detect_error_patterns !== false;
+          document.getElementById('enipMaxSessions').value = enipConfig.max_sessions_per_60s || '10';
+          document.getElementById('enipMaxRRData').value = enipConfig.max_rrdata_per_30s || '50';
+          document.getElementById('enipMaxWrites').value = enipConfig.max_writes_per_120s || '5';
+          document.getElementById('enipMaxDiscovery').value = enipConfig.max_discovery_per_60s || '20';
+        }
+      } catch (e) {
+        toast('Errore caricamento moduli IDS: ' + e.message);
+      }
+    }
+
+    async function saveIDSModules() {
+      try {
+        const idsEnabled = document.getElementById('idsEnabled').checked;
+        const npEnabled = document.getElementById('networkPresenceEnabled').checked;
+
+        // Save IDS general config
+        const idsResponse = await fetch('/api/ids/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: idsEnabled })
+        });
+
+        // Save network presence config
+        const npResponse = await fetch('/api/network-presence/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: npEnabled })
+        });
+
+        if (idsResponse.ok && npResponse.ok) {
+          toast('Moduli IDS aggiornati');
+        } else {
+          throw new Error('Errore salvataggio');
+        }
+      } catch (e) {
+        toast('Errore salvataggio moduli: ' + e.message);
+      }
+    }
+
+    async function saveProtocolSettings() {
+      try {
+        const updates = {
+          // Modbus
+          'ids.protocol_specific.modbus.alert_broadcast_write': document.getElementById('modbusAlertBroadcast').checked,
+
+          // S7
+          'ids.protocol_specific.s7.detect_non_tls': document.getElementById('s7DetectNonTLS').checked,
+          'ids.protocol_specific.s7.detect_stop_commands': document.getElementById('s7DetectStop').checked,
+          'ids.protocol_specific.s7.detect_reconnaissance': document.getElementById('s7DetectRecon').checked,
+          'ids.protocol_specific.s7.detect_write_storms': document.getElementById('s7DetectWriteStorm').checked,
+          'ids.protocol_specific.s7.detect_brute_force': document.getElementById('s7DetectBruteForce').checked,
+          'ids.protocol_specific.s7.max_writes_per_60s': parseInt(document.getElementById('s7MaxWrites').value) || 50,
+          'ids.protocol_specific.s7.max_reads_per_30s': parseInt(document.getElementById('s7MaxReads').value) || 100,
+
+          // PROFINET
+          'ids.protocol_specific.profinet.detect_dcp_spoofing': document.getElementById('pnDetectSpoofing').checked,
+          'ids.protocol_specific.profinet.detect_config_changes': document.getElementById('pnDetectConfigChanges').checked,
+          'ids.protocol_specific.profinet.detect_topology_changes': document.getElementById('pnDetectTopology').checked,
+          'ids.protocol_specific.profinet.detect_hello_flooding': document.getElementById('pnDetectHelloFlood').checked,
+          'ids.protocol_specific.profinet.detect_xid_reuse': document.getElementById('pnDetectXIDReuse').checked,
+          'ids.protocol_specific.profinet.max_identify_responses_per_30s': parseInt(document.getElementById('pnMaxIdentify').value) || 20,
+          'ids.protocol_specific.profinet.max_config_changes_per_120s': parseInt(document.getElementById('pnMaxConfig').value) || 5,
+
+          // EtherNet/IP
+          'ids.protocol_specific.ethernetip.detect_session_flooding': document.getElementById('enipDetectSessionFlood').checked,
+          'ids.protocol_specific.ethernetip.detect_rrdata_storm': document.getElementById('enipDetectRRDataStorm').checked,
+          'ids.protocol_specific.ethernetip.detect_write_storm': document.getElementById('enipDetectWriteStorm').checked,
+          'ids.protocol_specific.ethernetip.detect_reconnaissance': document.getElementById('enipDetectRecon').checked,
+          'ids.protocol_specific.ethernetip.detect_error_patterns': document.getElementById('enipDetectErrors').checked,
+          'ids.protocol_specific.ethernetip.max_sessions_per_60s': parseInt(document.getElementById('enipMaxSessions').value) || 10,
+          'ids.protocol_specific.ethernetip.max_rrdata_per_30s': parseInt(document.getElementById('enipMaxRRData').value) || 50,
+          'ids.protocol_specific.ethernetip.max_writes_per_120s': parseInt(document.getElementById('enipMaxWrites').value) || 5,
+          'ids.protocol_specific.ethernetip.max_discovery_per_60s': parseInt(document.getElementById('enipMaxDiscovery').value) || 20
+        };
+
+        const response = await fetch('/api/config/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        });
+
+        if (response.ok) {
+          toast('Impostazioni protocollo aggiornate');
+        } else {
+          throw new Error('Errore salvataggio');
+        }
+      } catch (e) {
+        toast('Errore salvataggio protocollo: ' + e.message);
+      }
+    }
+
+    // ---- Learned Devices Management ----
+    async function loadLearnedDevices() {
+      try {
+        const boot = await ensureBootstrap();
+        let data = null;
+        if (boot && boot.data && boot.data.presence_learned) {
+          data = boot.data.presence_learned;
+        } else {
+          const response = await fetch('/api/network-presence/learned', { cache: 'no-store' });
+          if (!response.ok) throw new Error('API non disponibile');
+          data = await response.json();
+        }
+
+        const devices =
+          (data && Array.isArray(data.devices) ? data.devices : null) ||
+          (data && Array.isArray(data.learned_devices) ? data.learned_devices : []) ||
+          [];
+        const tbody = document.getElementById('learnedDevicesBody');
+
+        tbody.innerHTML = '';
+
+        if (devices.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" class="muted">Nessun dispositivo riconosciuto</td></tr>';
+          return;
+        }
+
+        devices.forEach((device, index) => {
+          const row = document.createElement('tr');
+          const address =
+            (device && typeof device.address === 'string' && device.address) ? device.address :
+            (device && typeof device.ip_address === 'string' && device.ip_address) ? device.ip_address :
+            (device && typeof device.mac_address === 'string' && device.mac_address) ? device.mac_address :
+            '';
+          const deviceType = address.includes(':') ? 'MAC' : 'IP';
+          const persistent = (device && device.is_persistent) ? 'P' : '-';
+
+          // Backward-compat for old UI template: normalize fields when backend uses learned_devices schema.
+          if (device && typeof device === 'object') {
+            if (!device.address) device.address = address;
+            if (device.trusted === undefined && device.is_persistent !== undefined) {
+              device.trusted = !!device.is_persistent;
+            }
+          }
+          const trustIndicator = device.trusted ? '🟢' : '🟡';
+
+          row.innerHTML = `
+            <td><code>${device.address}</code> ${trustIndicator}</td>
+            <td>${deviceType}</td>
+            <td>
+              <button class="btn small" onclick="makeDevicePermanent('${device.address}')" title="Rendi permanente">💾</button>
+              <button class="btn small danger" onclick="removeLearnedDevice('${device.address}')" title="Rimuovi">🗑️</button>
+            </td>
+          `;
+          tbody.appendChild(row);
+        });
+
+      } catch (e) {
+        document.getElementById('learnedDevicesBody').innerHTML =
+          '<tr><td colspan="3" class="muted">Errore caricamento: ' + e.message + '</td></tr>';
+      }
+    }
+
+    async function makeDevicePermanent(address) {
+      try {
+        const response = await fetch('/api/network-presence/make-permanent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: address })
+        });
+
+        if (response.ok) {
+          toast(`Dispositivo ${address} reso permanente`);
+          // Add to allowlist automatically
+          const deviceType = address.includes(':') ? 'mac' : 'ip';
+          if (!model.per_protocol) model.per_protocol = {};
+          if (!model.per_protocol['learned']) model.per_protocol['learned'] = { ip: [], mac: [] };
+
+          if (!model.per_protocol['learned'][deviceType].includes(address)) {
+            model.per_protocol['learned'][deviceType].push(address);
+            markDirty();
+            render();
+          }
+
+          loadLearnedDevices();
+        } else {
+          throw new Error('Errore API');
+        }
+      } catch (e) {
+        toast('Errore: ' + e.message);
+      }
+    }
+
+    async function removeLearnedDevice(address) {
+      if (!confirm(`Rimuovere il dispositivo ${address}?`)) return;
+
+      try {
+        const response = await fetch('/api/network-presence/remove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: address })
+        });
+
+        if (response.ok) {
+          toast(`Dispositivo ${address} rimosso`);
+          loadLearnedDevices();
+        } else {
+          throw new Error('Errore API');
+        }
+      } catch (e) {
+        toast('Errore: ' + e.message);
+      }
+    }
+
+    async function clearAllLearned() {
+      if (!confirm('Rimuovere tutti i dispositivi riconosciuti?')) return;
+
+      try {
+        const response = await fetch('/api/network-presence/clear', {
+          method: 'POST'
+        });
+
+        if (response.ok) {
+          toast('Tutti i dispositivi rimossi');
+          loadLearnedDevices();
+        } else {
+          throw new Error('Errore API');
+        }
+      } catch (e) {
+        toast('Errore: ' + e.message);
+      }
+    }
+
+    // Initial load
+    (async ()=>{
+      try {
+        await ensureBootstrap();
+        const catalogPromise = loadProtocolCatalog();
+        await reloadFromDevice();
+        await loadIDSModules();
+        await loadLearnedDevices();
+        await refreshStats();
+        await catalogPromise;
+      } catch (err) {
+        console.error('IDS page initial load failed:', err);
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+name: Bug report
+description: Report a reproducible firmware, build, or documentation problem.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include credentials, private keys, proprietary OT traffic, or exploit details. Use private vulnerability reporting for security-sensitive findings.
+  - type: dropdown
+    id: board
+    attributes:
+      label: Hardware target
+      options:
+        - LILYGO T-POE Pro
+        - Waveshare ESP32-S3-ETH
+        - Waveshare ESP32-P4-ETH
+        - Host-side tooling or documentation
+    validations:
+      required: true
+  - type: input
+    id: revision
+    attributes:
+      label: Revision
+      description: Commit hash, tag, or branch used.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: PlatformIO version, operating system, power method, and sanitized network layout.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest safe and authorized reproduction.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and sanitized logs
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: I tested only on systems and networks I own or am explicitly authorized to assess.
+          required: true
+        - label: I removed credentials, private network data, and proprietary information from this report.
+          required: true

@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Diagnostics - ESP32 OT Security</title>
+    <style>
+       /* Baseline “GIUSTO” */
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial; margin:1rem; background:#f6f6f6; color:#222}
+.container{max-width:1100px;margin:0 auto}
+
+/* Navbar */
+.navbar{display:flex; align-items:center; justify-content:space-between; margin:0 0 1rem 0; padding:0}
+.nav-brand{font-weight:700;color:#111}
+.nav-btn{background:#06a; color:#fff; border:none; padding:.6rem 1rem; border-radius:8px; text-decoration:none; display:inline-block}
+.nav-btn:hover{background:#07b}
+
+/* Card / layout */
+.card{background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.06); padding:1rem; margin-bottom:1rem}
+
+/* Tipografia */
+h1{font-size:1.4rem;margin:0 0 1rem 0}
+h2{font-size:1.15rem;margin:0 0 .5rem 0}
+label{display:block;margin-bottom:.3rem;font-weight:600;color:#333}
+
+/* Form */
+.form-group{margin-bottom:.8rem}
+input,select,textarea{width:100%; padding:.45rem .6rem; border:1px solid #ccc; border-radius:4px; background:#fff; color:#222}
+
+/* Bottoni */
+.btn,.btn-primary,.btn-secondary,.btn-success,.btn-danger{background:#007; color:#fff; border:none; padding:.5rem 1rem; border-radius:6px; cursor:pointer; display:inline-block; margin-right:.5rem}
+.btn:hover,.btn-primary:hover{background:#008}
+.btn-secondary{background:#555}
+.btn-success{background:#268c2f}
+.btn-danger{background:#c33}
+
+/* Tabelle / pre */
+table{width:100%; border-collapse:collapse}
+th,td{padding:.5rem; text-align:left; border-bottom:1px solid #eee}
+th{background:#f8f9fa; color:#333}
+pre{background:#f8f9fa; padding:.6rem; border-radius:6px; overflow:auto; max-height:240px}
+
+/* Risultati diagnostica */
+.diagnostic-results{background:#f8f9fa; padding:.6rem; border-radius:6px; min-height:2rem; border:1px solid #e6e6e6}
+.button-group{display:flex; gap:.5rem; flex-wrap:wrap}
+
+/* Alert (se usati) */
+.alert{padding:.5rem .75rem; border-radius:6px; border:1px solid transparent; margin:.5rem 0}
+.alert-info{background:#e8f4ff; color:#084298; border-color:#b6daff}
+.alert-success{background:#d4edda; color:#155724; border-color:#c3e6cb}
+.alert-warning{background:#fff3cd; color:#664d03; border-color:#ffecb5}
+.alert-danger{background:#f8d7da; color:#721c24; border-color:#f5c2c7}
+
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">ESP32 OT Security - Diagnostics</div>
+        <div class="nav-links">
+            <a href="/" class="btn nav-btn">← Dashboard</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>🔧 Network Diagnostics</h1>
+        <p>Comprehensive Ethernet debugging tools for T-POE Pro hardware troubleshooting</p>
+
+        <!-- Phase 1: Hardware Diagnostics -->
+        <div class="card">
+            <h2>⚡ Phase 1: Hardware Diagnostics</h2>
+            <p>PHY registers, link status, and hardware-level connectivity</p>
+
+            <button onclick="loadHardwareDiagnostics()" class="btn-primary">Run Hardware Diagnostics</button>
+            <div id="hardware-results" class="diagnostic-results"></div>
+        </div>
+
+        <!-- Phase 2: IP Stack Debugging -->
+        <div class="card">
+            <h2>🌐 Phase 2: IP Stack Debugging</h2>
+            <p>Ping tests, routing table, ARP analysis</p>
+
+            <button onclick="loadIPStackDiagnostics()" class="btn-primary">Run IP Stack Diagnostics</button>
+            <div id="ipstack-results" class="diagnostic-results"></div>
+        </div>
+
+        <!-- Phase 3: Network Layer Analysis -->
+        <div class="card">
+            <h2>📡 Phase 3: Network Layer Analysis</h2>
+            <p>Network discovery, ARP debugging, broadcast testing</p>
+
+            <button onclick="loadNetworkLayerAnalysis()" class="btn-primary">Run Network Analysis</button>
+            <div class="form-group">
+                <label for="scan-type">Scan Type:</label>
+                <select id="scan-type">
+                    <option value="device_scan">Device Discovery</option>
+                    <option value="segment_analysis">Segment Analysis</option>
+                </select>
+                <button onclick="runNetworkScan()" class="btn-secondary">Network Scan</button>
+            </div>
+            <div id="network-results" class="diagnostic-results"></div>
+        </div>
+
+        <!-- Phase 4: Driver Level Debugging -->
+        <div class="card">
+            <h2>🛠️ Phase 4: Driver Level Debugging</h2>
+            <p>RMII configuration, MAC statistics, driver integrity</p>
+
+            <button onclick="loadDriverDiagnostics()" class="btn-primary">Run Driver Diagnostics</button>
+            <div id="driver-results" class="diagnostic-results"></div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card">
+            <h2>🚀 Quick Actions</h2>
+            <div class="button-group">
+                <button onclick="runFullDiagnostics()" class="btn-success">Run All Diagnostics</button>
+                <button onclick="clearResults()" class="btn-warning">Clear Results</button>
+                <button onclick="exportResults()" class="btn-info">Export Results</button>
+            </div>
+        </div>
+
+        <!-- Results Summary -->
+        <div class="card" id="summary-card" style="display: none;">
+            <h2>📊 Diagnostics Summary</h2>
+            <div id="summary-content"></div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionToken = urlParams.get('sid');
+
+    if (sessionToken) {
+        console.log('Session token found');
+
+        // Override fetch to automatically add Bearer token to API calls
+        const originalFetch = window.fetch;
+        if (!window.__apiFetchQueue) {
+            window.__apiFetchQueue = Promise.resolve();
+        }
+        window.fetch = function(url, options = {}) {
+            const isApiCall = typeof url === 'string' && url.startsWith('/api/');
+            if (!isApiCall) {
+                return originalFetch.call(this, url, options);
+            }
+
+            const opts = {...options};
+            opts.headers = {...(options && options.headers) || {}};
+            opts.headers['Authorization'] = 'Bearer ' + sessionToken;
+
+            const runner = () => originalFetch.call(window, url, opts);
+            const queued = window.__apiFetchQueue.then(runner, runner);
+            window.__apiFetchQueue = queued.catch(() => {});
+            return queued;
+        };
+
+        // Update navigation links to include session token
+        document.querySelectorAll('.nav-btn').forEach(link => {
+            const href = link.getAttribute('href');
+            if (href && !href.includes('sid=')) {
+                link.setAttribute('href', href + '?sid=' + encodeURIComponent(sessionToken));
+            }
+        });
+    } else {
+        console.warn('No session token found in URL - API calls may fail');
+    }
+})();
+        let diagnosticsData = {};
+
+        async function makeAPICall(endpoint) {
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                return { error: error.message };
+            }
+        }
+
+        async function makePOSTCall(endpoint, data) {
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                return { error: error.message };
+            }
+        }
+
+        function formatResults(data, containerId) {
+            const container = document.getElementById(containerId);
+            if (data.error) {
+                container.innerHTML = `<div class="alert alert-danger">❌ Error: ${data.error}</div>`;
+                return;
+            }
+
+            let html = '<div class="diagnostic-details">';
+
+            for (const [key, value] of Object.entries(data)) {
+                if (key === 'status' || key === 'timestamp') continue;
+
+                html += `<div class="detail-item">`;
+                html += `<strong>${key.replace(/_/g, ' ').toUpperCase()}:</strong>`;
+
+                if (typeof value === 'boolean') {
+                    html += `<span class="${value ? 'status-ok' : 'status-error'}">${value ? '✅ OK' : '❌ FAILED'}</span>`;
+                } else if (typeof value === 'object') {
+                    html += `<pre>${JSON.stringify(value, null, 2)}</pre>`;
+                } else {
+                    html += `<pre>${value}</pre>`;
+                }
+                html += `</div>`;
+            }
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        async function loadHardwareDiagnostics() {
+            document.getElementById('hardware-results').innerHTML = '<div class="loading">⏳ Running hardware diagnostics...</div>';
+            const data = await makeAPICall('/api/ethernet/diagnostics');
+            diagnosticsData.hardware = data;
+            formatResults(data, 'hardware-results');
+            updateSummary();
+        }
+
+        async function loadIPStackDiagnostics() {
+            document.getElementById('ipstack-results').innerHTML = '<div class="loading">⏳ Running IP stack diagnostics...</div>';
+            const data = await makeAPICall('/api/ip-stack/diagnostics');
+            diagnosticsData.ipstack = data;
+            formatResults(data, 'ipstack-results');
+            updateSummary();
+        }
+
+        async function loadNetworkLayerAnalysis() {
+            document.getElementById('network-results').innerHTML = '<div class="loading">⏳ Running network layer analysis...</div>';
+            const data = await makeAPICall('/api/network-layer/analysis');
+            diagnosticsData.network = data;
+            formatResults(data, 'network-results');
+            updateSummary();
+        }
+
+        async function runNetworkScan() {
+            const scanType = document.getElementById('scan-type').value;
+            document.getElementById('network-results').innerHTML = '<div class="loading">⏳ Running network scan...</div>';
+            const data = await makePOSTCall('/api/network/scan', { scan_type: scanType });
+            diagnosticsData.scan = data;
+            formatResults(data, 'network-results');
+            updateSummary();
+        }
+
+        async function loadDriverDiagnostics() {
+            document.getElementById('driver-results').innerHTML = '<div class="loading">⏳ Running driver diagnostics...</div>';
+            const data = await makeAPICall('/api/driver-level/diagnostics');
+            diagnosticsData.driver = data;
+            formatResults(data, 'driver-results');
+            updateSummary();
+        }
+
+        async function runFullDiagnostics() {
+            await loadHardwareDiagnostics();
+            await new Promise(r => setTimeout(r, 1000)); // Brief delay between phases
+            await loadIPStackDiagnostics();
+            await new Promise(r => setTimeout(r, 1000));
+            await loadNetworkLayerAnalysis();
+            await new Promise(r => setTimeout(r, 1000));
+            await loadDriverDiagnostics();
+        }
+
+        function clearResults() {
+            diagnosticsData = {};
+            document.getElementById('hardware-results').innerHTML = '';
+            document.getElementById('ipstack-results').innerHTML = '';
+            document.getElementById('network-results').innerHTML = '';
+            document.getElementById('driver-results').innerHTML = '';
+            document.getElementById('summary-card').style.display = 'none';
+        }
+
+        function updateSummary() {
+            const summaryCard = document.getElementById('summary-card');
+            const summaryContent = document.getElementById('summary-content');
+
+            if (Object.keys(diagnosticsData).length === 0) {
+                summaryCard.style.display = 'none';
+                return;
+            }
+
+            let html = '<div class="summary-grid">';
+
+            for (const [phase, data] of Object.entries(diagnosticsData)) {
+                const hasError = data.error;
+                const status = hasError ? 'error' : 'success';
+                const icon = hasError ? '❌' : '✅';
+
+                html += `<div class="summary-item summary-${status}">`;
+                html += `<h4>${icon} ${phase.toUpperCase()}</h4>`;
+                html += `<p>${hasError ? 'Failed' : 'Completed'}</p>`;
+                html += `</div>`;
+            }
+
+            html += '</div>';
+            summaryContent.innerHTML = html;
+            summaryCard.style.display = 'block';
+        }
+
+        function exportResults() {
+            const results = {
+                timestamp: new Date().toISOString(),
+                device: 'ESP32 T-POE Pro',
+                diagnostics: diagnosticsData
+            };
+
+            const blob = new Blob([JSON.stringify(results, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ethernet-diagnostics-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>

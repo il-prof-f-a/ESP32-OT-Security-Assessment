@@ -1,0 +1,287 @@
+#pragma once
+#include <string>
+#include <cstdint>
+#include <atomic>
+#include <vector>
+
+#include "../core/types.h"
+#include "../core/psram_allocator.h"
+#include "../assessment/flow_table.h"
+#include "../assessment/flow_key.h"
+#include "../assessment/flow_data.h"
+#include "session_state_machine.h"
+
+class ConfigurationManager;
+class ReportingEngine;
+class WritersTracker;
+class NetworkPresenceTracker;
+
+// Forward declarations for fuzzing structures
+struct FuzzTestCase;
+struct FuzzJob;
+
+// Fuzzing execution result codes
+enum class FuzzResult {
+    SUCCESS = 0,              // Test executed successfully and received valid response
+    CONNECTION_FAILED = 1,    // Cannot connect to target
+    TIMEOUT = 2,             // Connected but no response received
+    EXCEPTION_RESPONSE = 3,   // Received protocol-level exception/error
+    INVALID_RESPONSE = 4,     // Received malformed or unexpected response
+    SOCKET_ERROR = 5,        // Socket creation or configuration failed
+    SEND_FAILED = 6          // Failed to send test payload
+};
+
+class BasePlugin {
+public:
+    BasePlugin(const std::string& name, const std::string& version, ProtocolType type)
+    : name_(name), version_(version), type_(type) {}
+    virtual ~BasePlugin() = default;
+
+    virtual bool initialize(ConfigurationManager* cfg, ReportingEngine* rep) {
+        cfg_ = cfg; rep_ = rep;
+        loadAllowedWritersFromConfig();
+        return true;
+    }
+    virtual void shutdown() {}
+
+    // Network packet callback for real-time analysis (implemented at base level)
+    void onPacket(const NetworkPacket& pkt, bool bypassAuthorization = false);
+
+    // Protocol-specific packet analysis is handled via doPacketAnalysis()
+    // Base class enforces writers authorization via enforceWritersAuthorization()
+
+    // Plugin-specific determination: is this packet a WRITE operation for this protocol?
+    // Default false; plugins should override.
+    virtual bool isPacketWriter(const NetworkPacket& pkt) const { (void)pkt; return false; }
+
+    // Active scan API (legacy std::string, to be phased out)
+    virtual std::string doVulnerabilityScan(const std::string& target) = 0;
+
+    // Network discovery API - returns JSON with discovered devices/services (legacy)
+    virtual std::string doNetworkDiscovery(const std::string& target_network, uint32_t timeout_ms = 300000) = 0;
+
+    // PSRAM-native active scan APIs (new). Default implementation bridges to legacy methods.
+    virtual bool doVulnerabilityScanPSRAM(const psram_string& target, psram_string& out_report);
+    virtual bool doNetworkDiscoveryPSRAM(const psram_string& target_network,
+                                         uint32_t timeout_ms,
+                                         psram_string& out_report);
+    bool doNetworkDiscoveryPSRAM(const psram_string& target_network,
+                                 psram_string& out_report) {
+        return doNetworkDiscoveryPSRAM(target_network, 300000U, out_report);
+    }
+
+    // Writers tracking API - each protocol manages its own writers
+    // Network presence tracking interface
+    virtual NetworkPresenceTracker& getNetworkPresenceTracker() = 0;
+    virtual const NetworkPresenceTracker& getNetworkPresenceTracker() const = 0;
+
+    // Passive IDS API
+    virtual bool doPacketAnalysis(const NetworkPacket& packet) = 0;
+    virtual bool isTargetPacket(const NetworkPacket& packet) = 0;
+    virtual void loadIDSRules(const std::string& rules_json) { (void)rules_json; }
+    virtual void loadIDSRulesPSRAM(const psram_string& rules_json);
+
+    // ==================== FLOW MANAGEMENT API ====================
+
+    /**
+     * @brief Costruisce chiave flusso specifica del protocollo
+     *
+     * Ogni protocollo implementa questa funzione per estrarre gli identificatori
+     * rilevanti dal pacchetto (es: Modbus unit_id, S7 rack/slot, OPC UA channel_id)
+     *
+     * @param packet Pacchetto di rete
+     * @param key [out] Chiave flusso da popolare
+     * @return true se chiave creata con successo, false altrimenti
+     */
+    virtual bool buildFlowKey(const NetworkPacket& packet, FlowKey& key) = 0;
+
+    /**
+     * @brief Classifica tipo operazione dal pacchetto
+     *
+     * Determina se il pacchetto contiene READ, WRITE, CONTROL, ERROR, etc.
+     *
+     * @param packet Pacchetto di rete
+     * @param operation_type [out] Tipo operazione (es: "READ", "WRITE")
+     * @param operation_details [out] Dettagli (es: "FC=0x03 addr=100")
+     * @param is_error [out] true se risposta di errore
+     * @return true se classificazione riuscita, false se pacchetto non analizzabile
+     */
+    virtual bool classifyPacketOperation(const NetworkPacket& packet,
+                                         psram_string& operation_type,
+                                         psram_string& operation_details,
+                                         bool& is_error) = 0;
+
+    /**
+     * @brief Aggiorna stato protocollo del flusso
+     *
+     * Chiamato per aggiornare la state machine del flusso basandosi sul pacchetto.
+     * (es: INIT -> CONNECTING -> ESTABLISHED -> DATA_EXCHANGE)
+     *
+     * @param packet Pacchetto di rete
+     * @param flow Flusso da aggiornare
+     */
+    virtual void updateProtocolState(const NetworkPacket& packet, FlowData& flow) = 0;
+
+    /**
+     * @brief Assegna label al flusso basandosi su pattern rilevati
+     *
+     * Analizza le metriche e lo storico del flusso per assegnare label appropriate
+     * (es: READER, WRITER, SCANNER, FLOODING, SUSPICIOUS, etc.)
+     *
+     * @param flow Flusso da classificare
+     */
+    virtual void assignFlowLabel(FlowData& flow) = 0;
+
+    /**
+     * @brief Ottieni riferimento alla flow table del plugin
+     *
+     * @return Riferimento alla FlowTable
+     */
+    FlowTable& getFlowTable() { return flow_table_; }
+    const FlowTable& getFlowTable() const { return flow_table_; }
+
+    // Fuzzing API
+    virtual bool generateSeedCorpus(const FuzzJob& job, std::vector<FuzzTestCase>& out) = 0;
+    virtual bool fixup(const FuzzJob& job, const FuzzTestCase& in, FuzzTestCase& out) = 0;
+    virtual FuzzResult execute(const FuzzJob& job, const FuzzTestCase& tc,
+                              std::string& sent_hex, std::string& received_hex,
+                              std::string& status_details) = 0;
+
+    // Port monitoring for dynamic raw taps
+    virtual std::vector<uint16_t> getMonitoredPorts() const = 0;
+
+    // Plugin metadata (for compatibility with existing code)
+    virtual ProtocolType protocol() const { return type_; }
+    virtual const char* name() const { return name_.c_str(); }
+    virtual const char* version() const { return version_.c_str(); }
+
+    // Introspection
+    const std::string& getName() const { return name_; }
+    const std::string& getVersion() const { return version_; }
+    ProtocolType getProtocolType() const { return type_; }
+    uint64_t getEventsGenerated() const { return events_generated_.load(); }
+
+    // Centralized target parsing: splits "ip:port" or "ip" format and uses protocol default port if not specified
+    bool parseTarget(const std::string& target, std::string& ip, uint16_t& port) const;
+    bool parseTarget(const psram_string& target, psram_string& ip, uint16_t& port) const;
+
+    struct GeneralDiscoveryConfig {
+        psram_string target;
+        psram_string mode_label;
+        // Interfaccia di bind per le socket di discovery:
+        // - "" (default): ETH_DEF (comportamento precedente, Ethernet-only)
+        // - "ETH_DEF": Ethernet
+        // - "WIFI_STA_DEF": WiFi STA
+        // - "WIFI_AP_DEF": WiFi AP
+        // - "AUTO": prova ETH_DEF poi WIFI_STA_DEF
+        psram_string bind_ifkey;
+        bool ping_scan = true;
+        bool port_scan = false;
+        bool emit_progress_events = true;
+        uint32_t per_host_timeout_ms = 500;
+        uint32_t connect_timeout_ms = 400;
+        uint32_t batch_size = 4;
+        uint32_t batch_delay_ms = 250;
+        uint32_t max_hosts = 512;
+        uint16_t ping_tcp_port = 80;
+        uint32_t total_timeout_ms = 0;
+        psram_vector<uint16_t> ports;
+    };
+
+    static std::string runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
+                                           ReportingEngine* rep,
+                                           ConfigurationManager* cfg_mgr);
+
+protected:
+    // ==================== FLOW TRACKING HELPERS ====================
+
+    /**
+     * @brief Traccia pacchetto nel sistema di flow management
+     *
+     * Metodo comune implementato nel BasePlugin che:
+     * 1. Costruisce la FlowKey chiamando buildFlowKey()
+     * 2. Ottiene o crea il flusso nella FlowTable
+     * 3. Aggiorna le metriche del flusso
+     * 4. Classifica l'operazione chiamando classifyPacketOperation()
+     * 5. Aggiunge l'operazione allo storico
+     * 6. Aggiorna lo stato chiamando updateProtocolState()
+     * 7. Assegna label chiamando assignFlowLabel()
+     *
+     * I plugin devono chiamare questo metodo da doPacketAnalysis() per
+     * ogni pacchetto che vogliono tracciare.
+     *
+     * @param packet Pacchetto di rete da tracciare
+     * @return true se tracking riuscito, false se errore
+     */
+    bool trackPacketInFlow(const NetworkPacket& packet);
+
+    /**
+     * @brief Cleanup periodico dei flussi scaduti
+     *
+     * Chiamato periodicamente (es: ogni minuto) per rimuovere flussi
+     * inattivi dalla tabella. I plugin possono chiamarlo da un task dedicato
+     * o dal doPacketAnalysis() stesso.
+     */
+    void cleanupExpiredFlows();
+
+    /**
+     * @brief Accesso alla state machine centralizzata
+     *
+     * I plugin possono usare questo metodo per registrare callbacks
+     * protocol-specific per la gestione degli stati.
+     *
+     * @return Riferimento alla SessionStateMachine
+     */
+    SessionStateMachine& getSessionStateMachine() { return session_state_machine_; }
+
+    // Helpers for reporting
+    void reportVulnerability(const std::string& target,
+                             const std::string& payload_json,
+                             const std::string& extra = "",
+                             LogLevel level = LogLevel::WARNING);
+    void reportVulnerabilityPSRAM(const psram_string& target,
+                                  const psram_string& payload_json,
+                                  const psram_string& extra,
+                                  LogLevel level = LogLevel::WARNING);
+    inline void reportVulnerabilityPSRAM(const psram_string& target,
+                                         const psram_string& payload_json,
+                                         LogLevel level = LogLevel::WARNING) {
+        reportVulnerabilityPSRAM(target, payload_json, psram_string{}, level);
+    }
+
+    void reportIntrusion(const NetworkPacket& pkt,
+                         const std::string& payload_json,
+                         LogLevel level = LogLevel::WARNING);
+    void reportIntrusionPSRAM(const NetworkPacket& pkt,
+                              const psram_string& payload_json,
+                              LogLevel level = LogLevel::WARNING);
+
+    ConfigurationManager* cfg_ = nullptr;
+    ReportingEngine* rep_ = nullptr;
+    std::atomic<uint64_t> events_generated_{0};
+
+    /**
+     * Flow table per tracking sessioni/flussi (allocata in PSRAM)
+     */
+    FlowTable flow_table_;
+
+    /**
+     * Centralized session state machine (shared across all protocols)
+     * Plugins can register protocol-specific callbacks for custom state transitions
+     */
+    SessionStateMachine session_state_machine_;
+
+private:
+    std::string name_;
+    std::string version_;
+    ProtocolType type_;
+
+protected:
+    // Allowed writers parsed from config for this plugin (stored in PSRAM)
+    psram_vector<psram_string> allowed_writer_ips_;
+    psram_vector<psram_string> allowed_writer_macs_;
+
+    void loadAllowedWritersFromConfig();
+    bool isWriterAuthorized(const std::string& src_ip, const std::string& src_mac) const;
+    void enforceWritersAuthorization(const NetworkPacket& pkt, bool bypassAuthorization);
+};

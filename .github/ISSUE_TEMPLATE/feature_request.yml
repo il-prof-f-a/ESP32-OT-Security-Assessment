@@ -1,0 +1,42 @@
+name: Feature request
+description: Propose a scoped improvement for the experimental firmware or tooling.
+title: "[Enhancement]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the use case and why the current behavior is insufficient.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed outcome
+      description: Describe the desired behavior without including sensitive network or exploit details.
+    validations:
+      required: true
+  - type: dropdown
+    id: board
+    attributes:
+      label: Hardware impact
+      multiple: true
+      options:
+        - LILYGO T-POE Pro
+        - Waveshare ESP32-S3-ETH
+        - Waveshare ESP32-P4-ETH
+        - All targets
+        - Host-side tooling or documentation
+  - type: textarea
+    id: validation
+    attributes:
+      label: Suggested validation
+      description: Explain how the outcome could be tested safely and reproducibly.
+  - type: checkboxes
+    id: responsibility
+    attributes:
+      label: Responsible-use confirmation
+      options:
+        - label: This proposal is intended for authorized defensive research and laboratory use.
+          required: true

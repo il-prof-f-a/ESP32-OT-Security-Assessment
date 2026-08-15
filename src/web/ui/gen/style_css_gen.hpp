@@ -1,0 +1,421 @@
+/* auto-generated from style.css */
+#pragma once
+static const char* STYLE_CSS_GEN = R"HTML(
+body {
+    font-family: system-ui;
+    margin: 1rem;
+    background: #f6f6f6;
+}
+
+.card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .1);
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.btn {
+    background: #007;
+    color: #fff;
+    border: none;
+    padding: .5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-right: .5rem;
+}
+
+.btn:hover {
+    background: #008;
+}
+
+.btn.danger {
+    background: #c33;
+}
+
+.btn.danger:hover {
+    background: #d44;
+}
+
+.btn.success {
+    background: #28a745;
+}
+
+.btn.info {
+    background: #17a2b8;
+}
+
+.btn.warning {
+    background: #ffc107;
+}
+
+.btn-primary {
+    background-color: #007bff;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.btn-secondary {
+    background-color: #6c757d;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.nav-btn {
+    background: #06a;
+    color: #fff;
+    border: none;
+    padding: .6rem 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.nav-btn:hover {
+    background: #07b;
+}
+
+.form-group {
+    margin-bottom: .8rem;
+}
+
+label {
+    display: block;
+    margin-bottom: .3rem;
+    font-weight: 600;
+}
+
+input,
+select {
+    width: 100%;
+    padding: .4rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.status {
+    padding: .5rem;
+    border-radius: 4px;
+    margin-bottom: .8rem;
+}
+
+.status.ok {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status.err {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.tabs {
+    display: flex;
+    gap: .5rem;
+    margin-bottom: 1rem;
+}
+
+.tab {
+    padding: .5rem 1rem;
+    background: #ddd;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.tab.active {
+    background: #007;
+    color: #fff;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+textarea {
+    width: 100%;
+    height: 200px;
+    padding: .4rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    padding: .5rem;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+th {
+    background: #f8f9fa;
+}
+
+pre {
+    background: #f8f9fa;
+    padding: .5rem;
+    border-radius: 4px;
+    overflow: auto;
+    max-height: 200px;
+}
+
+.job-status {
+    padding: .2rem .5rem;
+    border-radius: 12px;
+    font-size: .8rem;
+    font-weight: 600;
+}
+
+.status-ready {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.status-running {
+    background: #e8f5e8;
+    color: #388e3c;
+    animation: pulse 2s infinite;
+}
+
+.status-completed {
+    background: #f3e5f5;
+    color: #7b1fa2;
+}
+
+.status-error {
+    background: #ffebee;
+    color: #d32f2f;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+.fuzz-actions {
+    display: flex;
+    gap: .3rem;
+    flex-wrap: wrap;
+}
+
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #333;
+    color: white;
+    padding: 10px 20px;
+}
+
+.nav-brand {
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+.nav-links a {
+    color: white;
+    text-decoration: none;
+    padding: 5px 10px;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+}
+
+.nav-links a:hover {
+    background-color: #575757;
+}
+
+.nav-links a.active {
+    background-color: #007bff;
+}
+
+.container {
+    padding: 20px;
+}
+
+.diagnostic-results {
+    margin-top: 15px;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+}
+
+.detail-item {
+    margin-bottom: 10px;
+}
+
+.detail-item strong {
+    display: block;
+    margin-bottom: 5px;
+    color: #495057;
+}
+
+.detail-item pre {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    margin: 0;
+}
+
+.status-ok {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.status-error {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.summary-item {
+    padding: 15px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.summary-success {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+}
+
+.summary-failure {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+}
+
+.summary-info {
+    background: #cfe2f3;
+    border: 1px solid #99c2e4;
+}
+
+.summary-value {
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.summary-label {
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+.config-section {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 6px;
+    margin: 1rem 0;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.375rem;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+}
+
+.checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin: 0.5rem 0;
+}
+
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+}
+
+.stat-card {
+    background: #e9ecef;
+    padding: 0.75rem;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #007;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: #666;
+    margin-top: 0.25rem;
+}
+
+.output-area {
+    background: #000;
+    color: #0f0;
+    padding: 1rem;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.875rem;
+    height: 300px;
+    overflow-y: auto;
+    border: 1px solid #333;
+    white-space: pre-wrap;
+}
+
+.controls {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin: 1rem 0;
+    flex-wrap: wrap;
+}
+)HTML";
+
+// Compile-time size constant (actual content length)
+static constexpr size_t STYLE_CSS_GEN_SIZE = 6026;

@@ -1,0 +1,730 @@
+/* auto-generated from signatures.html */
+#pragma once
+static const char* SIGNATURES_HTML_GEN = R"HTML(
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CVE Signatures • Detection Engine</title>
+  <style>
+/* Baseline "GIUSTO" (coerente con protocols / scanner / reporting) */
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial; margin:1rem; background:#f6f6f6; color:#222}
+
+/* Layout / card */
+.container{max-width:1100px;margin:0 auto}
+.card{background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.06); padding:1rem; margin-bottom:1rem}
+.full-width{grid-column:1 / -1}
+
+/* Tipografia */
+h1{font-size:1.4rem;margin:0 0 1rem 0}
+h2{font-size:1.15rem;margin:0 0 .5rem 0}
+label{display:block;margin-bottom:.3rem;font-weight:600;color:#333}
+.muted{color:#666}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Consolas,Monaco,monospace; font-size:12px; background:#f8f9fa; padding:.1rem .3rem; border-radius:4px; color:#222}
+
+/* Form */
+.form-group{margin-bottom:.8rem}
+input,select,textarea{width:100%; padding:.45rem .6rem; border:1px solid #ccc; border-radius:4px; background:#fff; color:#222}
+input[type="checkbox"],input[type="radio"]{width:auto}
+input[type="file"]{width:auto; padding:.3rem}
+.switch{display:inline-flex; align-items:center; gap:.5rem}
+
+/* Bottoni */
+.btn{background:#007; color:#fff; border:none; padding:.5rem 1rem; border-radius:6px; cursor:pointer; display:inline-block; margin-right:.5rem}
+.btn:hover{background:#008}
+.btn.small{font-size:.9rem; padding:.35rem .7rem; border-radius:5px}
+.btn.ghost{background:transparent; color:#333; border:1px solid #bbb}
+.btn.danger{background:#c33}
+.btn.danger:hover{background:#d44}
+.btn.success{background:#28a745}
+.btn.success:hover{background:#218838}
+.nav-btn{background:#06a; color:#fff; border:none; padding:.6rem 1rem; border-radius:8px; text-decoration:none; display:inline-block}
+.nav-btn:hover{background:#07b}
+
+/* Tabelle */
+table{width:100%; border-collapse:collapse}
+th,td{padding:.5rem; text-align:left; border-bottom:1px solid #eee}
+th{background:#f8f9fa; color:#333}
+.table-actions{display:flex; gap:.3rem}
+
+/* Blocchi di stato */
+.status{padding:.5rem;border-radius:4px;margin-bottom:.8rem}
+.status.ok{background:#d4edda;color:#155724}
+.status.err{background:#f8d7da;color:#721c24}
+.status.warn{background:#fff3cd;color:#856404}
+.pill{display:inline-flex; gap:.5rem; align-items:center; padding:.25rem .5rem; border-radius:999px; background:#eef5ff; border:1px solid #cfe8ff; color:#113}
+
+/* Toolbar */
+.toolbar{display:flex; gap:.5rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap}
+.file-upload{display:flex; gap:.5rem; align-items:center}
+
+/* JSON Editor */
+.json-editor{min-height:400px; font-family:ui-monospace,SFMono-Regular,Consolas,Monaco,monospace; font-size:13px; line-height:1.4}
+.signature-item{border:1px solid #e0e0e0; border-radius:6px; margin-bottom:1rem; padding:1rem; background:#fafafa}
+.signature-item.editing{background:#f0f8ff; border-color:#007}
+.signature-header{display:flex; justify-content:space-between; align-items:center; margin-bottom:.5rem}
+.signature-cve{font-weight:bold; color:#c33}
+.signature-protocol{color:#666; font-size:.9rem}
+.signature-details{margin-top:.5rem}
+.signature-bytes{font-family:ui-monospace,monospace; background:#fff; padding:.5rem; border-radius:4px; border:1px solid #ddd; word-break:break-all}
+
+/* Loader */
+.loader{text-align:center; padding:2rem; color:#666}
+
+/* Modal per editing */
+.modal{display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.5); z-index:1000}
+.modal.show{display:flex; align-items:center; justify-content:center}
+.modal-content{background:#fff; border-radius:8px; padding:2rem; max-width:600px; width:90%; max-height:80vh; overflow-y:auto}
+.modal-header{display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem}
+.modal-close{background:none; border:none; font-size:1.5rem; cursor:pointer; padding:0}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .toolbar{flex-direction:column; align-items:stretch}
+  .file-upload{flex-direction:column}
+  .table-actions{flex-direction:column}
+}
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Navigation -->
+    <div class="card">
+      <h1>🛡️ CVE Signature Detection Engine</h1>
+      <a href="/" class="nav-btn">🏠 Dashboard</a>
+    </div>
+
+    <div class="card">
+      <div id="status" class="status" style="display:none"></div>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="file-upload">
+          <input type="file" id="fileInput" accept=".json" />
+          <button class="btn" onclick="uploadSignatures()">📤 Carica File</button>
+        </div>
+        <button class="btn success" onclick="downloadSignatures()">📥 Scarica JSON</button>
+        <button class="btn danger" onclick="clearSignatures()">🗑️ Cancella Tutto</button>
+        <button class="btn ghost" onclick="reloadSignatures()">🔄 Ricarica da NVS</button>
+      </div>
+
+      <!-- Stats -->
+      <div class="card">
+        <h2>📊 Statistiche Signature</h2>
+        <div id="stats" class="loader">Caricamento statistiche...</div>
+      </div>
+
+      <!-- Signature List -->
+      <div class="card">
+        <h2>📋 Lista Signature CVE</h2>
+        <div class="toolbar">
+          <button class="btn" onclick="addNewSignature()">➕ Aggiungi Nuova</button>
+          <button class="btn ghost" onclick="toggleRawEditor()">🧾 Modifica JSON</button>
+          <button class="btn success" id="saveRawBtn" style="display:none" onclick="saveRawJSON()">💾 Salva JSON</button>
+        </div>
+        <textarea id="jsonEditor" class="json-editor" style="display:none"></textarea>
+
+        <div id="signatureList" class="loader">Caricamento signature...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal per editing signature -->
+  <div id="editModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>✏️ Modifica Signature</h2>
+        <button class="modal-close" onclick="closeEditModal()">&times;</button>
+      </div>
+      <div class="form-group">
+        <label>CVE ID:</label>
+        <input type="text" id="editCVE" placeholder="CVE-2024-12345">
+      </div>
+      <div class="form-group">
+        <label>Name (opzionale):</label>
+        <input type="text" id="editName" placeholder="Nome vulnerabilità">
+      </div>
+      <div class="form-group">
+        <label>Protocollo:</label>
+        <select id="editProtocol">
+          <option value="Modbus TCP">Modbus TCP</option>
+          <option value="PROFINET">PROFINET</option>
+          <option value="S7comm/S7comm+">S7comm/S7comm+</option>
+          <option value="OPC UA">OPC UA</option>
+          <option value="EtherNet/IP">EtherNet/IP</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Bytes (hex):</label>
+        <textarea id="editBytes" rows="3" placeholder="01 02 03 FF ... per prefix match"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Function Code (opzionale):</label>
+        <input type="text" id="editFunctionCode" placeholder="es. 0x05">
+      </div>
+      <div class="form-group">
+        <label>Descrizione (opzionale):</label>
+        <textarea id="editDescription" rows="2"></textarea>
+      </div>
+      <div class="form-group">
+        <label>References (opzionale, una per riga):</label>
+        <textarea id="editReferences" rows="3" placeholder="https://cve.mitre.org/...&#10;https://nvd.nist.gov/..."></textarea>
+      </div>
+      <div class="toolbar">
+        <button class="btn success" onclick="saveSignatureEdit()">💾 Salva</button>
+        <button class="btn ghost" onclick="closeEditModal()">❌ Annulla</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+
+    (function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionToken = urlParams.get('sid');
+
+    if (sessionToken) {
+        console.log('Session token found');
+
+        // Override fetch to automatically add Bearer token to API calls
+        const originalFetch = window.fetch;
+        if (!window.__apiFetchQueue) {
+            window.__apiFetchQueue = Promise.resolve();
+        }
+        window.fetch = function(url, options = {}) {
+            const isApiCall = typeof url === 'string' && url.startsWith('/api/');
+            if (!isApiCall) {
+                return originalFetch.call(this, url, options);
+            }
+
+            const opts = {...options};
+            opts.headers = {...(options && options.headers) || {}};
+            opts.headers['Authorization'] = 'Bearer ' + sessionToken;
+            console.log('Adding Bearer token to API call (queued)');
+
+            const runner = () => originalFetch.call(window, url, opts);
+            const queued = window.__apiFetchQueue.then(runner, runner);
+            window.__apiFetchQueue = queued.catch(() => {});
+            return queued;
+        };
+
+        // Update navigation links to include session token
+        document.querySelectorAll('.nav-btn').forEach(link => {
+            const href = link.getAttribute('href');
+            if (href && !href.includes('sid=')) {
+                link.setAttribute('href', href + '?sid=' + encodeURIComponent(sessionToken));
+            }
+        });
+    } else {
+        console.warn('No session token found in URL - API calls may fail');
+    }
+})();
+
+let signatures = {};
+let editMode = false;
+let currentEditIndex = -1;
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+  (async () => {
+    try {
+      let boot = null;
+      try {
+        const r = await fetch('/api/page/bootstrap?name=signatures', { cache: 'no-store' });
+        if (r && r.ok) boot = await r.json();
+      } catch (e) { boot = null; }
+
+      if (boot && boot.data) {
+        await loadStats(boot.data.stats || null);
+        await loadSignatures(boot.data.list || null);
+      } else {
+        await loadStats();
+        await loadSignatures();
+      }
+    } catch (err) {
+      console.error('Signatures page initial load failed:', err);
+    }
+  })();
+});
+
+// Load signature statistics
+async function loadStats(override) {
+  try {
+    const stats = override || await (async () => {
+      const response = await fetch('/api/signatures/stats', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Failed to load stats');
+      return await response.json();
+    })();
+    const statsDiv = document.getElementById('stats');
+
+    let html = `<div class="pill">📊 Totale: ${stats.total}</div>`;
+
+    if (stats.by_protocol) {
+      html += '<div style="margin-top:.5rem">';
+      for (const [protocol, count] of Object.entries(stats.by_protocol)) {
+        html += `<div class="pill" style="margin-right:.5rem">${protocol}: ${count}</div>`;
+      }
+      html += '</div>';
+    }
+
+    statsDiv.innerHTML = html;
+  } catch (error) {
+    showStatus('Errore nel caricamento statistiche: ' + error.message, 'err');
+  }
+}
+
+function toggleRawEditor() {
+  const ta = document.getElementById('jsonEditor');
+  const saveBtn = document.getElementById('saveRawBtn');
+  const visible = ta.style.display !== 'none';
+  if (!visible) {
+    ta.value = JSON.stringify(signatures, null, 2);
+  }
+  ta.style.display = visible ? 'none' : 'block';
+  saveBtn.style.display = visible ? 'none' : 'inline-block';
+}
+
+async function saveRawJSON() {
+  const ta = document.getElementById('jsonEditor');
+  let parsed;
+  try {
+    parsed = JSON.parse(ta.value);
+  } catch (e) {
+    showStatus('JSON non valido: ' + e.message, 'err');
+    return;
+  }
+  try {
+    const response = await fetch('/api/signatures/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ signatures: parsed })
+    });
+    const result = await response.json();
+    if (response.ok) {
+      signatures = parsed;
+      showStatus('✅ JSON salvato', 'ok');
+      await reloadSignatures();
+      await loadStats();
+      renderSignatures();
+    } else {
+      showStatus(`❌ ${result.message}`, 'err');
+    }
+  } catch (e) {
+    showStatus('Errore salvataggio JSON: ' + e.message, 'err');
+  }
+}
+
+function renderExtraFields(sig) {
+  let html = '';
+
+  // Display Name if present
+  if (sig.Name) {
+    html += `<div><strong>Nome:</strong> ${esc(sig.Name)}</div>`;
+  }
+
+  // Display FunctionCode if present from Packet
+  if (sig.Packet?.FunctionCode) {
+    html += `<div><strong>Function Code:</strong> ${esc(sig.Packet.FunctionCode)}</div>`;
+  }
+
+  // Display References if present
+  if (sig.References && Array.isArray(sig.References) && sig.References.length > 0) {
+    html += `<div><strong>References:</strong></div>`;
+    sig.References.forEach(ref => {
+      html += `<div style="margin-left:8px;">• <a href="${esc(ref)}" target="_blank">${esc(ref)}</a></div>`;
+    });
+  }
+
+  // Display other unknown fields (backward compatibility)
+  const known = new Set(['CVE','Name','Description','Packet','References']);
+  for (const k of Object.keys(sig)) {
+    if (!known.has(k)) {
+      const v = typeof sig[k] === 'object' ? JSON.stringify(sig[k]) : String(sig[k]);
+      html += `<div><strong>${esc(k)}:</strong> ${esc(v)}</div>`;
+    }
+  }
+
+  // Packet extra fields (excluding Bytes, FunctionCode already shown)
+  if (sig.Packet && typeof sig.Packet === 'object') {
+    const pk = {...sig.Packet};
+    delete pk.Bytes;
+    delete pk.FunctionCode;
+    delete pk.Description; // Description is shown at top level
+    const keys = Object.keys(pk);
+    if (keys.length) {
+      html += `<div><strong>Packet (extra):</strong></div>`;
+      keys.forEach(k => {
+        const v = typeof pk[k] === 'object' ? JSON.stringify(pk[k]) : String(pk[k]);
+        html += `<div style="margin-left:8px;"><strong>${esc(k)}:</strong> ${esc(v)}</div>`;
+      });
+    }
+  }
+  return html;
+}
+
+// Load signatures from API
+async function loadSignatures(override) {
+  try {
+    signatures = override || await (async () => {
+      const response = await fetch('/api/signatures/list', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Failed to load signatures');
+      return await response.json();
+    })();
+    renderSignatures();
+  } catch (error) {
+    showStatus('Errore nel caricamento signature: ' + error.message, 'err');
+    document.getElementById('signatureList').innerHTML =
+      '<div class="status err">❌ Impossibile caricare le signature</div>';
+  }
+}
+
+function esc(s) {
+  return String(s ?? '')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'",'&#39;');
+}
+
+// Render signatures list
+function renderSignatures() {
+  const listDiv = document.getElementById('signatureList');
+
+  if (!signatures || Object.keys(signatures).length === 0) {
+    listDiv.innerHTML = '<div class="status warn">⚠️ Nessuna signature caricata</div>';
+    return;
+  }
+
+  const parts = [];
+
+  for (const [protocol, protocolSigs] of Object.entries(signatures)) {
+    const vulns = protocolSigs?.Vulnerabilities;
+    if (!Array.isArray(vulns)) continue;
+
+    parts.push(`<h3>${esc(protocol)}</h3>`);
+
+    vulns.forEach((sig, index) => {
+      const globalIndex = `${protocol}_${index}`;
+      const safeId = 'sig_' + globalIndex.replace(/[^\w\-:.]+/g, '-');
+      // preferisci Packet.Bytes; fai fallback a Bytes “piatto” per compatibilità
+      const bytes = (sig?.Packet?.Bytes ?? sig?.Bytes ?? 'N/A');
+
+      parts.push(`
+        <div class="signature-item" id="${safeId}">
+          <div class="signature-header">
+            <div>
+              <span class="signature-cve">${esc(sig?.CVE + 'N/A')}</span>
+              <span class="signature-protocol">${esc(protocol)}</span>
+            </div>
+            <div class="table-actions">
+              <button class="btn small" onclick="editSignature('${esc(globalIndex)}')">✏️ Modifica</button>
+              <button class="btn small danger" onclick="deleteSignature('${esc(globalIndex)}')">🗑️</button>
+            </div>
+          </div>
+          <div class="signature-details">
+            ${sig?.Description ? `<div><strong>Descrizione:</strong> ${esc(sig.Description)}</div>` : ''}
+            <div><strong>Bytes:</strong></div>
+            <div class="signature-bytes">${esc(bytes)}</div>
+            ${renderExtraFields(sig)}
+          </div>
+        </div>
+      `);
+    });
+  }
+
+  listDiv.innerHTML = parts.join('');
+}
+
+// Upload signatures file
+async function uploadSignatures() {
+  const fileInput = document.getElementById('fileInput');
+  const file = fileInput.files[0];
+  if (!file) { showStatus('Seleziona un file JSON', 'err'); return; }
+
+  const text = await file.text();
+  try {
+    // Validiamo che sia JSON
+    JSON.parse(text);
+  } catch {
+    showStatus('Il file non è un JSON valido', 'err');
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/signatures/upload', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: text
+    });
+    const result = await response.json();
+    if (response.ok) {
+      showStatus(`✅ ${result.message}. Signature aggiunte: ${result.signatures_added}`, 'ok');
+      fileInput.value = '';
+      await reloadSignatures();
+      await loadStats();
+    } else {
+      showStatus(`❌ ${result.message}`, 'err');
+    }
+  } catch (e) {
+    showStatus('Errore upload: ' + e.message, 'err');
+  }
+}
+
+
+// Download signatures
+async function downloadSignatures() {
+  try {
+    const response = await fetch('/api/signatures/download');
+    if (!response.ok) throw new Error('Download failed');
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'cve_signatures.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    showStatus('✅ File scaricato con successo', 'ok');
+  } catch (error) {
+    showStatus('Errore download: ' + error.message, 'err');
+  }
+}
+
+// Clear all signatures
+async function clearSignatures() {
+  if (!confirm('⚠️ Confermi di voler cancellare TUTTE le signature?')) return;
+
+  try {
+    const response = await fetch('/api/signatures/clear', { method: 'POST' });
+    const result = await response.json();
+
+    if (response.ok) {
+      showStatus('✅ Signature cancellate con successo', 'ok');
+      loadStats();
+      loadSignatures();
+    } else {
+      showStatus(`❌ ${result.message}`, 'err');
+    }
+  } catch (error) {
+    showStatus('Errore cancellazione: ' + error.message, 'err');
+  }
+}
+
+// Reload signatures from NVS
+async function reloadSignatures() {
+  try {
+    const response = await fetch('/api/signatures/reload', { method: 'POST' });
+    const result = await response.json();
+
+    if (response.ok) {
+      showStatus(`✅ ${result.message}. Signature caricate: ${result.signatures_loaded}`, 'ok');
+      loadStats();
+      loadSignatures();
+    } else {
+      showStatus(`❌ ${result.message}`, 'err');
+    }
+  } catch (error) {
+    showStatus('Errore reload: ' + error.message, 'err');
+  }
+}
+
+// Edit signature
+function editSignature(globalIndex) {
+  const [protocol, index] = globalIndex.split('_');
+  const sig = signatures[protocol]?.Vulnerabilities?.[parseInt(index)];
+
+  if (!sig) return;
+
+  currentEditIndex = globalIndex;
+  document.getElementById('editCVE').value = sig.CVE || '';
+  document.getElementById('editName').value = sig.Name || '';
+  document.getElementById('editProtocol').value = protocol;
+  document.getElementById('editBytes').value = (sig.Packet?.Bytes ?? sig.Bytes ?? '');
+  document.getElementById('editFunctionCode').value = sig.Packet?.FunctionCode || '';
+  document.getElementById('editDescription').value = (sig.Packet?.Description ?? sig.Description ?? '');
+
+  // Handle references array
+  const refs = sig.References || [];
+  document.getElementById('editReferences').value = refs.join('\n');
+
+  document.getElementById('editModal').classList.add('show');
+}
+
+// Add new signature
+function addNewSignature() {
+  currentEditIndex = 'new';
+  document.getElementById('editCVE').value = '';
+  document.getElementById('editName').value = '';
+  document.getElementById('editProtocol').value = 'Modbus TCP';
+  document.getElementById('editBytes').value = '';
+  document.getElementById('editFunctionCode').value = '';
+  document.getElementById('editDescription').value = '';
+  document.getElementById('editReferences').value = '';
+
+  document.getElementById('editModal').classList.add('show');
+}
+
+// Save signature edit
+async function saveSignatureEdit() {
+  const cve = document.getElementById('editCVE').value.trim();
+  const name = document.getElementById('editName').value.trim();
+  const protocolSel = document.getElementById('editProtocol').value;  // es. "Modbus TCP"
+  const bytes = document.getElementById('editBytes').value.trim();
+  const functionCode = document.getElementById('editFunctionCode').value.trim();
+  const description = document.getElementById('editDescription').value.trim();
+  const referencesText = document.getElementById('editReferences').value.trim();
+
+  if (!cve || !bytes) { showStatus('CVE e Bytes sono obbligatori', 'err'); return; }
+
+  // Parse references (one per line)
+  const references = referencesText
+    .split('\n')
+    .map(r => r.trim())
+    .filter(r => r.length > 0);
+
+  // Assicurati che il protocollo esista
+  if (!signatures[protocolSel]) {
+    signatures[protocolSel] = { Vulnerabilities: [] };
+  }
+
+  // Build signature object with new fields
+  const sigObject = {
+    CVE: cve,
+    Packet: {
+      Bytes: bytes
+    }
+  };
+
+  // Add optional fields only if present
+  if (name) sigObject.Name = name;
+  if (functionCode) sigObject.Packet.FunctionCode = functionCode;
+  if (description) sigObject.Packet.Description = description;
+  if (references.length > 0) sigObject.References = references;
+
+  if (currentEditIndex === 'new') {
+    // add new signature
+    signatures[protocolSel].Vulnerabilities.push(sigObject);
+  } else {
+    // edit esistente: "Modbus TCP_3"
+    const [oldProto, idxStr] = String(currentEditIndex).split('_');
+    const idx = parseInt(idxStr, 10);
+
+    const oldArr = signatures[oldProto]?.Vulnerabilities || [];
+    const existing = oldArr[idx];
+    if (!existing) { showStatus('Signature non trovata', 'err'); return; }
+
+    if (protocolSel === oldProto) {
+      // update in-place
+      oldArr[idx] = sigObject;
+    } else {
+      // spostamento tra protocolli
+      oldArr.splice(idx, 1);
+      signatures[protocolSel].Vulnerabilities.push(sigObject);
+      // se il vecchio protocollo resta vuoto puoi decidere se rimuoverlo
+      if (oldArr.length === 0) {
+        // opzionale: delete signatures[oldProto];
+      }
+    }
+  }
+
+  // Persisti tutto
+  try {
+    const response = await fetch('/api/signatures/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ signatures })
+    });
+    const result = await response.json();
+    if (response.ok) {
+      showStatus('✅ Signature salvata con successo', 'ok');
+      closeEditModal();
+      await reloadSignatures();
+      await loadStats();
+    } else {
+      showStatus(`❌ ${result.message}`, 'err');
+    }
+  } catch (e) {
+    showStatus('Errore salvataggio: ' + e.message, 'err');
+  }
+}
+
+
+// Delete signature
+async function deleteSignature(globalIndex) {
+  if (!confirm('Confermi di voler eliminare questa signature?')) return;
+  const [protocol, idxStr] = String(globalIndex).split('_');
+  const idx = parseInt(idxStr, 10);
+  const arr = signatures[protocol]?.Vulnerabilities || [];
+  if (arr[idx] == null) { showStatus('Signature non trovata', 'err'); return; }
+  arr.splice(idx, 1);
+
+  try {
+    const response = await fetch('/api/signatures/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ signatures })
+    });
+    const result = await response.json();
+    if (response.ok) {
+      showStatus('✅ Signature eliminata', 'ok');
+      await reloadSignatures();
+      await loadStats();
+    } else {
+      showStatus(`❌ ${result.message}`, 'err');
+    }
+  } catch (e) {
+    showStatus('Errore eliminazione: ' + e.message, 'err');
+  }
+}
+
+
+// Close edit modal
+function closeEditModal() {
+  document.getElementById('editModal').classList.remove('show');
+  currentEditIndex = -1;
+}
+
+// Toggle edit mode
+function toggleEditMode() {
+  editMode = !editMode;
+  document.getElementById('saveBtn').style.display = editMode ? 'inline-block' : 'none';
+  // Add visual feedback for edit mode
+}
+
+// Save all changes
+async function saveAllChanges() {
+  showStatus('✅ Modifiche salvate', 'ok');
+  editMode = false;
+  document.getElementById('saveBtn').style.display = 'none';
+}
+
+// Show status message
+function showStatus(message, type = 'ok') {
+  const statusDiv = document.getElementById('status');
+  statusDiv.className = `status ${type}`;
+  statusDiv.textContent = message;
+  statusDiv.style.display = 'block';
+
+  setTimeout(() => {
+    statusDiv.style.display = 'none';
+  }, 5000);
+}
+
+// Close modal on outside click
+document.getElementById('editModal').addEventListener('click', function(e) {
+  if (e.target === this) closeEditModal();
+});
+  </script>
+</body>
+</html>
+
+)HTML";
+
+// Compile-time size constant (actual content length)
+static constexpr size_t SIGNATURES_HTML_GEN_SIZE = 25320;

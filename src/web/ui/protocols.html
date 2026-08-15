@@ -1,0 +1,673 @@
+<!doctype html>
+<html>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Configurazione Protocolli</title>
+<style>
+body{font-family:system-ui;margin:1rem;background:#f6f6f6}
+.card{background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);padding:1rem;margin-bottom:1rem}
+.btn{background:#007;color:#fff;border:none;padding:.5rem 1rem;border-radius:6px;cursor:pointer;margin-right:.5rem}
+.btn:hover{background:#008}
+.form-group{margin-bottom:.8rem}
+label{display:block;margin-bottom:.3rem;font-weight:600}
+input{width:100%;padding:.4rem;border:1px solid #ccc;border-radius:4px}
+.tabs{display:flex;gap:.5rem;margin-bottom:1rem}
+.tab{padding:.5rem 1rem;background:#ddd;border:none;border-radius:4px;cursor:pointer}
+.tab.active{background:#007;color:#fff}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.status{padding:.5rem;border-radius:4px;margin-bottom:.8rem}
+.status.ok{background:#d4edda;color:#155724}
+.status.err{background:#f8d7da;color:#721c24}
+.nav-btn{
+    background:#06a;
+    color:#fff;
+    border:none;
+    padding:.6rem 1rem;
+    border-radius:8px;
+    cursor:pointer;
+    text-decoration:none;
+    display:inline-block
+}
+.nav-btn:hover{
+    background:#07b
+}
+.proto-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.8rem;margin-top:.8rem}
+.proto-metric{background:#eef2ff;border:1px solid #d1d9ff;border-radius:8px;padding:.7rem}
+.proto-metric .label{font-size:.75rem;color:#4a5568;text-transform:uppercase;letter-spacing:.04em}
+.proto-metric .value{font-size:1.25rem;font-weight:600;color:#1a237e}
+.proto-metric .hint{font-size:.7rem;color:#718096;margin-top:.15rem}
+.proto-table{width:100%;border-collapse:collapse;margin-top:.8rem}
+.proto-table th,.proto-table td{border:1px solid #dce0f0;padding:.45rem;font-size:.85rem;text-align:left}
+.proto-table th{background:#f5f7ff;color:#334155;text-transform:uppercase;font-size:.75rem}
+.proto-table tbody tr:nth-child(even){background:#f9fbff}
+.disabled-protocol{opacity:.92}
+</style>
+
+<div class="card">
+  <h1>🔌 Configurazione Protocolli</h1>
+  <a href="/" class="btn nav-btn">← Dashboard</a>
+</div>
+
+<ul class="tabs" id="protoTabs"></ul>
+<div id="status"></div>
+
+<div class="tab-content active" id="modbus">
+  <div class="card">
+    <h2>Modbus TCP</h2>
+    <div class="form-group">
+      <label><input type="checkbox" id="mb_enabled" style="width:auto;margin-right:.5rem">Plugin Abilitato</label>
+    </div>
+    <div class="form-group"><label>Unit ID</label><input id="mb_unit" placeholder="1"></div>
+    <div class="form-group"><label>Connect Timeout (ms)</label><input id="mb_ctimeout" placeholder="1500"></div>
+    <div class="form-group"><label>I/O Timeout (ms)</label><input id="mb_iotimeout" placeholder="1500"></div>
+    <div class="form-group"><label>Allowed Writers</label><input id="mb_writers" placeholder="192.168.1.100,192.168.1.101"></div>
+    <button class="btn" onclick="load('modbus')">Carica</button>
+    <button class="btn" onclick="save('modbus')">Salva</button>
+  </div>
+</div>
+
+<div class="tab-content" id="s7">
+  <div class="card">
+    <h2>S7 Communication</h2>
+    <div class="form-group">
+      <label><input type="checkbox" id="s7_enabled" style="width:auto;margin-right:.5rem">Plugin Abilitato</label>
+    </div>
+
+    <h3 style="margin-top:1rem">Configurazione Connessione</h3>
+    <div class="form-group"><label>Port</label><input id="s7_port" placeholder="102" type="number"></div>
+    <div class="form-group"><label>Connection Timeout (ms)</label><input id="s7_timeout" placeholder="2000" type="number"></div>
+    <div class="form-group"><label>PDU Size (bytes)</label><input id="s7_pdu" placeholder="240" type="number"></div>
+    <div class="form-group"><label>Rack Number</label><input id="s7_rack" placeholder="0" type="number"></div>
+    <div class="form-group"><label>Slot Number</label><input id="s7_slot" placeholder="1" type="number"></div>
+
+    <h3 style="margin-top:1rem">Configurazione Sicurezza</h3>
+    <div class="form-group">
+      <label><input type="checkbox" id="s7_check_auth" style="width:auto;margin-right:.5rem">Check Authentication</label>
+      <small>Verifica se il PLC richiede autenticazione</small>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="s7_check_protection" style="width:auto;margin-right:.5rem">Check Protection Level</label>
+      <small>Verifica il livello di protezione del PLC (0=None, 1=Write-protected, 2=Read/Write, 3=Full)</small>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="s7_test_stop" style="width:auto;margin-right:.5rem">Test Anonymous Stop</label>
+      <small>Testa se è possibile arrestare il PLC senza autenticazione</small>
+    </div>
+
+    <h3 style="margin-top:1rem">IDS Configuration</h3>
+    <div class="form-group">
+      <label><input type="checkbox" id="s7_detect_tls" style="width:auto;margin-right:.5rem">Detect Non-TLS Communications</label>
+      <small>Rileva comunicazioni S7 non criptate</small>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="s7_detect_stop" style="width:auto;margin-right:.5rem">Detect STOP CPU Commands</label>
+      <small>Rileva comandi di arresto del PLC</small>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="s7_detect_recon" style="width:auto;margin-right:.5rem">Detect Reconnaissance</label>
+      <small>Rileva attività di scansione e raccolta informazioni (SZL reads eccessivi)</small>
+    </div>
+    <div class="form-group"><label>Max Writes per 60s</label><input id="s7_max_writes" placeholder="50" type="number"></div>
+    <div class="form-group"><label>Max Reads per 30s</label><input id="s7_max_reads" placeholder="100" type="number"></div>
+
+    <button class="btn" onclick="load('s7')">Carica</button>
+    <button class="btn" onclick="save('s7')">Salva</button>
+  </div>
+  <div class="card" id="s7-stats-card" style="display:none;margin-top:1rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3>Telemetria IDS</h3>
+      <button class="btn" type="button" onclick="refreshS7Stats()">Aggiorna</button>
+    </div>
+    <div class="proto-grid">
+      <div class="proto-metric"><div class="label">Handshake avviati</div><div class="value" id="s7-handshake-started">0</div></div>
+      <div class="proto-metric"><div class="label">Handshake confermati</div><div class="value" id="s7-handshake-confirmed">0</div></div>
+      <div class="proto-metric"><div class="label">Handshake falliti</div><div class="value" id="s7-handshake-failed">0</div></div>
+      <div class="proto-metric"><div class="label">Success rate</div><div class="value" id="s7-handshake-success-pct">0.0%</div></div>
+      <div class="proto-metric"><div class="label">Setup COMM completati</div><div class="value" id="s7-setup-comm">0</div></div>
+      <div class="proto-metric"><div class="label">Sessioni TLS</div><div class="value" id="s7-tls-sessions">0</div></div>
+      <div class="proto-metric"><div class="label">STOP CPU rilevati</div><div class="value" id="s7-stop-detected">0</div></div>
+      <div class="proto-metric"><div class="label">STOP CPU bloccati</div><div class="value" id="s7-stop-blocked">0</div><div class="hint" id="s7-stop-block-pct">0.0%</div></div>
+      <div class="proto-metric"><div class="label">Restart rilevati</div><div class="value" id="s7-restart-detected">0</div></div>
+      <div class="proto-metric"><div class="label">Alert reconnaissance</div><div class="value" id="s7-recon-alerts">0</div></div>
+      <div class="proto-metric"><div class="label">Alert write</div><div class="value" id="s7-write-alerts">0</div></div>
+      <div class="proto-metric"><div class="label">Tentativi brute force</div><div class="value" id="s7-bruteforce-alerts">0</div></div>
+      <div class="proto-metric"><div class="label">Flooding rilevati</div><div class="value" id="s7-flooding-alerts">0</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="tab-content" id="profinet">
+  <div class="card">
+    <h2>PROFINET</h2>
+    <div class="form-group">
+      <label><input type="checkbox" id="pn_enabled" style="width:auto;margin-right:.5rem">Plugin Abilitato</label>
+    </div>
+
+    <h3 style="margin-top:1rem">Configurazione DCP Discovery</h3>
+    <div class="form-group"><label>DCP Multicast MAC</label><input id="pn_multicast" placeholder="01:0E:CF:00:00:00"></div>
+    <div class="form-group"><label>Discovery Timeout (ms)</label><input id="pn_timeout" placeholder="3000" type="number"></div>
+    <div class="form-group">
+      <label><input type="checkbox" id="pn_topology" style="width:auto;margin-right:.5rem">Enable Topology Discovery</label>
+      <small>Scopri automaticamente la topologia di rete PROFINET</small>
+    </div>
+
+    <h3 style="margin-top:1rem">Configurazione Sicurezza</h3>
+    <div class="form-group">
+      <label><input type="checkbox" id="pn_check_names" style="width:auto;margin-right:.5rem">Check Default Names</label>
+      <small>Verifica se i dispositivi usano nomi predefiniti/generici</small>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="pn_check_security" style="width:auto;margin-right:.5rem">Check Security Class</label>
+      <small>Verifica il livello di sicurezza PROFINET (0=None, 1=Integrity, 2=Integrity+Confidentiality)</small>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="pn_check_unencrypted" style="width:auto;margin-right:.5rem">Check Unencrypted Communication</label>
+      <small>Rileva comunicazioni DCP/RT non criptate</small>
+    </div>
+    <div class="form-group"><label>Default Name Patterns (comma-separated)</label><input id="pn_patterns" placeholder="station_,new_device,simatic,plc_"></div>
+
+    <h3 style="margin-top:1rem">IDS Configuration</h3>
+    <div class="form-group">
+      <label><input type="checkbox" id="pn_detect_spoofing" style="width:auto;margin-right:.5rem">Detect DCP Spoofing</label>
+      <small>Rileva risposte DCP Identify sospette (flooding)</small>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="pn_detect_config" style="width:auto;margin-right:.5rem">Detect Configuration Changes</label>
+      <small>Rileva operazioni DCP Set multiple (riconfigurazioni sospette)</small>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="pn_detect_topology" style="width:auto;margin-right:.5rem">Detect Topology Changes</label>
+      <small>Rileva modifiche non autorizzate alla topologia di rete</small>
+    </div>
+    <div class="form-group"><label>Max Devices per Second</label><input id="pn_max_devices" placeholder="10" type="number"></div>
+
+    <button class="btn" onclick="load('profinet')">Carica</button>
+    <button class="btn" onclick="save('profinet')">Salva</button>
+  </div>
+  <div class="card" id="profinet-stats-card" style="display:none;margin-top:1rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3>Monitoraggio Real-Time</h3>
+      <button class="btn" type="button" onclick="refreshProfinetStats()">Aggiorna</button>
+    </div>
+    <div class="proto-grid">
+      <div class="proto-metric"><div class="label">Canali totali</div><div class="value" id="pn-total-channels">0</div></div>
+      <div class="proto-metric"><div class="label">Canali write</div><div class="value" id="pn-write-channels">0</div></div>
+      <div class="proto-metric"><div class="label">Canali read</div><div class="value" id="pn-read-channels">0</div></div>
+      <div class="proto-metric"><div class="label">Alert spoofing</div><div class="value" id="pn-spoofing-alerts">0</div></div>
+      <div class="proto-metric"><div class="label">Alert config</div><div class="value" id="pn-config-alerts">0</div></div>
+    </div>
+    <p style="font-size:.85rem;color:#64748b;margin-top:.6rem">
+      Le metriche vengono aggiornate solo se il plugin PROFINET è abilitato.
+    </p>
+  </div>
+</div>
+
+<div class="tab-content" id="ethernetip">
+  <div class="card">
+    <h2>EtherNet/IP (CIP)</h2>
+    <div class="form-group">
+      <label><input type="checkbox" id="enip_enabled" style="width:auto;margin-right:.5rem">Plugin Abilitato</label>
+    </div>
+
+    <h3 style="margin-top:1rem">Configurazione Connessione</h3>
+    <div class="form-group"><label>TCP Port (Explicit Messaging)</label><input id="enip_tcp" placeholder="44818" type="number"></div>
+    <div class="form-group"><label>UDP Port (Implicit I/O)</label><input id="enip_udp" placeholder="2222" type="number"></div>
+    <div class="form-group"><label>Connection Timeout (ms)</label><input id="enip_timeout" placeholder="3000" type="number"></div>
+    <div class="form-group"><label>Discovery Timeout (ms)</label><input id="enip_discovery_timeout" placeholder="1500" type="number"></div>
+
+    <h3 style="margin-top:1rem">Configurazione Sicurezza</h3>
+    <div class="form-group">
+      <label><input type="checkbox" id="enip_check_cip_security" style="width:auto;margin-right:.5rem">Check CIP Security</label>
+      <small>Verifica se il dispositivo supporta CIP Security (autenticazione/crittografia)</small>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="enip_check_plaintext" style="width:auto;margin-right:.5rem">Check Plaintext Messaging</label>
+      <small>Rileva explicit messaging in chiaro (GetAttributeSingle senza crittografia)</small>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="enip_test_anonymous_write" style="width:auto;margin-right:.5rem">Test Anonymous Write</label>
+      <small>Testa se è possibile scrivere attributi senza autenticazione</small>
+    </div>
+
+    <h3 style="margin-top:1rem">IDS Configuration</h3>
+    <div class="form-group">
+      <label><input type="checkbox" id="enip_detect_session_flood" style="width:auto;margin-right:.5rem">Detect Session Flooding</label>
+      <small>Rileva tentativi eccessivi di RegisterSession (>10 in 60s)</small>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="enip_detect_rrdata_storm" style="width:auto;margin-right:.5rem">Detect SendRRData Storm</label>
+      <small>Rileva richieste SendRRData eccessive (>50 in 30s) - possibile DoS</small>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="enip_detect_write_storm" style="width:auto;margin-right:.5rem">Detect Write Storm</label>
+      <small>Rileva operazioni di scrittura CIP eccessive (SetAttributeSingle/Reset)</small>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="enip_detect_recon" style="width:auto;margin-right:.5rem">Detect Reconnaissance</label>
+      <small>Rileva attività di ricognizione (ListIdentity/ListServices eccessivi)</small>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="enip_detect_errors" style="width:auto;margin-right:.5rem">Detect Error Patterns</label>
+      <small>Rileva pattern di errori sospetti (>15 status!=0 in 30s)</small>
+    </div>
+    <div class="form-group"><label>Max Session Attempts per 60s</label><input id="enip_max_sessions" placeholder="10" type="number"></div>
+    <div class="form-group"><label>Max SendRRData per 30s</label><input id="enip_max_rrdata" placeholder="50" type="number"></div>
+    <div class="form-group"><label>Max Write Operations per 120s</label><input id="enip_max_writes" placeholder="5" type="number"></div>
+    <div class="form-group"><label>Max Discovery Requests per 60s</label><input id="enip_max_discovery" placeholder="20" type="number"></div>
+
+    <button class="btn" onclick="load('ethernetip')">Carica</button>
+    <button class="btn" onclick="save('ethernetip')">Salva</button>
+  </div>
+</div>
+
+<div class="tab-content" id="opcua">
+  <div class="card">
+    <h2>OPC UA</h2>
+    <div class="form-group">
+      <label><input type="checkbox" id="opcua_enabled" style="width:auto;margin-right:.5rem">Plugin Abilitato</label>
+    </div>
+    <div class="form-group"><label>Port</label><input id="opcua_port" placeholder="4840"></div>
+    <div class="form-group"><label>Timeout (ms)</label><input id="opcua_timeout" placeholder="5000"></div>
+    <button class="btn" onclick="load('opcua')">Carica</button>
+    <button class="btn" onclick="save('opcua')">Salva</button>
+  </div>
+</div>
+
+<div class="card" style="margin-top:2rem;border:2px solid #007;background:#f0f8ff">
+  <h2>💾 Salva Configurazione</h2>
+  <p>Salva l'intera configurazione corrente su NVS (memoria non volatile) per renderla persistente al riavvio.</p>
+  <div class="row">
+    <button class="btn" onclick="saveToNVS()" style="background:#28a745;font-weight:bold">💾 Salva su NVS</button>
+    <button class="btn" onclick="loadCurrentConfig()" style="margin-left:.5rem">🔄 Mostra Config Attuale</button>
+  </div>
+  <div id="nvs-status" style="margin-top:1rem"></div>
+  <details style="margin-top:1rem">
+    <summary style="cursor:pointer;font-weight:600;color:#007">📋 Mostra configurazione JSON corrente</summary>
+    <pre id="current-config" style="background:#f8f9fa;padding:1rem;border:1px solid #ddd;border-radius:4px;margin-top:.5rem;font-size:.8rem;max-height:300px;overflow-y:auto"></pre>
+  </details>
+</div>
+
+<script>
+// ---- Token di sessione: aggiunge Authorization a tutte le /api/* e propaga sid nei link .nav-btn
+(function() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const sessionToken = urlParams.get('sid');
+
+  if (sessionToken) {
+    // Override fetch per aggiungere Authorization: Bearer <sid>
+    const originalFetch = window.fetch;
+    if (!window.__apiFetchQueue) {
+      window.__apiFetchQueue = Promise.resolve();
+    }
+    window.fetch = function(url, options = {}) {
+      const isApiCall = typeof url === 'string' && url.startsWith('/api/');
+      if (!isApiCall) {
+        return originalFetch.call(this, url, options);
+      }
+
+      const opts = {...options};
+      opts.headers = {...(options && options.headers) || {}};
+      opts.headers['Authorization'] = 'Bearer ' + sessionToken;
+
+      const runner = () => originalFetch.call(window, url, opts);
+      const queued = window.__apiFetchQueue.then(runner, runner);
+      window.__apiFetchQueue = queued.catch(() => {});
+      return queued;
+    };
+
+    // Propaga sid nei link di navigazione
+    document.querySelectorAll('.nav-btn').forEach(link => {
+      const href = link.getAttribute('href');
+      if (href && !href.includes('sid=')) {
+        const sep = href.includes('?') ? '&' : '?';
+        link.setAttribute('href', href + sep + 'sid=' + encodeURIComponent(sessionToken));
+      }
+    });
+  } else {
+    console.warn('No session token found in URL - API calls may fail');
+  }
+})();
+
+// ---- UI helpers
+function status(msg, err){
+  var s = document.getElementById('status');
+  s.className = 'status ' + (err ? 'err' : 'ok');
+  s.textContent = msg;
+  setTimeout(() => s.innerHTML = '', 3000);
+}
+
+// Fix: showTab non usa più "event", accetta l'elemento (opzionale) o fa fallback via data-key
+function showTab(p, el){
+  // contenuti
+  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+  var panel = document.getElementById(p);
+  if (panel) panel.classList.add('active');
+
+  // tab attivi
+  const allTabs = document.querySelectorAll('.tab');
+  allTabs.forEach(e => e.classList.remove('active'));
+
+  if (el) {
+    el.classList.add('active');
+  } else {
+    const btn = document.querySelector('.tab[data-key="'+p+'"]');
+    if (btn) btn.classList.add('active');
+  }
+}
+
+const __PROTO_ENABLE_MAP = {
+  modbus: 'mb_enabled',
+  s7: 's7_enabled',
+  profinet: 'pn_enabled',
+  ethernetip: 'enip_enabled',
+  opcua: 'opcua_enabled'
+};
+
+function applyProtocolEnableState(p){
+  const panel = document.getElementById(p);
+  const enId = __PROTO_ENABLE_MAP[p];
+  const enCb = enId ? document.getElementById(enId) : null;
+  if(!panel || !enCb) return;
+
+  const enabled = !!enCb.checked;
+  panel.classList.toggle('disabled-protocol', !enabled);
+
+  panel.querySelectorAll('input, select, textarea, button').forEach((el) => {
+    if(el === enCb) return;
+    const oc = (el.getAttribute('onclick') || '');
+    const isLoadSave = oc.indexOf("load('"+p+"')") >= 0 || oc.indexOf("save('"+p+"')") >= 0;
+    if(isLoadSave){
+      el.disabled = false;
+      return;
+    }
+    el.disabled = !enabled;
+  });
+}
+
+function bindEnableToggles(){
+  Object.keys(__PROTO_ENABLE_MAP).forEach((p) => {
+    const id = __PROTO_ENABLE_MAP[p];
+    const cb = document.getElementById(id);
+    if(!cb) return;
+    cb.addEventListener('change', () => applyProtocolEnableState(p));
+  });
+}
+
+// ---- API
+let __BOOTSTRAP = null;
+async function ensureBootstrap(){
+  if(__BOOTSTRAP) return __BOOTSTRAP;
+  try{
+    const r = await fetch('/api/page/bootstrap?name=protocols', { cache: 'no-store' });
+    if(!r.ok) return null;
+    __BOOTSTRAP = await r.json();
+    return __BOOTSTRAP;
+  }catch(_){
+    return null;
+  }
+}
+
+async function load(p){
+  try{
+    var c = {};
+    const boot = await ensureBootstrap();
+    if (boot && boot.data && boot.data.protocol_configs && boot.data.protocol_configs[p]) {
+      c = boot.data.protocol_configs[p] || {};
+    } else {
+      var r = await fetch('/api/protocols/'+p+'/config');
+      if(r.ok) {
+        c = await r.json();
+      } else {
+        console.log('No config found for protocol ' + p + ', using defaults');
+      }
+    }
+    switch(p){
+      case 'modbus':
+        document.getElementById('mb_enabled').checked = c.enabled || false;
+        document.getElementById('mb_unit').value = c.default_unit_id || '1';
+        document.getElementById('mb_ctimeout').value = c.connect_timeout_ms || '1500';
+        document.getElementById('mb_iotimeout').value = c.io_timeout_ms || '1500';
+        document.getElementById('mb_writers').value = c.allowed_writers || '';
+      break;
+      case 's7':
+        document.getElementById('s7_enabled').checked = c.enabled || false;
+        document.getElementById('s7_port').value = c.default_port || '102';
+        document.getElementById('s7_timeout').value = c.connect_timeout || '2000';
+        document.getElementById('s7_pdu').value = c.pdu_size || '240';
+        document.getElementById('s7_rack').value = c.rack || '0';
+        document.getElementById('s7_slot').value = c.slot || '1';
+        document.getElementById('s7_check_auth').checked = c.check_authentication !== false;
+        document.getElementById('s7_check_protection').checked = c.check_protection_level !== false;
+        document.getElementById('s7_test_stop').checked = c.test_anonymous_stop !== false;
+        document.getElementById('s7_detect_tls').checked = c.detect_non_tls !== false;
+        document.getElementById('s7_detect_stop').checked = c.detect_stop_commands !== false;
+        document.getElementById('s7_detect_recon').checked = c.detect_reconnaissance !== false;
+        document.getElementById('s7_max_writes').value = c.max_writes_per_60s || '50';
+        document.getElementById('s7_max_reads').value = c.max_reads_per_30s || '100';
+      break;
+      case 'profinet':
+        document.getElementById('pn_enabled').checked = c.enabled || false;
+        document.getElementById('pn_multicast').value = c.dcp_multicast || '01:0E:CF:00:00:00';
+        document.getElementById('pn_timeout').value = c.discovery_timeout_ms || '3000';
+        document.getElementById('pn_topology').checked = c.enable_topology_discovery !== false;
+        document.getElementById('pn_check_names').checked = c.check_default_names !== false;
+        document.getElementById('pn_check_security').checked = c.check_security_class !== false;
+        document.getElementById('pn_check_unencrypted').checked = c.check_unencrypted_comm !== false;
+        document.getElementById('pn_patterns').value = (c.default_name_patterns || ['station_','new_device','simatic','plc_']).join(',');
+        document.getElementById('pn_detect_spoofing').checked = c.detect_dcp_spoofing !== false;
+        document.getElementById('pn_detect_config').checked = c.detect_config_changes !== false;
+        document.getElementById('pn_detect_topology').checked = c.detect_topology_changes !== false;
+        document.getElementById('pn_max_devices').value = c.max_devices_per_sec || '10';
+      break;
+      case 'ethernetip':
+        document.getElementById('enip_enabled').checked = c.enabled || false;
+        document.getElementById('enip_tcp').value = c.tcp_port || '44818';
+        document.getElementById('enip_udp').value = c.udp_port || '2222';
+        document.getElementById('enip_timeout').value = c.timeout || '3000';
+        document.getElementById('enip_discovery_timeout').value = c.discovery_timeout_ms || '1500';
+        document.getElementById('enip_check_cip_security').checked = c.check_cip_security !== false;
+        document.getElementById('enip_check_plaintext').checked = c.check_plaintext_messaging !== false;
+        document.getElementById('enip_test_anonymous_write').checked = c.test_anonymous_write !== false;
+        document.getElementById('enip_detect_session_flood').checked = c.detect_session_flooding !== false;
+        document.getElementById('enip_detect_rrdata_storm').checked = c.detect_rrdata_storm !== false;
+        document.getElementById('enip_detect_write_storm').checked = c.detect_write_storm !== false;
+        document.getElementById('enip_detect_recon').checked = c.detect_reconnaissance !== false;
+        document.getElementById('enip_detect_errors').checked = c.detect_error_patterns !== false;
+        document.getElementById('enip_max_sessions').value = c.max_sessions_per_60s || '10';
+        document.getElementById('enip_max_rrdata').value = c.max_rrdata_per_30s || '50';
+        document.getElementById('enip_max_writes').value = c.max_writes_per_120s || '5';
+        document.getElementById('enip_max_discovery').value = c.max_discovery_per_60s || '20';
+      break;
+      case 'opcua':
+        document.getElementById('opcua_enabled').checked = c.enabled || false;
+        document.getElementById('opcua_port').value = c.port || '4840';
+        document.getElementById('opcua_timeout').value = c.timeout || '5000';
+      break;
+    }
+    applyProtocolEnableState(p);
+    status('Configurazione caricata');
+  }catch(e){ status('Errore: '+e.message,true); }
+}
+
+async function save(p){
+  try{
+    var c = {};
+    switch(p){
+      case 'modbus':
+        c = {
+          enabled: document.getElementById('mb_enabled').checked,
+          default_unit_id: document.getElementById('mb_unit').value || '1',
+          connect_timeout_ms: document.getElementById('mb_ctimeout').value || '1500',
+          io_timeout_ms: document.getElementById('mb_iotimeout').value || '1500',
+          allowed_writers: document.getElementById('mb_writers').value || ''
+        };
+      break;
+      case 's7':
+        c = {
+          enabled: document.getElementById('s7_enabled').checked,
+          default_port: document.getElementById('s7_port').value || '102',
+          connect_timeout: document.getElementById('s7_timeout').value || '2000',
+          pdu_size: document.getElementById('s7_pdu').value || '240',
+          rack: document.getElementById('s7_rack').value || '0',
+          slot: document.getElementById('s7_slot').value || '1',
+          check_authentication: document.getElementById('s7_check_auth').checked,
+          check_protection_level: document.getElementById('s7_check_protection').checked,
+          test_anonymous_stop: document.getElementById('s7_test_stop').checked,
+          detect_non_tls: document.getElementById('s7_detect_tls').checked,
+          detect_stop_commands: document.getElementById('s7_detect_stop').checked,
+          detect_reconnaissance: document.getElementById('s7_detect_recon').checked,
+          max_writes_per_60s: document.getElementById('s7_max_writes').value || '50',
+          max_reads_per_30s: document.getElementById('s7_max_reads').value || '100'
+        };
+      break;
+      case 'profinet':
+        const patterns = document.getElementById('pn_patterns').value.split(',').map(s => s.trim()).filter(Boolean);
+        c = {
+          enabled: document.getElementById('pn_enabled').checked,
+          dcp_multicast: document.getElementById('pn_multicast').value || '01:0E:CF:00:00:00',
+          discovery_timeout_ms: document.getElementById('pn_timeout').value || '3000',
+          enable_topology_discovery: document.getElementById('pn_topology').checked,
+          check_default_names: document.getElementById('pn_check_names').checked,
+          check_security_class: document.getElementById('pn_check_security').checked,
+          check_unencrypted_comm: document.getElementById('pn_check_unencrypted').checked,
+          default_name_patterns: patterns.length > 0 ? patterns : ['station_','new_device','simatic','plc_'],
+          detect_dcp_spoofing: document.getElementById('pn_detect_spoofing').checked,
+          detect_config_changes: document.getElementById('pn_detect_config').checked,
+          detect_topology_changes: document.getElementById('pn_detect_topology').checked,
+          max_devices_per_sec: document.getElementById('pn_max_devices').value || '10'
+        };
+      break;
+      case 'ethernetip':
+        c = {
+          enabled: document.getElementById('enip_enabled').checked,
+          tcp_port: document.getElementById('enip_tcp').value || '44818',
+          udp_port: document.getElementById('enip_udp').value || '2222',
+          timeout: document.getElementById('enip_timeout').value || '3000',
+          discovery_timeout_ms: document.getElementById('enip_discovery_timeout').value || '1500',
+          check_cip_security: document.getElementById('enip_check_cip_security').checked,
+          check_plaintext_messaging: document.getElementById('enip_check_plaintext').checked,
+          test_anonymous_write: document.getElementById('enip_test_anonymous_write').checked,
+          detect_session_flooding: document.getElementById('enip_detect_session_flood').checked,
+          detect_rrdata_storm: document.getElementById('enip_detect_rrdata_storm').checked,
+          detect_write_storm: document.getElementById('enip_detect_write_storm').checked,
+          detect_reconnaissance: document.getElementById('enip_detect_recon').checked,
+          detect_error_patterns: document.getElementById('enip_detect_errors').checked,
+          max_sessions_per_60s: document.getElementById('enip_max_sessions').value || '10',
+          max_rrdata_per_30s: document.getElementById('enip_max_rrdata').value || '50',
+          max_writes_per_120s: document.getElementById('enip_max_writes').value || '5',
+          max_discovery_per_60s: document.getElementById('enip_max_discovery').value || '20'
+        };
+      break;
+      case 'opcua':
+        c = {
+          enabled: document.getElementById('opcua_enabled').checked,
+          port: document.getElementById('opcua_port').value || '4840',
+          timeout: document.getElementById('opcua_timeout').value || '5000'
+        };
+      break;
+    }
+    var r = await fetch('/api/protocols/'+p+'/config',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(c)
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    status('Configurazione salvata');
+  }catch(e){ status('Errore: '+e.message,true); }
+}
+
+// ---- Tabs + auto-load
+(function(){
+  const allProtocols = [
+    {id:1,key:'modbus',    name:'Modbus TCP'},
+    {id:2,key:'s7',        name:'S7 Communication'},
+    {id:3,key:'profinet',  name:'PROFINET'},
+    {id:4,key:'ethernetip',name:'EtherNet/IP'},
+    {id:5,key:'opcua',     name:'OPC UA'}
+  ];
+  function $(s,root=document){ return root.querySelector(s); }
+
+  function renderTabs(list){
+    const tabs = $('#protoTabs');
+    tabs.innerHTML = '';
+    const filtered = list;
+    if(!filtered.length){ tabs.innerHTML = '<em>Nessun protocollo disponibile</em>'; return; }
+    filtered.forEach((p,i)=>{
+      const btn = document.createElement('button');
+      btn.textContent = p.name;
+      btn.className = 'tab' + (i===0 ? ' active' : '');
+      btn.dataset.key = p.key;
+      btn.addEventListener('click', (ev)=> showTab(p.key, ev.currentTarget));
+      tabs.appendChild(btn);
+    });
+    if(filtered.length > 0) {
+      // Attiva il primo pannello (fallback: showTab troverà il bottone via data-key)
+      showTab(filtered[0].key);
+    }
+  }
+
+  async function loadProtocolTabs(){
+    await ensureBootstrap();
+    renderTabs(allProtocols);
+    // Carica automaticamente la configurazione per tutti i protocolli presenti
+    for (const p of allProtocols) {
+      if (document.getElementById(p.key)) {
+        await load(p.key);
+      }
+    }
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    bindEnableToggles();
+    loadProtocolTabs().catch(err => console.error('Protocol tabs init failed:', err));
+  });
+})();
+
+// ---- Salvataggio/lettura configurazione complessiva
+async function saveToNVS() {
+  try {
+    const statusDiv = document.getElementById('nvs-status');
+    statusDiv.innerHTML = '<div style="color:#007;font-weight:bold">⏳ Salvando configurazione su NVS...</div>';
+
+    const response = await fetch('/api/config');
+    if (!response.ok) throw new Error('Errore nel leggere configurazione: ' + response.status);
+    const currentConfig = await response.json();
+
+    const saveResponse = await fetch('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(currentConfig)
+    });
+    if (!saveResponse.ok) throw new Error('Errore nel salvare configurazione: ' + saveResponse.status);
+
+    const result = await saveResponse.text();
+    if (result === 'OK') {
+      statusDiv.innerHTML = '<div style="color:#28a745;font-weight:bold;padding:.5rem;background:#d4edda;border-radius:4px">✅ Configurazione salvata con successo su NVS!</div>';
+    } else {
+      throw new Error('Risposta inaspettata: ' + result);
+    }
+    setTimeout(() => { statusDiv.innerHTML = ''; }, 5000);
+  } catch(e) {
+    const statusDiv = document.getElementById('nvs-status');
+    statusDiv.innerHTML = '<div style="color:#dc3545;font-weight:bold;padding:.5rem;background:#f8d7da;border-radius:4px">❌ Errore: ' + e.message + '</div>';
+    console.error('SaveToNVS error:', e);
+  }
+}
+
+async function loadCurrentConfig() {
+  try {
+    const response = await fetch('/api/config');
+    if (!response.ok) throw new Error('Errore nel caricare configurazione: ' + response.status);
+
+    const config = await response.json();
+    const configDiv = document.getElementById('current-config');
+    configDiv.textContent = JSON.stringify(config, null, 2);
+    configDiv.parentElement.open = true;
+  } catch(e) {
+    const statusDiv = document.getElementById('nvs-status');
+    statusDiv.innerHTML = '<div style="color:#dc3545;font-weight:bold;padding:.5rem;background:#f8d7da;border-radius:4px">❌ Errore nel caricare configurazione: ' + e.message + '</div>';
+    console.error('LoadCurrentConfig error:', e);
+  }
+}
+</script>
+</html>

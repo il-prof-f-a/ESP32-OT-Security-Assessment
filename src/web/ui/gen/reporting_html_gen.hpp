@@ -1,0 +1,1231 @@
+/* auto-generated from reporting.html */
+#pragma once
+static const char* REPORTING_HTML_GEN = R"HTML(
+<!doctype html>
+<html><meta charset="utf-8"/><title>Reporting Configuration</title>
+<style>body{font-family:system-ui;margin:1rem;background:#f6f6f6}.card{background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);padding:1rem;margin-bottom:1rem}.btn{background:#007;color:#fff;border:none;padding:.5rem 1rem;border-radius:6px;cursor:pointer;margin-right:.5rem}textarea{width:100%;height:200px;padding:.4rem;border:1px solid #ccc;border-radius:4px;font-family:monospace}.status{padding:.5rem;border-radius:4px;margin-bottom:.8rem}.status.ok{background:#d4edda;color:#155724}.status.err{background:#f8d7da;color:#721c24}
+    .nav-btn{
+    background:#06a;
+    color:#fff;
+    border:none;
+    padding:.6rem 1rem;
+    border-radius:8px;
+    cursor:pointer;
+    text-decoration:none;
+    display:inline-block
+}
+.nav-btn:hover{
+    background:#07b
+}
+.channel-item{
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background: #f9f9f9;
+}
+.channel-name{
+    font-weight: bold;
+    font-size: 1.1em;
+    margin-bottom: 0.5rem;
+    color: #333;
+}
+.channel-controls{
+    display: grid;
+    grid-template-columns: auto auto auto;
+    gap: 1rem;
+    align-items: center;
+    max-width: 500px;
+}
+.control-group{
+    display: flex;
+    flex-direction: column;
+}
+.control-group label{
+    font-size: 0.85em;
+    color: #666;
+    margin-bottom: 0.2rem;
+}
+.control-group select, .control-group input[type="checkbox"]{
+    padding: 0.3rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+.verbosity-info{
+    font-size: 0.75em;
+    color: #888;
+    margin-top: 0.2rem;
+}
+.filters-section{
+    margin-top: 1rem;
+    padding: 0.8rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background: #fafafa;
+}
+.filters-header{
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    color: #555;
+}
+.filter-controls{
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.8rem;
+}
+.filter-list{
+    margin-bottom: 0.5rem;
+}
+.filter-item{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.3rem 0.5rem;
+    margin: 0.2rem 0;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.85em;
+}
+.filter-remove{
+    background: #d32f2f;
+    color: #fff;
+    border: none;
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.7em;
+}
+.filter-add-controls{
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.5rem;
+}
+.filter-add-input{
+    flex: 1;
+    padding: 0.3rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-family: monospace;
+}
+.filter-add-btn{
+    background: #2e7d32;
+    color: #fff;
+    border: none;
+    padding: 0.3rem 0.8rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8em;
+}
+.queue-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+    gap:.8rem;
+    margin-top:1rem
+}
+.queue-card{
+    background:#eef3ff;
+    border-radius:6px;
+    padding:.7rem;
+    border:1px solid rgba(0,0,0,.06);
+    display:flex;
+    flex-direction:column;
+    gap:.2rem
+}
+.queue-card .label{
+    font-size:.75rem;
+    color:#4a5568;
+    text-transform:uppercase;
+    letter-spacing:.04em
+}
+.queue-card .value{
+    font-size:1.2rem;
+    font-weight:600;
+    color:#1a237e
+}
+.queue-card .hint{
+    font-size:.7rem;
+    color:#718096
+}
+.queue-status-line{
+    margin-top:.6rem;
+    font-size:.8rem;
+    color:#4a5568
+}
+.stream-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:.8rem;
+    align-items:end
+}
+.stream-grid .control-group input[type="text"]{
+    padding:.35rem;
+    border:1px solid #ccc;
+    border-radius:4px;
+    font-family:Consolas,monospace;
+    font-size:.8rem
+}
+.stream-actions{
+    display:flex;
+    gap:.5rem;
+    align-items:center;
+    flex-wrap:wrap;
+    margin:.6rem 0
+}
+.stream-output{
+    width:100%;
+    height:260px;
+    resize:vertical;
+    font-family:Consolas,monospace;
+    font-size:.82rem;
+    overflow:auto;
+    border:1px solid #ccc;
+    border-radius:6px;
+    background:#fff;
+    padding:.4rem
+}
+.stream-row{
+    border:1px solid #e3e3e3;
+    border-radius:6px;
+    padding:.35rem .45rem;
+    margin-bottom:.35rem;
+    background:#fcfcfc
+}
+.stream-row-include{
+    border-color:#8fd19e;
+    background:#ecfff1
+}
+.stream-row-exclude{
+    border-color:#e59a9a;
+    background:#fff0f0
+}
+.stream-row-error{
+    border-color:#ffcf70;
+    background:#fff8e8
+}
+.stream-tags{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.25rem;
+    margin-bottom:.2rem
+}
+.stream-tag{
+    font-size:.68rem;
+    padding:.08rem .35rem;
+    border-radius:999px;
+    border:1px solid transparent;
+    font-weight:600;
+    letter-spacing:.02em
+}
+.stream-tag-channel{
+    background:#eef2ff;
+    border-color:#cad3ff;
+    color:#253b7a
+}
+.stream-tag-channel-mqtt{
+    background:#e5f6ff;
+    border-color:#a6dcff;
+    color:#155b8f
+}
+.stream-tag-channel-webhook{
+    background:#ede9ff;
+    border-color:#c9bfff;
+    color:#4b2f8a
+}
+.stream-tag-channel-email{
+    background:#fff2db;
+    border-color:#ffd89a;
+    color:#8a5a14
+}
+.stream-tag-channel-file{
+    background:#e8fbe9;
+    border-color:#b4e7b7;
+    color:#1f6b28
+}
+.stream-tag-channel-serial{
+    background:#ffe9f3;
+    border-color:#ffc0dd;
+    color:#8b2f60
+}
+.stream-tag-ignored{
+    background:#f3f3f3;
+    border-color:#d8d8d8;
+    color:#666
+}
+.stream-tag-preview-include{
+    background:#dbfbe5;
+    border-color:#9ce3b5;
+    color:#1f6f39
+}
+.stream-tag-preview-exclude{
+    background:#ffe3e3;
+    border-color:#f7b0b0;
+    color:#8a2a2a
+}
+.stream-tag-error{
+    background:#fff3cd;
+    border-color:#ffd769;
+    color:#8b5a00
+}
+.stream-msg{
+    white-space:pre-wrap;
+    word-break:break-word;
+    line-height:1.25
+}
+.stream-stats{
+    font-size:.8rem;
+    color:#555;
+    margin:.4rem 0
+}
+.card-header-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:.6rem
+}
+.toggle-btn{
+    background:#444;
+    color:#fff;
+    border:none;
+    padding:.35rem .7rem;
+    border-radius:6px;
+    cursor:pointer;
+    font-size:.8rem
+}
+.toggle-btn:hover{
+    background:#555
+}
+.collapsed{
+    display:none
+}
+</style>
+<div class="card"><h1>📊 Reporting Configuration</h1><a href="/" class="btn nav-btn">← Dashboard</a></div>
+<div id="status"></div>
+<div class="card">
+<div class="card-header-row">
+<h2 style="margin:0;">Live Stream by Reporting Channel</h2>
+<button id="report-stream-toggle" class="toggle-btn" onclick="toggleReportStreamPanel()">Comprimi</button>
+</div>
+<div id="report-stream-body">
+<div class="stream-grid">
+    <div class="control-group">
+        <label>Channels</label>
+        <select id="report-stream-channels" multiple style="min-height:120px;"></select>
+    </div>
+    <div class="control-group">
+        <label>Preview filtri regex</label>
+        <div>
+            <input type="checkbox" id="report-stream-preview-filters" checked>
+            Applica include/exclude definiti nella sezione canali
+        </div>
+        <div style="margin-top:.4rem;">
+            <input type="checkbox" id="report-stream-local-enable" checked>
+            Abilita regex locale solo per questa anteprima
+        </div>
+        <div style="margin-top:.45rem;">
+            <input type="text" id="report-stream-local-include" placeholder="Regex include locale (es. intrusion|threat)">
+        </div>
+        <div style="margin-top:.35rem;">
+            <input type="text" id="report-stream-local-exclude" placeholder="Regex exclude locale (es. debug|heartbeat)">
+        </div>
+        <div style="margin-top:.35rem;">
+            <input type="checkbox" id="report-stream-local-case">
+            Case sensitive (regex locale)
+        </div>
+        <div class="stream-stats" id="report-stream-stats">Match: 0 | Filtered: 0 | Regex error: 0</div>
+    </div>
+</div>
+<div class="stream-actions">
+    <button id="report-stream-start" class="btn" onclick="startReportStream()">Avvia Stream</button>
+    <button id="report-stream-stop" class="btn" onclick="stopReportStream()" disabled>Stop Stream</button>
+    <button class="btn" onclick="clearReportStream()">Pulisci</button>
+</div>
+<div id="report-stream-output" class="stream-output"></div>
+</div>
+</div>
+<div class="card">
+<h2>Queue Status</h2>
+<div>
+    <button class="btn" onclick="loadQueueStats()">Aggiorna</button>
+    <button class="btn" onclick="flush()">Flush Queue</button>
+</div>
+<div id="queueStats" class="queue-grid">
+    <div class="queue-card"><span class="label">Queued</span><span class="value" id="queue-queued">0</span><span class="hint">eventi in attesa</span></div>
+    <div class="queue-card"><span class="label">Capacity</span><span class="value" id="queue-capacity">0</span><span class="hint">slot disponibili</span></div>
+    <div class="queue-card"><span class="label">Usage %</span><span class="value" id="queue-usage">0%</span><span class="hint">rispetto capienza</span></div>
+    <div class="queue-card"><span class="label">Payload</span><span class="value" id="queue-payload">0 KB</span><span class="hint">dati stimati in coda</span></div>
+    <div class="queue-card"><span class="label">Sync Pending</span><span class="value" id="queue-dirty">--</span><span class="hint">eventi da scrivere</span></div>
+    <div class="queue-card"><span class="label">Flush Interval</span><span class="value" id="queue-flush">0s</span><span class="hint">worker reporting</span></div>
+</div>
+<div class="queue-status-line" id="queue-last-sync">Ultima sincronizzazione: n/d</div>
+<div class="queue-status-line" id="queue-backup-path"></div>
+</div>
+<div class="card">
+<h2>Reporting Channels</h2>
+<button class="btn" onclick="loadChannels()">Load Channels</button>
+<div id="channelsConfig" style="margin-top: 1rem;">
+    <!-- Channels will be populated here -->
+</div>
+<pre id="channels" style="display:none;"></pre>
+</div>
+
+<div class="card">
+<h2>Reporting Endpoints</h2>
+<textarea id="endpoints" placeholder="Configure MQTT, Webhook, Email, File endpoints..."></textarea>
+<button class="btn" onclick="loadEndpoints()">Load</button>
+<button class="btn" onclick="saveEndpoints()">Save</button>
+</div>
+<script>
+    // Extract session token from URL and add to all API calls
+(function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionToken = urlParams.get('sid');
+
+    if (sessionToken) {
+        console.log('Session token found');
+        window.__sidToken = sessionToken;
+
+        // Override fetch to automatically add Bearer token to API calls
+        const originalFetch = window.fetch;
+        if (!window.__apiFetchQueue) {
+            window.__apiFetchQueue = Promise.resolve();
+        }
+        window.fetch = function(url, options = {}) {
+            const isApiCall = typeof url === 'string' && url.startsWith('/api/');
+            if (!isApiCall) {
+                return originalFetch.call(this, url, options);
+            }
+
+            const opts = {...options};
+            opts.headers = {...(options && options.headers) || {}};
+            opts.headers['Authorization'] = 'Bearer ' + sessionToken;
+            console.log('Adding Bearer token to API call (queued)');
+
+            const runner = () => originalFetch.call(window, url, opts);
+            const queued = window.__apiFetchQueue.then(runner, runner);
+            window.__apiFetchQueue = queued.catch(() => {});
+            return queued;
+        };
+
+        // Update navigation links to include session token
+        document.querySelectorAll('.nav-btn').forEach(link => {
+            const href = link.getAttribute('href');
+            if (href && !href.includes('sid=')) {
+                link.setAttribute('href', href + '?sid=' + encodeURIComponent(sessionToken));
+            }
+        });
+    } else {
+        console.warn('No session token found in URL - API calls may fail');
+    }
+})();
+
+function status(msg,err){var s=document.getElementById('status');s.className='status '+(err?'err':'ok');s.textContent=msg;setTimeout(()=>s.innerHTML='',3000);}
+
+let reportStreamSource = null;
+const REPORT_STREAM_ALL_KEY = '__all_stream__';
+const REPORT_STREAM_MAX_ROWS = 700;
+const reportStreamStats = {
+    total: 0,
+    routed: 0,
+    ignored: 0,
+    previewIncluded: 0,
+    previewExcluded: 0,
+    regexErrors: 0
+};
+
+function applyReportStreamCollapsedState(collapsed, persist){
+    const body = document.getElementById('report-stream-body');
+    const btn = document.getElementById('report-stream-toggle');
+    if (!body || !btn) return;
+    if (collapsed) {
+        body.classList.add('collapsed');
+        btn.textContent = 'Espandi';
+    } else {
+        body.classList.remove('collapsed');
+        btn.textContent = 'Comprimi';
+    }
+    if (persist) {
+        try { localStorage.setItem('report_stream_collapsed', collapsed ? '1' : '0'); } catch (_) {}
+    }
+}
+
+function toggleReportStreamPanel(){
+    const body = document.getElementById('report-stream-body');
+    if (!body) return;
+    applyReportStreamCollapsedState(!body.classList.contains('collapsed'), true);
+}
+
+function initReportStreamPanelState(){
+    let collapsed = false;
+    try { collapsed = localStorage.getItem('report_stream_collapsed') === '1'; } catch (_) { collapsed = false; }
+    applyReportStreamCollapsedState(collapsed, false);
+}
+
+function updateReportStreamStats(){
+    const el = document.getElementById('report-stream-stats');
+    if (!el) return;
+    el.textContent = `Tot: ${reportStreamStats.total} | Routed: ${reportStreamStats.routed} | Ignored: ${reportStreamStats.ignored} | Local include: ${reportStreamStats.previewIncluded} | Local exclude: ${reportStreamStats.previewExcluded} | Regex error: ${reportStreamStats.regexErrors}`;
+}
+
+function resetReportStreamStats(){
+    reportStreamStats.total = 0;
+    reportStreamStats.routed = 0;
+    reportStreamStats.ignored = 0;
+    reportStreamStats.previewIncluded = 0;
+    reportStreamStats.previewExcluded = 0;
+    reportStreamStats.regexErrors = 0;
+    updateReportStreamStats();
+}
+
+function getSelectedReportStreamChannels(){
+    const sel = document.getElementById('report-stream-channels');
+    if (!sel) return [];
+    return Array.from(sel.selectedOptions).map(o => o.value);
+}
+
+function getReportStreamKnownChannels(){
+    const sel = document.getElementById('report-stream-channels');
+    if (!sel) return [];
+    return Array.from(sel.options)
+        .map(o => o.value)
+        .filter(v => v !== REPORT_STREAM_ALL_KEY);
+}
+
+function resolveReportStreamEvalChannels(){
+    const selected = getSelectedReportStreamChannels();
+    if (selected.includes(REPORT_STREAM_ALL_KEY)) return getReportStreamKnownChannels();
+    return selected.filter(v => v !== REPORT_STREAM_ALL_KEY);
+}
+
+function updateReportStreamChannelOptions(channels){
+    const sel = document.getElementById('report-stream-channels');
+    if (!sel) return;
+    const prev = new Set(Array.from(sel.selectedOptions).map(o => o.value));
+    sel.innerHTML = '';
+
+    const all = ['mqtt','webhook','email','file','serial'];
+    const keys = (channels && typeof channels === 'object') ? Object.keys(channels) : [];
+    const merged = Array.from(new Set(all.concat(keys))).sort();
+
+    const allOpt = document.createElement('option');
+    allOpt.value = REPORT_STREAM_ALL_KEY;
+    allOpt.textContent = 'ALL STREAM';
+    if (prev.has(REPORT_STREAM_ALL_KEY)) allOpt.selected = true;
+    sel.appendChild(allOpt);
+
+    merged.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name.toUpperCase();
+        if (prev.has(name)) opt.selected = true;
+        sel.appendChild(opt);
+    });
+
+    if (sel.options.length > 0 && sel.selectedOptions.length === 0) {
+        sel.options[0].selected = true;
+    }
+}
+
+function appendReportStreamSystemLine(line){
+    appendReportStreamEntry(line, ['SYSTEM'], { state: 'neutral', enabled: false, errors: 0 });
+}
+
+function appendReportStreamEntry(line, channels, preview){
+    const out = document.getElementById('report-stream-output');
+    if (!out) return;
+
+    const row = document.createElement('div');
+    row.className = 'stream-row';
+    if (preview && preview.state === 'include') row.classList.add('stream-row-include');
+    if (preview && preview.state === 'exclude') row.classList.add('stream-row-exclude');
+    if (preview && preview.state === 'error') row.classList.add('stream-row-error');
+
+    const tags = document.createElement('div');
+    tags.className = 'stream-tags';
+
+    if (Array.isArray(channels) && channels.length > 0) {
+        channels.forEach(ch => {
+            const tag = document.createElement('span');
+            const suffix = String(ch).toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+            tag.className = `stream-tag stream-tag-channel stream-tag-channel-${suffix}`;
+            tag.textContent = String(ch).toUpperCase();
+            tags.appendChild(tag);
+        });
+    } else {
+        const ignored = document.createElement('span');
+        ignored.className = 'stream-tag stream-tag-ignored';
+        ignored.textContent = 'IGNORED';
+        tags.appendChild(ignored);
+    }
+
+    if (preview && preview.enabled) {
+        const localTag = document.createElement('span');
+        if (preview.state === 'include') {
+            localTag.className = 'stream-tag stream-tag-preview-include';
+            localTag.textContent = 'LOCAL INCLUDE';
+        } else if (preview.state === 'exclude') {
+            localTag.className = 'stream-tag stream-tag-preview-exclude';
+            localTag.textContent = 'LOCAL EXCLUDE';
+        } else if (preview.state === 'error') {
+            localTag.className = 'stream-tag stream-tag-error';
+            localTag.textContent = 'LOCAL REGEX ERROR';
+        }
+        if (localTag.textContent) tags.appendChild(localTag);
+    }
+
+    const msg = document.createElement('div');
+    msg.className = 'stream-msg';
+    msg.textContent = line;
+
+    row.appendChild(tags);
+    row.appendChild(msg);
+    out.appendChild(row);
+
+    while (out.childElementCount > REPORT_STREAM_MAX_ROWS) {
+        out.removeChild(out.firstChild);
+    }
+    out.scrollTop = out.scrollHeight;
+}
+
+function buildRegex(pattern, caseSensitive){
+    try {
+        return { regex: new RegExp(pattern, caseSensitive ? '' : 'i'), error: false };
+    } catch (_) {
+        return { regex: null, error: true };
+    }
+}
+
+function getChannelFilterConfig(channelName){
+    const enabledEl = document.getElementById(`filters_enabled_${channelName}`);
+    const caseEl = document.getElementById(`case_sensitive_${channelName}`);
+    const includeEls = document.querySelectorAll(`#include_filters_${channelName} .filter-item span`);
+    const excludeEls = document.querySelectorAll(`#exclude_filters_${channelName} .filter-item span`);
+
+    const cfg = {
+        enabled: enabledEl ? !!enabledEl.checked : false,
+        caseSensitive: caseEl ? !!caseEl.checked : false,
+        include: Array.from(includeEls).map(x => x.textContent || '').filter(Boolean),
+        exclude: Array.from(excludeEls).map(x => x.textContent || '').filter(Boolean)
+    };
+    return cfg;
+}
+
+function evaluateLineAgainstChannel(line, channelName){
+    const cfg = getChannelFilterConfig(channelName);
+    if (!cfg.enabled) return true;
+
+    let channelRegexErrors = 0;
+    const includeRegex = cfg.include
+        .map(p => buildRegex(p, cfg.caseSensitive))
+        .filter(x => {
+            if (x.error) channelRegexErrors += 1;
+            return !!x.regex;
+        })
+        .map(x => x.regex);
+    const excludeRegex = cfg.exclude
+        .map(p => buildRegex(p, cfg.caseSensitive))
+        .filter(x => {
+            if (x.error) channelRegexErrors += 1;
+            return !!x.regex;
+        })
+        .map(x => x.regex);
+
+    if (channelRegexErrors > 0) {
+        reportStreamStats.regexErrors += channelRegexErrors;
+    }
+
+    const includeOk = includeRegex.length === 0 || includeRegex.some(rx => rx.test(line));
+    const excludeHit = excludeRegex.some(rx => rx.test(line));
+    return includeOk && !excludeHit;
+}
+
+function evaluateRoutingChannels(line, channels){
+    const previewOn = document.getElementById('report-stream-preview-filters')?.checked;
+    const routed = [];
+
+    channels.forEach(ch => {
+        const enabledEl = document.getElementById(`enabled_${ch}`);
+        const channelEnabled = enabledEl ? !!enabledEl.checked : true;
+        if (!channelEnabled) return;
+
+        if (!previewOn) {
+            routed.push(ch);
+            return;
+        }
+
+        if (evaluateLineAgainstChannel(line, ch)) {
+            routed.push(ch);
+        }
+    });
+
+    return routed;
+}
+
+function evaluateLocalRegexPreview(line){
+    const enabled = document.getElementById('report-stream-local-enable')?.checked;
+    if (!enabled) {
+        return { enabled: false, state: 'neutral', errors: 0 };
+    }
+
+    const includePattern = (document.getElementById('report-stream-local-include')?.value || '').trim();
+    const excludePattern = (document.getElementById('report-stream-local-exclude')?.value || '').trim();
+    const caseSensitive = !!document.getElementById('report-stream-local-case')?.checked;
+
+    let regexErrors = 0;
+    let includeOk = true;
+    let excludeHit = false;
+
+    if (includePattern) {
+        const built = buildRegex(includePattern, caseSensitive);
+        if (built.error || !built.regex) {
+            regexErrors += 1;
+        } else {
+            includeOk = built.regex.test(line);
+        }
+    }
+
+    if (excludePattern) {
+        const built = buildRegex(excludePattern, caseSensitive);
+        if (built.error || !built.regex) {
+            regexErrors += 1;
+        } else {
+            excludeHit = built.regex.test(line);
+        }
+    }
+
+    if (regexErrors > 0) {
+        return { enabled: true, state: 'error', errors: regexErrors };
+    }
+
+    if (includeOk && !excludeHit) {
+        return { enabled: true, state: 'include', errors: 0 };
+    }
+
+    return { enabled: true, state: 'exclude', errors: 0 };
+}
+
+function updateStatsForEntry(routedChannels, preview){
+    reportStreamStats.total += 1;
+    if (Array.isArray(routedChannels) && routedChannels.length > 0) {
+        reportStreamStats.routed += 1;
+    } else {
+        reportStreamStats.ignored += 1;
+    }
+
+    if (preview && preview.enabled) {
+        if (preview.state === 'include') reportStreamStats.previewIncluded += 1;
+        if (preview.state === 'exclude') reportStreamStats.previewExcluded += 1;
+        if (preview.state === 'error') reportStreamStats.regexErrors += (preview.errors || 1);
+    }
+
+    updateReportStreamStats();
+}
+
+function startReportStream(){
+    if (reportStreamSource) stopReportStream();
+    const sid = window.__sidToken;
+    if (!sid) {
+        status('Sessione non disponibile: manca sid', true);
+        return;
+    }
+
+    const selected = getSelectedReportStreamChannels();
+    if (!selected.length) {
+        status('Seleziona almeno un channel', true);
+        return;
+    }
+    const channels = resolveReportStreamEvalChannels();
+    const allStreamSelected = selected.includes(REPORT_STREAM_ALL_KEY);
+    if (!channels.length) {
+        status('Nessun channel disponibile per la valutazione', true);
+        return;
+    }
+
+    resetReportStreamStats();
+    let url = `/api/logs/sse?sid=${encodeURIComponent(sid)}&name=all&tail=120`;
+    if (!allStreamSelected) {
+        const qsChannels = encodeURIComponent(channels.join(','));
+        url += `&channels=${qsChannels}`;
+    }
+    reportStreamSource = new EventSource(url);
+
+    reportStreamSource.addEventListener('ready', () => appendReportStreamSystemLine('[SSE] stream avviato'));
+    reportStreamSource.addEventListener('log', ev => {
+        const line = ev.data || '';
+        const routedChannels = evaluateRoutingChannels(line, channels);
+        const localPreview = evaluateLocalRegexPreview(line);
+        updateStatsForEntry(routedChannels, localPreview);
+        appendReportStreamEntry(line, routedChannels, localPreview);
+    });
+    reportStreamSource.onerror = () => {
+        appendReportStreamSystemLine('[SSE] stream chiuso');
+        stopReportStream();
+    };
+
+    const startBtn = document.getElementById('report-stream-start');
+    const stopBtn = document.getElementById('report-stream-stop');
+    if (startBtn) startBtn.disabled = true;
+    if (stopBtn) stopBtn.disabled = false;
+    status('Stream report avviato', false);
+}
+
+function stopReportStream(){
+    if (reportStreamSource) {
+        reportStreamSource.close();
+        reportStreamSource = null;
+    }
+    const startBtn = document.getElementById('report-stream-start');
+    const stopBtn = document.getElementById('report-stream-stop');
+    if (startBtn) startBtn.disabled = false;
+    if (stopBtn) stopBtn.disabled = true;
+}
+
+function clearReportStream(){
+    const out = document.getElementById('report-stream-output');
+    if (out) out.innerHTML = '';
+    resetReportStreamStats();
+}
+
+function renderQueueStats(data){
+    const queuedEl=document.getElementById('queue-queued');
+    const capEl=document.getElementById('queue-capacity');
+    const usageEl=document.getElementById('queue-usage');
+    const payloadEl=document.getElementById('queue-payload');
+    const dirtyEl=document.getElementById('queue-dirty');
+    const flushEl=document.getElementById('queue-flush');
+    const syncLine=document.getElementById('queue-last-sync');
+    const backupLine=document.getElementById('queue-backup-path');
+
+    const queued=typeof data.queued==='number'?data.queued:0;
+    const capacity=typeof data.max_items==='number'?data.max_items:0;
+    const usage=typeof data.usage_pct==='number'?data.usage_pct:0;
+    const payloadBytes=typeof data.payload_bytes==='number'?data.payload_bytes:0;
+    const dirty=!!data.dirty;
+    const pending=typeof data.events_since_sync==='number'?data.events_since_sync:0;
+    const flushMs=typeof data.flush_interval_ms==='number'?data.flush_interval_ms:0;
+    const lastSyncMs=typeof data.last_sync_ms==='number'?data.last_sync_ms:0;
+
+    if(queuedEl)queuedEl.textContent=queued;
+    if(capEl)capEl.textContent=capacity;
+    if(usageEl)usageEl.textContent=(usage||0)+'%';
+    if(payloadEl){
+        const kb=payloadBytes/1024;
+        payloadEl.textContent=(kb<1?payloadBytes+' B':kb.toFixed(1)+' KB');
+    }
+    if(dirtyEl)dirtyEl.textContent=dirty?pending+' pending':'0';
+    if(flushEl){
+        const seconds=Math.max(1,Math.round(flushMs/1000));
+        flushEl.textContent=seconds+'s';
+    }
+    if(syncLine){
+        if(lastSyncMs>0){
+            const seconds=(lastSyncMs/1000).toFixed(1);
+            syncLine.textContent='Ultima sincronizzazione: '+seconds+'s, pending '+pending;
+        }else{
+            syncLine.textContent='Ultima sincronizzazione: n/d';
+        }
+    }
+    if(backupLine){
+        if(data.backup_file){
+            backupLine.textContent='Backup file: '+data.backup_file;
+        }else{
+            backupLine.textContent='Backup file non configurato';
+        }
+    }
+}
+
+async function loadQueueStats(override){
+try{
+ var stats = override || null;
+ if (!stats) {
+   var r=await fetch('/api/report/queue', { cache: 'no-store' });
+   if(!r.ok)throw new Error('HTTP '+r.status);
+   stats=await r.json();
+ }
+ renderQueueStats(stats||{});
+}catch(e){
+ status('Queue stats error: '+e.message,true);
+}}
+
+async function loadChannels(channelsOverride, endpointsOverride){
+try{
+ var channels = channelsOverride || null;
+ var endpoints = endpointsOverride || null;
+
+ if (!channels) {
+   var r=await fetch('/api/report/channels', { cache: 'no-store' });
+   var channelsText=await r.text();
+   channels=JSON.parse(channelsText);
+   document.getElementById('channels').textContent=channelsText;
+ } else {
+   document.getElementById('channels').textContent=JSON.stringify(channels, null, 2);
+ }
+
+ if (!endpoints) {
+   var endpointsResp=await fetch('/api/report/endpoints', { cache: 'no-store' });
+   endpoints=await endpointsResp.json();
+ }
+
+ renderChannelsUI(channels, endpoints);
+ updateReportStreamChannelOptions(channels);
+ status('Channels loaded');
+}catch(e){status('Error: '+e.message,true);}
+}
+
+function renderChannelsUI(channels, endpoints){
+const container=document.getElementById('channelsConfig');
+container.innerHTML='';
+
+// Show ALL possible reporters, not just enabled ones
+const allReporters=['mqtt','webhook','email','file','serial'];
+
+allReporters.forEach(channelName=>{
+const channel=channels[channelName] || {enabled:false,format:0,verbosity:0}; // Default if not present
+const hasEndpoint = endpoints[channelName] && Object.keys(endpoints[channelName]).length > 0;
+const div=document.createElement('div');
+div.className='channel-item';
+
+// Configuration status indicator
+const configStatus = hasEndpoint ? '<span style="color:green;font-size:0.8em;">✓ Configurato</span>' : '<span style="color:red;font-size:0.8em;">✗ Non configurato</span>';
+
+// Determine download button for file reporter
+let downloadButton = '';
+if (channelName === 'file' && channel.enabled) {
+    downloadButton = `
+    <div class="control-group">
+        <label>Download Log</label>
+        <button class="btn" onclick="downloadLog('${getFileReporterLogName()}')">📥 Download</button>
+    </div>`;
+}
+
+div.innerHTML=`
+<div class="channel-name">📡 ${channelName.toUpperCase()} ${configStatus}</div>
+<div class="channel-controls">
+    <div class="control-group">
+        <label>Enabled</label>
+        <input type="checkbox" id="enabled_${channelName}" ${channel.enabled?'checked':''} onchange="updateChannel('${channelName}')">
+    </div>
+    <div class="control-group">
+        <label>Format</label>
+        <select id="format_${channelName}" onchange="updateChannel('${channelName}')">
+            <option value="0" ${channel.format==0?'selected':''}>JSON</option>
+            <option value="1" ${channel.format==1?'selected':''}>CEE</option>
+            <option value="2" ${channel.format==2?'selected':''}>LEEF</option>
+            <option value="3" ${channel.format==3?'selected':''}>CEF</option>
+        </select>
+    </div>
+    <div class="control-group">
+        <label>Verbosity</label>
+        <select id="verbosity_${channelName}" onchange="updateChannel('${channelName}')">
+            <option value="0" ${channel.verbosity==0?'selected':''}>Reports Only</option>
+            <option value="1" ${channel.verbosity==1?'selected':''}>Verbose</option>
+        </select>
+        <div class="verbosity-info">
+            ${channel.verbosity==1?'Shows logs + reports with delimiters':'Only tool-generated events'}
+        </div>
+    </div>
+    ${downloadButton}
+</div>
+<div class="filters-section" id="filters_${channelName}">
+    <div class="filters-header">🔍 Regex Filters</div>
+    <div class="filter-controls">
+        <div class="control-group">
+            <label>Filters Enabled</label>
+            <input type="checkbox" id="filters_enabled_${channelName}" onchange="updateChannelFilters('${channelName}')">
+        </div>
+        <div class="control-group">
+            <label>Case Sensitive</label>
+            <input type="checkbox" id="case_sensitive_${channelName}" onchange="updateChannelFilters('${channelName}')">
+        </div>
+    </div>
+    <div class="filter-list">
+        <strong>Include Patterns:</strong>
+        <div id="include_filters_${channelName}"></div>
+        <div class="filter-add-controls">
+            <input type="text" id="include_input_${channelName}" class="filter-add-input" placeholder="Enter regex pattern (e.g., error|warning)">
+            <button class="filter-add-btn" onclick="addFilter('${channelName}', 'include')">Add Include</button>
+        </div>
+    </div>
+    <div class="filter-list">
+        <strong>Exclude Patterns:</strong>
+        <div id="exclude_filters_${channelName}"></div>
+        <div class="filter-add-controls">
+            <input type="text" id="exclude_input_${channelName}" class="filter-add-input" placeholder="Enter regex pattern (e.g., debug|trace)">
+            <button class="filter-add-btn" onclick="addFilter('${channelName}', 'exclude')">Add Exclude</button>
+        </div>
+    </div>
+</div>
+<small style="color:#666;margin-top:0.5rem;display:block;">
+    ${hasEndpoint ? 'Endpoint configurato - pronto per l\'uso' : 'Configurare endpoint nella sezione "Reporting Endpoints" per abilitare'}
+</small>
+`;
+container.appendChild(div);
+
+// Load filters for this channel
+loadChannelFilters(channelName);
+});
+}
+
+async function updateChannel(channelName){
+try{
+const enabled=document.getElementById(`enabled_${channelName}`).checked;
+const format=parseInt(document.getElementById(`format_${channelName}`).value);
+const verbosity=parseInt(document.getElementById(`verbosity_${channelName}`).value);
+
+const payload={
+channel:channelName,
+enabled:enabled,
+format:format,
+verbosity:verbosity
+};
+
+const r=await fetch('/api/report/channels',{
+method:'POST',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify(payload)
+});
+
+if(!r.ok)throw new Error('HTTP '+r.status);
+const result=await r.text();
+status(`${channelName} updated: ${result}`);
+
+// Update verbosity info text
+const infoDiv=document.querySelector(`#verbosity_${channelName}`).parentNode.querySelector('.verbosity-info');
+infoDiv.textContent=verbosity==1?'Shows logs + reports with delimiters':'Only tool-generated events';
+
+}catch(e){status('Error updating '+channelName+': '+e.message,true);}
+}
+async function flush(){
+try{
+var r=await fetch('/api/report/flush',{method:'POST'});
+var result=await r.text();
+status('Queue flushed: '+result);
+await loadQueueStats();
+}catch(e){status('Error: '+e.message,true);}
+}
+async function loadEndpoints(override){
+try{
+ var endpoints = override || null;
+ if (!endpoints) {
+   var r=await fetch('/api/report/endpoints', { cache: 'no-store' });
+   endpoints=await r.json();
+ }
+ document.getElementById('endpoints').value=JSON.stringify(endpoints,null,2);
+ status('Endpoints loaded');
+}catch(e){status('Error: '+e.message,true);}
+}
+async function saveEndpoints(){
+try{
+var text=document.getElementById('endpoints').value;
+var endpoints=JSON.parse(text);
+var r=await fetch('/api/report/endpoints',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(endpoints)});
+if(!r.ok)throw new Error('HTTP '+r.status);
+status('Endpoints saved');
+}catch(e){status('Error: '+e.message,true);}
+}
+
+// Download log file function
+function getFileReporterLogName() {
+    // Default file reporter log name - could be made configurable
+    return 'fuzzing_events.log';
+}
+
+async function downloadLog(logName) {
+    try {
+        status('📥 Downloading ' + logName + '...', false);
+
+        // Create download link
+        const url = '/api/logs/download?name=' + encodeURIComponent(logName);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = logName;
+        link.style.display = 'none';
+
+        // Add auth header via fetch and blob
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error('Download failed: HTTP ' + response.status);
+        }
+
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+
+        link.href = blobUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Cleanup
+        setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+
+        status('✅ Downloaded ' + logName + ' successfully!', false);
+    } catch (e) {
+        status('❌ Download failed: ' + e.message, true);
+    }
+}
+
+// Filter management functions
+async function loadChannelFilters(channelName) {
+    try {
+        const response = await fetch(`/api/report/filters?channel=${channelName}`);
+        if (!response.ok) {
+            console.warn(`No filters found for channel ${channelName}`);
+            return;
+        }
+        const filters = await response.json();
+
+        // Update filter controls
+        document.getElementById(`filters_enabled_${channelName}`).checked = filters.enabled || false;
+        document.getElementById(`case_sensitive_${channelName}`).checked = filters.case_sensitive || false;
+
+        // Render filter lists
+        renderFilterList(channelName, 'include', filters.include || []);
+        renderFilterList(channelName, 'exclude', filters.exclude || []);
+
+    } catch (e) {
+        console.warn(`Error loading filters for ${channelName}:`, e);
+    }
+}
+
+function renderFilterList(channelName, type, patterns) {
+    const container = document.getElementById(`${type}_filters_${channelName}`);
+    container.innerHTML = '';
+
+    patterns.forEach(pattern => {
+        const div = document.createElement('div');
+        div.className = 'filter-item';
+        div.innerHTML = `
+            <span>${pattern}</span>
+            <button class="filter-remove" onclick="removeFilter('${channelName}', '${type}', '${pattern}')">Remove</button>
+        `;
+        container.appendChild(div);
+    });
+}
+
+async function updateChannelFilters(channelName) {
+    try {
+        const enabled = document.getElementById(`filters_enabled_${channelName}`).checked;
+        const caseSensitive = document.getElementById(`case_sensitive_${channelName}`).checked;
+
+        // Get current filter patterns
+        const includePatterns = Array.from(document.querySelectorAll(`#include_filters_${channelName} .filter-item span`))
+            .map(span => span.textContent);
+        const excludePatterns = Array.from(document.querySelectorAll(`#exclude_filters_${channelName} .filter-item span`))
+            .map(span => span.textContent);
+
+        const payload = {
+            channel: channelName,
+            enabled: enabled,
+            case_sensitive: caseSensitive,
+            include: includePatterns,
+            exclude: excludePatterns
+        };
+
+        const response = await fetch('/api/report/filters', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        status(`${channelName} filters updated`, false);
+
+    } catch (e) {
+        status(`Error updating filters for ${channelName}: ${e.message}`, true);
+    }
+}
+
+async function addFilter(channelName, type) {
+    try {
+        const inputId = `${type}_input_${channelName}`;
+        const pattern = document.getElementById(inputId).value.trim();
+
+        if (!pattern) {
+            status('Please enter a filter pattern', true);
+            return;
+        }
+
+        const payload = {
+            channel: channelName,
+            pattern: pattern,
+            type: type
+        };
+
+        const response = await fetch('/api/report/filter/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+
+        // Clear input and reload filters
+        document.getElementById(inputId).value = '';
+        await loadChannelFilters(channelName);
+        status(`Added ${type} filter: ${pattern}`, false);
+
+    } catch (e) {
+        status(`Error adding filter: ${e.message}`, true);
+    }
+}
+
+async function removeFilter(channelName, type, pattern) {
+    try {
+        const payload = {
+            channel: channelName,
+            pattern: pattern,
+            type: type
+        };
+
+        const response = await fetch('/api/report/filter/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+
+        // Reload filters
+        await loadChannelFilters(channelName);
+        status(`Removed ${type} filter: ${pattern}`, false);
+
+    } catch (e) {
+        status(`Error removing filter: ${e.message}`, true);
+    }
+}
+
+(async () => {
+  try {
+    initReportStreamPanelState();
+    resetReportStreamStats();
+    let boot = null;
+    try {
+      const r = await fetch('/api/page/bootstrap?name=reporting', { cache: 'no-store' });
+      if (r && r.ok) boot = await r.json();
+    } catch (e) { boot = null; }
+
+    if (boot && boot.data) {
+      await loadChannels(boot.data.channels || {}, boot.data.endpoints || {});
+      await loadEndpoints(boot.data.endpoints || {});
+      await loadQueueStats(boot.data.queue || {});
+    } else {
+      await loadChannels();
+      await loadEndpoints();
+      await loadQueueStats();
+    }
+  } catch (err) {
+    console.error('Reporting page initial load failed:', err);
+  }
+})();
+
+window.addEventListener('beforeunload', () => stopReportStream());
+</script></html>
+
+)HTML";
+
+// Compile-time size constant (actual content length)
+static constexpr size_t REPORTING_HTML_GEN_SIZE = 40712;

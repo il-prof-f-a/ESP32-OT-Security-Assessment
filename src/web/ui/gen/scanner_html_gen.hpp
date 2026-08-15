@@ -1,0 +1,2314 @@
+/* auto-generated from scanner.html */
+#pragma once
+static const char* SCANNER_HTML_GEN = R"HTML(
+<!doctype html>
+<html><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Scanner & Fuzzing</title>
+<style>
+body{font-family:system-ui;margin:1rem;background:#f6f6f6}
+.card{background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);padding:1rem;margin-bottom:1rem}
+.btn{background:#007;color:#fff;border:none;padding:.5rem 1rem;border-radius:6px;cursor:pointer;margin-right:.5rem}
+.btn:hover{background:#008}
+.btn.danger{background:#c33}
+.btn.danger:hover{background:#d44}
+.form-group{margin-bottom:.8rem}
+label{display:block;margin-bottom:.3rem;font-weight:600}
+input,select{width:100%;padding:.4rem;border:1px solid #ccc;border-radius:4px}
+.status{padding:.5rem;border-radius:4px;margin-bottom:.8rem}
+.status.ok{background:#d4edda;color:#155724}
+.status.err{background:#f8d7da;color:#721c24}
+table{width:100%;border-collapse:collapse}
+th,td{padding:.5rem;text-align:left;border-bottom:1px solid #ddd}
+th{background:#f8f9fa}
+pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:200px}
+.tabs{display:flex;gap:.5rem;margin-bottom:1rem}
+.tab{padding:.5rem 1rem;background:#ddd;border:none;border-radius:4px;cursor:pointer}
+.tab.active{background:#007;color:#fff}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.disabled{opacity:.5;pointer-events:none}
+.nav-btn{
+    background:#06a;
+    color:#fff;
+    border:none;
+    padding:.6rem 1rem;
+    border-radius:8px;
+    cursor:pointer;
+    text-decoration:none;
+    display:inline-block
+}
+.nav-btn:hover{
+    background:#07b
+}
+.job-status{
+    padding:.2rem .5rem;
+    border-radius:12px;
+    font-size:.8rem;
+    font-weight:600
+}
+.status-ready{background:#e3f2fd;color:#1976d2}
+.status-running{background:#e8f5e8;color:#388e3c;animation:pulse 2s infinite}
+.status-completed{background:#f3e5f5;color:#7b1fa2}
+.status-error{background:#ffebee;color:#d32f2f}
+.btn-sm{padding:.2rem .4rem;font-size:.8rem;margin-left:.5rem}
+#active_discoveries{max-height:300px;overflow-y:auto}
+.discovery-section{margin-bottom:.5rem}
+@keyframes pulse{
+    0%{opacity:1}
+    50%{opacity:0.7}
+    100%{opacity:1}
+}
+ .fuzz-actions{
+     display:flex;
+     gap:.3rem;
+     flex-wrap:wrap
+ }
+.helpbox{background:#f0f7ff;border:1px solid #cfe4ff;color:#083a6b;padding:.6rem .7rem;border-radius:6px;margin:.6rem 0}
+.helpbox strong{display:block;margin-bottom:.2rem}
+.helpbox code{background:rgba(0,0,0,.06);padding:.05rem .3rem;border-radius:4px}
+.result-summary{background:#eef9f0;border:1px solid #cdebd3;color:#123f1a;padding:.6rem .7rem;border-radius:6px;margin:.6rem 0}
+ .proto-btns{display:flex;gap:.4rem;flex-wrap:wrap;margin:.4rem 0 .6rem 0}
+ .proto-btns .btn{margin-right:0}
+ .proto-btns .btn.active{background:#014}
+ </style>
+<div class="card">
+<h1>🔍 Scanner & Fuzzing</h1>
+<a href="/" class="btn nav-btn">← Dashboard</a>
+<div class="helpbox" style="margin-top:.8rem">
+  <strong>Nota</strong>
+  Questa pagina contiene 4 tab (Discovery, Vulnerability Scanner, Fuzzing, Scheduled Scans). Esistono anche scorciatoie URL:
+  <code>/vulnerability-scanner</code> e <code>/fuzzing</code> (stessa pagina, tab pre-selezionato).
+  Le API reali sono sotto <code>/api/scanner/*</code>, <code>/api/fuzz/*</code> e <code>/api/discovery/*</code>.
+</div>
+</div>
+<div class="card" id="features">
+  <h2>Scanner & Fuzzing</h2>
+  <label><input type="checkbox" id="feat_scanner_fuzzing"> Enable Scanner & Fuzzing Module</label>
+  <label style="margin-top:.4rem;display:block;"><input type="checkbox" id="feat_scanner_scheduling"> Enable Scheduled Scans (Cron)</label>
+  <button class="btn" onclick="saveFeatures()">Save</button>
+</div>
+<div class="tabs">
+<button class="tab active" data-tab="discovery" onclick="showTab('discovery', this)">Discovery</button>
+<button class="tab" data-tab="scanner" onclick="showTab('scanner', this)">Vulnerability Scanner</button>
+<button class="tab" data-tab="fuzzing" onclick="showTab('fuzzing', this)">Fuzzing</button>
+<button class="tab" data-tab="scheduled" onclick="showTab('scheduled', this)">Scheduled Scans</button>
+</div>
+<div id="status"></div>
+
+<!-- Discovery Tab -->
+<div class="tab-content active" id="discovery">
+<div class="card">
+<h2>🔎 Protocol Discovery</h2>
+<div class="helpbox" id="disc_guide">
+  <strong>Guida rapida</strong>
+  Seleziona un protocollo, controlla il formato del target, poi avvia la discovery. Nota: PROFINET DCP e' L2 e non richiede una sottorete IP.
+</div>
+<div class="proto-btns">
+  <button class="btn active disc-proto-btn" id="disc_btn_modbus" onclick="setDiscProto('modbus')">Modbus</button>
+  <button class="btn disc-proto-btn" id="disc_btn_s7" onclick="setDiscProto('s7')">S7</button>
+  <button class="btn disc-proto-btn" id="disc_btn_profinet" onclick="setDiscProto('profinet')">PROFINET DCP</button>
+  <button class="btn disc-proto-btn" id="disc_btn_ethernetip" onclick="setDiscProto('ethernetip')">EtherNet/IP</button>
+  <button class="btn disc-proto-btn" id="disc_btn_opcua" onclick="setDiscProto('opcua')">OPC UA Hello</button>
+</div>
+<div class="form-group">
+<label id="disc_target_label">Target</label>
+<input id="disc_target" placeholder="192.168.1.100:502">
+<small id="disc_target_help">Formato target dipende dal protocollo selezionato.</small>
+</div>
+<div class="form-group">
+<label>Timeout (ms)</label>
+<input id="disc_timeout" placeholder="2000" type="number">
+</div>
+<button class="btn" onclick="startDiscovery()">Start Discovery</button>
+</div>
+
+<!-- S7 Protocol Discovery is integrated into the normal S7 discovery flow (Start Discovery). -->
+
+<div class="card">
+<h3>General Discovery</h3>
+<div class="form-group">
+<label>Mode</label>
+<select id="general_mode">
+<option value="ping">Ping sweep</option>
+<option value="ports">Port scan</option>
+</select>
+</div>
+<div class="form-group">
+<label>Target subnet or IP</label>
+<input id="general_target" placeholder="192.168.1.0/24">
+</div>
+<div class="form-group">
+<label>Interface</label>
+<select id="general_iface">
+<option value="eth">Ethernet (ETH)</option>
+<option value="auto">Auto (ETH, poi WiFi STA)</option>
+<option value="wifi_sta">WiFi STA</option>
+<option value="wifi_ap">WiFi AP</option>
+</select>
+</div>
+<div class="form-group">
+<label>Port list (comma separated)</label>
+<input id="general_ports" placeholder="502,102,44818,4840">
+</div>
+<div class="form-group">
+<label>Per host timeout (ms)</label>
+<input id="general_timeout" type="number" placeholder="500">
+</div>
+<div class="form-group">
+<label>Connection timeout (ms)</label>
+<input id="general_connect_timeout" type="number" placeholder="400">
+</div>
+<div class="form-group">
+<label>Max hosts</label>
+<input id="general_max_hosts" type="number" placeholder="512">
+</div>
+<button class="btn" onclick="startGeneralDiscovery()">General discovery</button>
+</div>
+<div class="card">
+<h3>🕒 Active Discoveries</h3>
+<div id="active_discoveries">No active discoveries</div>
+</div>
+
+<div class="card">
+<h3>📋 Discovery Results</h3>
+<button class="btn btn-sm" onclick="downloadDiscoveryResultsJson()">Download JSON</button>
+<pre id="disc_result">Results will appear here...</pre>
+</div>
+</div>
+
+<!-- Scanner Tab -->
+<div class="tab-content" id="scanner">
+<div class="helpbox" id="scanner_disabled_note" style="display:none">
+  <strong>Modulo disabilitato</strong>
+  Abilita <code>Enable Scanner &amp; Fuzzing Module</code> sopra per usare Vulnerability Scanner e Fuzzing.
+</div>
+ <div class="card">
+<h2>🛡️ Vulnerability Scanner</h2>
+<h3>Scanner Jobs</h3>
+<table id="jobs_table">
+<thead><tr><th>ID</th><th>Name</th><th>Protocol</th><th>Target</th><th>Enabled</th><th>Actions</th></tr></thead>
+<tbody></tbody>
+</table>
+<button class="btn" onclick="loadJobs()">Refresh Jobs</button>
+<button class="btn" onclick="showCreateJob()">Create Job</button>
+</div>
+
+<div class="card" id="create_job" style="display:none">
+<h3>Create Scanner Job</h3>
+<div class="form-group">
+<label>Job Name</label>
+<input id="job_name" placeholder="My Scan Job">
+</div>
+<div class="form-group">
+<label>Protocol</label>
+<select id="job_protocol"></select>
+</div>
+<div class="form-group">
+<label>Target</label>
+<input id="job_target" placeholder="192.168.1.100:502">
+</div>
+<div class="form-group" id="job_scan_types_group" style="display:none">
+<label>Scan types</label>
+<div id="job_scan_types" style="display:flex;gap:.6rem;flex-wrap:wrap"></div>
+<small id="job_scan_types_help">Optional: select which checks to run for this protocol.</small>
+</div>
+<div class="form-group">
+<label>Interval (seconds)</label>
+<input id="job_interval" placeholder="3600" type="number">
+</div>
+<button class="btn" onclick="createJob()">Create</button>
+<button class="btn" onclick="hideCreateJob()">Cancel</button>
+</div>
+
+<div class="card">
+<h3>Last Scan Result</h3>
+<div id="scan_summary" class="result-summary" style="display:none"></div>
+<button class="btn btn-sm" onclick="downloadScanResultJson()">Download JSON</button>
+<pre id="scan_result_box">No result yet</pre>
+</div>
+</div>
+
+<!-- Fuzzing Tab -->
+<div class="tab-content" id="fuzzing">
+<div class="helpbox" id="fuzzing_disabled_note" style="display:none">
+  <strong>Modulo disabilitato</strong>
+  Abilita <code>Enable Scanner &amp; Fuzzing Module</code> sopra per usare il Fuzzing.
+</div>
+<!-- S7 offensive actions are exposed as fuzzing profiles/jobs (see "Create New Job"). -->
+<!-- Fuzzing Jobs Management -->
+<div class="card">
+<h2>🧨 Fuzzing Jobs Management</h2>
+<table id="fuzz_jobs_table">
+<thead><tr><th>ID</th><th>Protocol</th><th>Target</th><th>Profile</th><th>Safe Mode</th><th>Rate/s</th><th>Max Cases</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody></tbody>
+</table>
+<div class="row" style="margin-top:.8rem">
+<button class="btn" id="fuzz-refresh-btn" onclick="toggleAutoRefresh()">🔄 Refresh Jobs</button>
+<button class="btn" onclick="showCreateFuzzJob()">➕ Create New Job</button>
+<button class="btn danger" onclick="stopAllFuzz()">🛑 Stop All</button>
+</div>
+</div>
+
+<!-- Create Fuzzing Job -->
+<div class="card" id="create_fuzz_job" style="display:none">
+<h3>Create New Fuzzing Job</h3>
+<div class="form-group">
+<label>Protocol</label>
+<select id="fuzz_protocol"></select>
+</div>
+<div class="form-group">
+<label>Target</label>
+<input id="fuzz_target" placeholder="192.168.1.100:502;1">
+<small id="target_format_help">Format: IP:PORT;SLAVE_ID for Modbus TCP</small>
+</div>
+<div class="form-group">
+<label>Rate (per second)</label>
+<input id="fuzz_rate" placeholder="10" type="number">
+</div>
+<div class="form-group">
+<label>Max Test Cases</label>
+<input id="fuzz_max" placeholder="100" type="number">
+</div>
+<div class="form-group">
+<label>Duration (ms)</label>
+<input id="fuzz_duration" placeholder="60000" type="number">
+</div>
+<div class="form-group">
+<label>Attack Profile</label>
+<select id="fuzz_profile" multiple size="7">
+<option value="">Loading profiles...</option>
+</select>
+<small>Tip: seleziona uno o piu' profili (Ctrl/Shift su desktop). I profili con (TODO) non sono ancora implementati.</small>
+</div>
+<div class="form-group">
+<label><input id="fuzz_safe" type="checkbox" checked> Safe Mode</label>
+<small>Safe mode prevents write operations that could affect production systems</small>
+</div>
+
+<!-- Advanced Modbus Configuration -->
+<div class="card" id="modbus_extra_config" style="display:none;background:#f8f9fa;margin-top:1rem">
+<h4 style="margin:0 0 .5rem 0">⚙️ Advanced Modbus Configuration</h4>
+<div class="form-group">
+<label>Critical Registers (comma-separated)</label>
+<input id="modbus_critical_regs" placeholder="100,200,300">
+<small>Specific register addresses to target during fuzzing</small>
+</div>
+<div class="form-group">
+<label>Unit ID Range</label>
+<div style="display:flex;gap:.5rem">
+<input id="modbus_unit_min" placeholder="Min (1)" type="number" style="width:50%">
+<input id="modbus_unit_max" placeholder="Max (247)" type="number" style="width:50%">
+</div>
+<small>Range of Unit IDs for device discovery</small>
+</div>
+<div class="form-group">
+<label>Timing Delay (ms)</label>
+<input id="modbus_timing_delay" placeholder="100" type="number">
+<small>Delay between fuzzing attempts for timing attacks</small>
+</div>
+<div class="form-group">
+<label><input id="modbus_stealth" type="checkbox"> Stealth Mode</label>
+<small>Use broadcast addresses and avoid generating responses</small>
+</div>
+<div class="form-group">
+<label>Discovery Depth</label>
+<select id="modbus_discovery_depth">
+<option value="basic">Basic</option>
+<option value="regular" selected>Regular</option>
+<option value="extended">Extended</option>
+</select>
+<small>Level of detail for device discovery</small>
+</div>
+<div class="form-group">
+<label><input id="modbus_force_broadcast" type="checkbox"> Force Broadcast</label>
+<small>Force use of Unit ID 0 (broadcast address)</small>
+</div>
+</div>
+
+<!-- Advanced S7 Configuration -->
+<div class="card" id="s7_extra_config" style="display:none;background:#f8f9fa;margin-top:1rem">
+<h4 style="margin:0 0 .5rem 0">⚙️ Advanced S7 Configuration</h4>
+<div class="form-group">
+<label>Rack / Slot</label>
+<div style="display:flex;gap:.5rem">
+<input id="s7_rack" placeholder="0" type="number" style="width:50%">
+<input id="s7_slot" placeholder="0" type="number" style="width:50%">
+</div>
+<small>S7-1200/1500 spesso: rack=0 slot=0. S7-300/400 spesso: rack=0 slot=2.</small>
+<small><strong>Nota:</strong> i profili offensivi (<code>unauthorized_write</code>, <code>plc_stop</code>) richiedono <em>Safe Mode</em> disabilitato.</small>
+</div>
+<div class="form-group">
+<label>Timeout (ms)</label>
+<input id="s7_timeout_ms" placeholder="3000" type="number">
+<small>Timeout TCP/ISO-on-TCP + SetupComm.</small>
+</div>
+
+<div class="card" id="s7_write_params" style="display:none;background:#fff;margin:.5rem 0 0 0">
+<h5 style="margin:0 0 .5rem 0">Unauthenticated Write Var Parameters (Lab)</h5>
+<div class="form-group">
+<label>Area</label>
+<select id="s7_write_area">
+  <option value="DB" selected>DB (Data Block)</option>
+  <option value="Q">Q (Outputs)</option>
+  <option value="M">M (Merker)</option>
+</select>
+<small>Scritture su Q/M sono disruptive. DB dipende dalla protezione del PLC.</small>
+</div>
+<div class="form-group" id="s7_db_number_group">
+<label>DB Number</label>
+<input id="s7_db_number" placeholder="1" type="number">
+</div>
+<div class="form-group">
+<label>Byte Offset</label>
+<input id="s7_byte_offset" placeholder="0" type="number">
+<small>Offset in byte (non in bit).</small>
+</div>
+<div class="form-group">
+<label>Value (hex bytes)</label>
+<input id="s7_value_hex" placeholder="DE AD">
+<small>Esempio: <code>DE AD</code> (spazi opzionali). Verrà scritto come bytes.</small>
+</div>
+</div>
+
+<div class="card" id="s7_plc_control_params" style="display:none;background:#fff;margin:.5rem 0 0 0">
+<h5 style="margin:0 0 .5rem 0">PLC Control Parameters (Lab)</h5>
+<div class="form-group">
+<label>Control</label>
+<select id="s7_plc_control">
+  <option value="stop" selected>STOP</option>
+  <option value="cold_restart">Cold Restart</option>
+  <option value="hot_restart">Hot Restart</option>
+</select>
+<small>Operazione altamente disruptive: usare solo in laboratorio.</small>
+</div>
+</div>
+</div>
+
+<button class="btn" onclick="createFuzzJob()">Create Job</button>
+<button class="btn" onclick="hideCreateFuzzJob()">Cancel</button>
+</div>
+
+<!-- Fuzzing Results -->
+<div class="card" id="fuzz_results_card" style="display:none">
+<h3>Operation Results</h3>
+<div id="fuzz_summary" class="result-summary" style="display:none"></div>
+<button class="btn btn-sm" onclick="downloadFuzzResultJson()">Download JSON</button>
+<pre id="fuzz_result"></pre>
+<button class="btn" onclick="hideFuzzResults()">Close</button>
+</div>
+</div>
+
+<!-- Scheduled Scans Tab -->
+<div class="tab-content" id="scheduled">
+<div class="helpbox" id="scheduled_disabled_note" style="display:none">
+  <strong>Cron disabilitato</strong>
+  Abilita <code>Enable Scheduled Scans (Cron)</code> sopra per gestire le scansioni pianificate.
+</div>
+ <div class="card">
+<h2>⏰ Scheduled Scans</h2>
+<p style="margin-bottom:1rem;color:#666">Configure automatic scans to run at specified times using cron-style scheduling.</p>
+<table id="schedules_table">
+<thead><tr><th>Name</th><th>Type</th><th>Target</th><th>Schedule</th><th>Next Run</th><th>Enabled</th><th>Actions</th></tr></thead>
+<tbody></tbody>
+</table>
+<button class="btn" onclick="loadSchedules()">🔄 Refresh</button>
+<button class="btn" onclick="showCreateSchedule()">➕ Create Schedule</button>
+</div>
+
+<div class="card" id="create_schedule" style="display:none">
+<h3>Create Scheduled Scan</h3>
+<div class="form-group">
+<label>Schedule Name</label>
+<input id="sched_name" placeholder="Daily Network Scan">
+</div>
+<div class="form-group">
+<label>Scan Type</label>
+<select id="sched_type">
+<option value="vulnerability">Vulnerability Scan</option>
+<option value="discovery">Discovery Scan</option>
+</select>
+</div>
+<div class="form-group">
+<label>Target (IP or subnet)</label>
+<input id="sched_target" placeholder="192.168.1.0/24">
+</div>
+
+<h4 style="margin-top:1rem">Cron Schedule</h4>
+<p style="font-size:0.9rem;color:#666;margin-bottom:.5rem">Set time fields to -1 for "any". Examples: Every hour at :00 (minute=0, hour=-1), Daily at 2:30 AM (minute=30, hour=2), Weekly Monday at 3:00 AM (minute=0, hour=3, day_of_week=1)</p>
+
+<div class="form-group">
+<label>Minute (0-59 or -1 for any)</label>
+<input id="sched_minute" type="number" placeholder="0" min="-1" max="59">
+</div>
+<div class="form-group">
+<label>Hour (0-23 or -1 for any)</label>
+<input id="sched_hour" type="number" placeholder="2" min="-1" max="23">
+</div>
+<div class="form-group">
+<label>Day of Month (1-31 or -1 for any)</label>
+<input id="sched_day_month" type="number" placeholder="-1" min="-1" max="31">
+</div>
+<div class="form-group">
+<label>Month (1-12 or -1 for any)</label>
+<input id="sched_month" type="number" placeholder="-1" min="-1" max="12">
+</div>
+<div class="form-group">
+<label>Day of Week (0=Sunday, 6=Saturday, -1 for any)</label>
+<input id="sched_day_week" type="number" placeholder="-1" min="-1" max="6">
+</div>
+
+<div class="form-group">
+<label><input id="sched_enabled" type="checkbox" checked> Enabled</label>
+</div>
+
+<button class="btn" onclick="createSchedule()">Create Schedule</button>
+<button class="btn" onclick="hideCreateSchedule()">Cancel</button>
+</div>
+
+<div class="card" id="edit_schedule" style="display:none">
+<h3>Edit Schedule</h3>
+<input type="hidden" id="edit_sched_id">
+<div class="form-group">
+<label>Schedule Name</label>
+<input id="edit_sched_name">
+</div>
+<div class="form-group">
+<label>Scan Type</label>
+<select id="edit_sched_type">
+<option value="vulnerability">Vulnerability Scan</option>
+<option value="discovery">Discovery Scan</option>
+</select>
+</div>
+<div class="form-group">
+<label>Target (IP or subnet)</label>
+<input id="edit_sched_target">
+</div>
+
+<h4 style="margin-top:1rem">Cron Schedule</h4>
+<div class="form-group">
+<label>Minute (0-59 or -1 for any)</label>
+<input id="edit_sched_minute" type="number" min="-1" max="59">
+</div>
+<div class="form-group">
+<label>Hour (0-23 or -1 for any)</label>
+<input id="edit_sched_hour" type="number" min="-1" max="23">
+</div>
+<div class="form-group">
+<label>Day of Month (1-31 or -1 for any)</label>
+<input id="edit_sched_day_month" type="number" min="-1" max="31">
+</div>
+<div class="form-group">
+<label>Month (1-12 or -1 for any)</label>
+<input id="edit_sched_month" type="number" min="-1" max="12">
+</div>
+<div class="form-group">
+<label>Day of Week (0-6 or -1 for any)</label>
+<input id="edit_sched_day_week" type="number" min="-1" max="6">
+</div>
+
+<div class="form-group">
+<label><input id="edit_sched_enabled" type="checkbox"> Enabled</label>
+</div>
+
+<button class="btn" onclick="updateSchedule()">Update Schedule</button>
+<button class="btn" onclick="hideEditSchedule()">Cancel</button>
+</div>
+</div>
+
+<script>
+async function loadFeatures(){
+  try{
+    const r = await fetch('/api/features');
+    if(!r.ok){
+      status('Failed to load features ('+r.status+')',true);
+      return;
+    }
+    const f = await r.json();
+    // Unified scanner_fuzzing feature - enabled if either vuln_scanner or fuzzing is enabled
+    const scanningEnabled = !!(f.vuln_scanner || f.fuzzing || f.scanner_fuzzing);
+    const schedulingEnabled = typeof f.scheduled_scans === 'boolean' ? f.scheduled_scans : scanningEnabled;
+    const scanningToggle = document.getElementById('feat_scanner_fuzzing');
+    const schedulingToggle = document.getElementById('feat_scanner_scheduling');
+    scanningToggle.checked = scanningEnabled;
+    schedulingToggle.checked = schedulingEnabled;
+    schedulingToggle.disabled = !scanningEnabled;
+    applyFeatureState(f);
+  }catch(e){ status('Error loading features: '+e.message,true); }
+}
+function applyFeatureState(f){
+  const scanningEnabled = !!(f.vuln_scanner || f.fuzzing || f.scanner_fuzzing);
+  const schedulingEnabled = (typeof f.scheduled_scans === 'boolean') ? f.scheduled_scans : scanningEnabled;
+  const schedulingToggle = document.getElementById('feat_scanner_scheduling');
+  if (schedulingToggle) {
+    schedulingToggle.disabled = !scanningEnabled;
+    if (!scanningEnabled) {
+      schedulingToggle.checked = false;
+    }
+  }
+  document.getElementById('scanner').classList.toggle('disabled', !scanningEnabled);
+  document.getElementById('fuzzing').classList.toggle('disabled', !scanningEnabled);
+  document.getElementById('scheduled').classList.toggle('disabled', !(scanningEnabled && schedulingEnabled));
+
+  // Visible hints so the UI doesn't look "empty" when modules are disabled.
+  const n1 = document.getElementById('scanner_disabled_note');
+  const n2 = document.getElementById('fuzzing_disabled_note');
+  const n3 = document.getElementById('scheduled_disabled_note');
+  if (n1) n1.style.display = scanningEnabled ? 'none' : 'block';
+  if (n2) n2.style.display = scanningEnabled ? 'none' : 'block';
+  if (n3) n3.style.display = (scanningEnabled && schedulingEnabled) ? 'none' : 'block';
+}
+async function saveFeatures(){
+  const enabled = document.getElementById('feat_scanner_fuzzing').checked;
+  const schedulingToggle = document.getElementById('feat_scanner_scheduling');
+  const schedulingEnabled = enabled ? schedulingToggle.checked : false;
+  const body={
+    scanner_fuzzing: enabled,
+    vuln_scanner: enabled,  // Keep backward compatibility
+    fuzzing: enabled,       // Keep backward compatibility
+    scheduled_scans: schedulingEnabled
+  };
+  const r=await fetch('/api/features',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok){ status('Failed to save features',true); return; }
+  status('Features updated');
+  loadFeatures();
+}
+    // Extract session token from URL and add to all API calls
+(function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionToken = urlParams.get('sid');
+
+    // Expose original fetch and queue helpers
+    const originalFetch = window.fetch.bind(window);
+    window.__originalFetch = originalFetch;
+    if (!window.__apiFetchQueue) {
+        window.__apiFetchQueue = Promise.resolve();
+    }
+    // Keep API concurrency low to avoid exhausting sockets/RAM on the device.
+    // Only let user-triggered "start/cancel" bypass the queue.
+    const NO_QUEUE = [/^\/api\/discovery\/start$/, /^\/api\/discovery\/cancel$/];
+
+     window.fetch = function(url, options = {}) {
+         const isApiCall = typeof url === 'string' && url.startsWith('/api/');
+         if (!isApiCall) {
+             return originalFetch(url, options);
+         }
+         const path = (typeof url === 'string') ? url : (url && url.url) || '';
+         const noQueue = NO_QUEUE.some(re => re.test(path));
+
+         const opts = {...options};
+        // Use an explicit conditional here: some JS engines are picky with spread + logical OR.
+        opts.headers = { ...((options && options.headers) ? options.headers : {}) };
+         if (sessionToken) {
+             opts.headers['Authorization'] = 'Bearer ' + sessionToken;
+         }
+
+        if (noQueue) {
+            console.log('API call (direct):', path);
+            return originalFetch(url, opts);
+        }
+
+        console.log('API call (queued):', path);
+        const runner = () => originalFetch(url, opts);
+        const queued = window.__apiFetchQueue.then(runner, runner);
+        window.__apiFetchQueue = queued.catch(() => {});
+        return queued;
+    };
+
+    // Update navigation links to include session token
+    if (sessionToken) {
+        document.querySelectorAll('.nav-btn').forEach(link => {
+            const href = link.getAttribute('href');
+            if (href && !href.includes('sid=')) {
+                link.setAttribute('href', href + '?sid=' + encodeURIComponent(sessionToken));
+            }
+        });
+    } else {
+        console.warn('No session token found in URL - API calls may be unauthorized');
+    }
+})();;
+
+const __triggerFeatureLoad = () => { loadFeatures(); };
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', __triggerFeatureLoad, { once: true });
+} else {
+    __triggerFeatureLoad();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const mainToggle = document.getElementById('feat_scanner_fuzzing');
+    const schedToggle = document.getElementById('feat_scanner_scheduling');
+    if (mainToggle && schedToggle) {
+        mainToggle.addEventListener('change', () => {
+            if (!mainToggle.checked) {
+                schedToggle.checked = false;
+                schedToggle.disabled = true;
+            } else {
+                schedToggle.disabled = false;
+            }
+        });
+    }
+});
+
+(function(){
+    const fallback = [
+      {id:1,key:'modbus',    name:'Modbus TCP'},
+      {id:2,key:'s7',        name:'S7 Communication'},
+      {id:3,key:'profinet',  name:'PROFINET'},
+      {id:4,key:'ethernetip',name:'EtherNet/IP'},
+      {id:5,key:'opcua',     name:'OPC UA'}
+    ];
+    function $(s,root=document){ return root.querySelector(s); }
+    function fillSelect(sel, list){
+      sel.innerHTML = '';
+      list.forEach(p=>{
+        const opt = document.createElement('option');
+        opt.value = String(p.id);
+        opt.textContent = p.name;
+        sel.appendChild(opt);
+      });
+    }
+    async function load(){
+      let list = fallback;
+      try{
+        const r = await fetch('/api/protocols/details');
+        if(!r.ok) throw new Error();
+        const j = await r.json();
+        if(Array.isArray(j) && j.length) list = j;
+      }catch(_){}
+      fillSelect($('#job_protocol'),  list);
+      fillSelect($('#fuzz_protocol'), list);
+      try{ updateJobScanTypesUI(); }catch(_){}
+    }
+    document.addEventListener('DOMContentLoaded', load);
+  })();
+
+  // Discovery tab: init protocol hints once DOM is ready
+  document.addEventListener('DOMContentLoaded', function(){
+    try { setDiscProto('modbus'); } catch(_){}
+  });
+
+  // Initial tab selection:
+  // - /scanner defaults to Discovery
+  // - /vulnerability-scanner defaults to Vulnerability Scanner
+  // - /fuzzing defaults to Fuzzing
+  // - query ?tab=... overrides
+  document.addEventListener('DOMContentLoaded', function(){
+    try{
+      const u = new URL(window.location.href);
+      const t = (u.searchParams.get('tab') || '').trim();
+      if(t) { showTab(t); return; }
+      const p = window.location.pathname || '';
+      if(p === '/vulnerability-scanner') showTab('scanner');
+      else if(p === '/fuzzing') showTab('fuzzing');
+      else if(p === '/scheduled-scans') showTab('scheduled');
+      else showTab('discovery');
+    }catch(_){}
+  });
+
+function showTab(tab, btn){
+document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));
+document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
+document.getElementById(tab).classList.add('active');
+if(btn) btn.classList.add('active');
+else {
+  const b = document.querySelector('.tab[data-tab=\"'+tab+'\"]');
+  if(b) b.classList.add('active');
+}
+}
+function status(msg,err){
+var s=document.getElementById('status');
+s.className='status '+(err?'err':'ok');
+s.textContent=msg;
+setTimeout(()=>s.innerHTML='',3000);
+}
+
+function escHtml(v){
+  return String(v==null?'':v)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+function parseJsonSafe(text){
+  try { return JSON.parse(text); } catch(_) { return null; }
+}
+
+function setSummaryBox(id, html){
+  var box = document.getElementById(id);
+  if(!box) return;
+  if(!html){
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  box.style.display = 'block';
+  box.innerHTML = html;
+}
+
+function buildScannerSummary(obj){
+  if(!obj || typeof obj !== 'object') return '';
+  var protocol = ((obj.scan||{}).protocol || obj.protocol || '').toString();
+  var target = ((obj.scan||{}).target || obj.target_network || '').toString();
+  var summary = obj.summary || {};
+  var risk = obj.risk_assessment || {};
+  var findings = Array.isArray(obj.findings) ? obj.findings.length : 0;
+  var testsExec = summary.tests_executed;
+  var testsSkip = summary.tests_skipped;
+  var hasCore = protocol || target || findings || Object.keys(summary).length || Object.keys(risk).length;
+  if(!hasCore) return '';
+  var rows = [];
+  if(protocol) rows.push('<div><strong>Protocollo:</strong> '+escHtml(protocol)+'</div>');
+  if(target) rows.push('<div><strong>Target:</strong> '+escHtml(target)+'</div>');
+  rows.push('<div><strong>Findings:</strong> '+escHtml(findings)+'</div>');
+  rows.push('<div><strong>Severita:</strong> C='+escHtml(summary.critical||0)+' H='+escHtml(summary.high||0)+' M='+escHtml(summary.medium||0)+' L='+escHtml(summary.low||0)+' I='+escHtml(summary.info||0)+'</div>');
+  if(typeof testsExec === 'number' || typeof testsSkip === 'number'){
+    rows.push('<div><strong>Test:</strong> eseguiti='+escHtml((typeof testsExec==='number')?testsExec:'n/a')+' skipped='+escHtml((typeof testsSkip==='number')?testsSkip:'n/a')+'</div>');
+  }
+  if(risk.overall_risk) rows.push('<div><strong>Risk overall:</strong> '+escHtml(risk.overall_risk)+'</div>');
+  if(risk.highest_cvss!=null) rows.push('<div><strong>CVSS max:</strong> '+escHtml(risk.highest_cvss)+'</div>');
+  if(risk.highest_risk_finding) rows.push('<div><strong>Finding top risk:</strong> '+escHtml(risk.highest_risk_finding)+'</div>');
+  return rows.join('');
+}
+
+function buildFuzzSummary(obj){
+  if(!obj || typeof obj !== 'object') return '';
+  var risk = obj.risk_assessment || {};
+  var stats = obj.statistics || {};
+  var profMeta = obj.attack_profile_metadata || {};
+  var attackMeta = stats.attack_types_metadata || {};
+  var first = obj.first_success || {};
+  var hasCore = Object.keys(risk).length || Object.keys(profMeta).length || Object.keys(attackMeta).length || Object.keys(stats).length;
+  if(!hasCore) return '';
+  var rows = [];
+  var tests = (stats.tests_total!=null) ? stats.tests_total : (stats.total_cases!=null ? stats.total_cases : null);
+  if(tests!=null) rows.push('<div><strong>Test eseguiti:</strong> '+escHtml(tests)+'</div>');
+  if(risk.overall_risk) rows.push('<div><strong>Risk overall:</strong> '+escHtml(risk.overall_risk)+'</div>');
+  if(risk.highest_risk_attack_type) rows.push('<div><strong>Attacco rischio massimo:</strong> '+escHtml(risk.highest_risk_attack_type)+'</div>');
+  if(profMeta.category || profMeta.risk_domain){
+    rows.push('<div><strong>Profilo:</strong> '+escHtml((profMeta.category||'n/a')+' / '+(profMeta.risk_domain||'n/a'))+'</div>');
+  }
+  if(first && (first.case_id!=null || first.attack_type || first.attack_metadata)){
+    var ftype = first.attack_type || ((first.attack_metadata||{}).attack_type) || 'n/a';
+    rows.push('<div><strong>Primo successo:</strong> case=' + escHtml((first.case_id!=null)?first.case_id:'n/a') + ' tipo=' + escHtml(ftype) + '</div>');
+  }
+  var keys = Object.keys(attackMeta || {});
+  if(keys.length){
+    var top = keys.slice(0, 4).map(function(k){
+      var m = attackMeta[k] || {};
+      var sev = m.expected_severity || 'n/a';
+      var dom = m.risk_domain || 'n/a';
+      return escHtml(k+' ('+sev+', '+dom+')');
+    }).join('; ');
+    rows.push('<div><strong>Attack metadata:</strong> '+top+'</div>');
+  }
+  return rows.join('');
+}
+
+function getSectionJsonValue(preId){
+  var pre = document.getElementById(preId);
+  var txt = pre ? String(pre.textContent || '').trim() : '';
+  if(!txt) return null;
+  var parsed = parseJsonSafe(txt);
+  return (parsed !== null) ? parsed : { raw_text: txt };
+}
+
+function downloadJsonClient(filename, data){
+  var jsonText;
+  try{
+    jsonText = JSON.stringify(data, null, 2);
+  }catch(_){
+    jsonText = JSON.stringify({ raw_text: String(data || '') }, null, 2);
+  }
+  var blob = new Blob([jsonText], { type: 'application/json;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 0);
+}
+
+function buildJsonFilename(prefix){
+  var d = new Date();
+  var ts = d.getFullYear().toString()
+    + String(d.getMonth()+1).padStart(2,'0')
+    + String(d.getDate()).padStart(2,'0')
+    + '_'
+    + String(d.getHours()).padStart(2,'0')
+    + String(d.getMinutes()).padStart(2,'0')
+    + String(d.getSeconds()).padStart(2,'0');
+  return prefix + '_' + ts + '.json';
+}
+
+function downloadDiscoveryResultsJson(){
+  var report = getSectionJsonValue('disc_result');
+  if(!report){
+    status('Nessun risultato discovery da scaricare', true);
+    return;
+  }
+  downloadJsonClient(buildJsonFilename('discovery_results'), report);
+  status('Download discovery avviato');
+}
+
+function downloadScanResultJson(){
+  var report = getSectionJsonValue('scan_result_box');
+  if(!report){
+    status('Nessun risultato scanner da scaricare', true);
+    return;
+  }
+  var summary = '';
+  var s = document.getElementById('scan_summary');
+  if(s && s.style.display !== 'none') summary = String(s.textContent || '').trim();
+  var payload = summary ? { summary_text: summary, result: report } : report;
+  downloadJsonClient(buildJsonFilename('vulnerability_scan_result'), payload);
+  status('Download scanner avviato');
+}
+
+function downloadFuzzResultJson(){
+  var report = getSectionJsonValue('fuzz_result');
+  if(!report){
+    status('Nessun risultato fuzzing da scaricare', true);
+    return;
+  }
+  var summary = '';
+  var s = document.getElementById('fuzz_summary');
+  if(s && s.style.display !== 'none') summary = String(s.textContent || '').trim();
+  var payload = summary ? { summary_text: summary, result: report } : report;
+  downloadJsonClient(buildJsonFilename('fuzz_operation_results'), payload);
+  status('Download fuzzing avviato');
+}
+
+// Global variables for discovery polling
+let activeDiscoveries = new Map();
+let discoveryPollInterval = null;
+let discoveryPollBusy = false;
+let generalDiscoveryDefaults = { ports: [] };
+
+// Protocol discovery UX helpers
+let discProto = 'modbus';
+const DISC_HINTS = {
+  modbus: {
+    label: 'Target (IP:PORT o subnet)',
+    placeholder: '192.168.1.100:502 oppure 192.168.1.0/24',
+    help: 'Modbus/TCP e\' tipicamente su porta 502. Puoi passare un host (IP:PORT) o una subnet (CIDR) se supportata dal firmware.',
+    def: '192.168.1.100:502'
+  },
+  s7: {
+    label: 'Target (IP:PORT o subnet)',
+    placeholder: '192.168.1.100:102 oppure 192.168.1.0/24',
+    help: 'S7comm e\' tipicamente su porta 102. Su molte build richiede Ethernet pronta (ETH).',
+    def: '192.168.1.100:102'
+  },
+  profinet: {
+    label: 'Target (L2 / interfaccia)',
+    placeholder: 'eth (consigliato) oppure l2',
+    help: 'PROFINET DCP e\' discovery a livello 2 (broadcast). Non inserire una subnet IP: usa "eth" (o lascia vuoto).',
+    def: 'eth'
+  },
+  ethernetip: {
+    label: 'Target (IP:PORT o subnet)',
+    placeholder: '192.168.1.100:44818 oppure 192.168.1.0/24',
+    help: 'EtherNet/IP e\' tipicamente su porta 44818. Puoi usare host (IP:PORT) o subnet (CIDR) se supportata.',
+    def: '192.168.1.100:44818'
+  },
+  opcua: {
+    label: 'Target (IP:PORT o subnet)',
+    placeholder: '192.168.1.100:4840 oppure 192.168.1.0/24',
+    help: 'OPC UA Hello usa tipicamente porta 4840. Puoi usare host (IP:PORT) o subnet (CIDR) se supportata.',
+    def: '192.168.1.100:4840'
+  }
+};
+
+function isLikelyIpOrCidrTarget(s){
+  if(!s) return false;
+  // Matches: A.B.C.D, A.B.C.D:PORT, A.B.C.D/M, A.B.C.D/M:PORT
+  return /^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?(?::\d{1,5})?$/.test(s);
+}
+
+function setDiscProto(p){
+  if(!p) return;
+  discProto = p;
+  document.querySelectorAll('.disc-proto-btn').forEach(btn => btn.classList.remove('active'));
+  const btn = document.getElementById('disc_btn_' + p);
+  if(btn) btn.classList.add('active');
+  updateDiscHints();
+}
+
+function updateDiscHints(){
+  const h = DISC_HINTS[discProto] || DISC_HINTS.modbus;
+  const lbl = document.getElementById('disc_target_label');
+  const tgt = document.getElementById('disc_target');
+  const help = document.getElementById('disc_target_help');
+  if(lbl) lbl.textContent = h.label || 'Target';
+  if(tgt) {
+    tgt.placeholder = h.placeholder || '';
+    // For PROFINET, prefill a safe default to discourage IP subnet usage.
+    if(discProto === 'profinet' && (!tgt.value || !tgt.value.trim())) {
+      tgt.value = h.def || 'eth';
+    }
+  }
+  if(help) help.textContent = h.help || '';
+}
+
+function startDiscovery(){
+  return discovery(discProto);
+}
+
+// (removed) runS7ProtocolDiscovery(): S7 protocol discovery is returned as part of /api/discovery/start -> /api/discovery/list results.
+
+async function discovery(type){
+  status('Avvio discovery ' + type + '...', false);
+ try{
+ var rawTarget=(document.getElementById('disc_target').value||'').trim();
+ var hint = DISC_HINTS[type] || DISC_HINTS.modbus;
+ var target = rawTarget || (hint.def || '192.168.1.100:502');
+ if(type === 'profinet'){
+   // PROFINET DCP is L2: ignore IP/CIDR targets to avoid user confusion.
+   if(isLikelyIpOrCidrTarget(target)){
+     status("PROFINET DCP e' L2: target IP ignorato, uso 'eth'", false);
+     target = 'eth';
+   }
+ }
+ var timeout=document.getElementById('disc_timeout').value||'2000';
+
+// Start async discovery
+var response = await fetch('/api/discovery/start', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({
+    protocol: type,
+    target: target,
+    timeout: parseInt(timeout)
+  })
+});
+
+var result = await response.json();
+if (result.success) {
+  status('Discovery '+type+' started - ID: '+result.discovery_id);
+  activeDiscoveries.set(result.discovery_id, {
+    protocol: type,
+    target: target,
+    startTime: Date.now()
+  });
+
+  // Start polling if not already running
+  if (!discoveryPollInterval) {
+    startDiscoveryPolling();
+  }
+} else {
+  status('Failed to start discovery: '+result.message, true);
+}
+}catch(e){status('Error: '+e.message,true);}
+}
+
+function updateGeneralMode(){
+  var mode=document.getElementById('general_mode');
+  var portsField=document.getElementById('general_ports');
+  if(!mode||!portsField) return;
+  var value=mode.value;
+  if(value==='ports'){
+    portsField.disabled=false;
+    if(generalDiscoveryDefaults && Array.isArray(generalDiscoveryDefaults.ports) && generalDiscoveryDefaults.ports.length && (!portsField.value || !portsField.value.trim())){
+      portsField.placeholder=generalDiscoveryDefaults.ports.join(', ');
+    }
+  }else{
+    portsField.disabled=true;
+  }
+}
+
+function parsePortList(text){
+  var result=[];
+  if(!text) return result;
+  var acc='';
+  for(var i=0;i<text.length;i++){
+    var ch=text[i];
+    if(ch>='0'&&ch<='9'){
+      acc+=ch;
+      if(acc.length>5) acc='65535';
+    }else{
+      if(acc.length){
+        var val=parseInt(acc,10);
+        if(!isNaN(val)&&val>0&&val<=65535&&result.indexOf(val)===-1){
+          result.push(val);
+        }
+        acc='';
+      }
+    }
+  }
+  if(acc.length){
+    var val=parseInt(acc,10);
+    if(!isNaN(val)&&val>0&&val<=65535&&result.indexOf(val)===-1){
+      result.push(val);
+    }
+  }
+  return result;
+}
+
+async function loadGeneralDiscoveryDefaults(override){
+  try{
+    var data = override || null;
+    if (!data) {
+      var resp=await fetch('/api/discovery/general/defaults', { cache: 'no-store' });
+      if(!resp.ok) return;
+      data=await resp.json();
+    }
+    generalDiscoveryDefaults=data;
+    var timeoutField=document.getElementById('general_timeout');
+    var connectField=document.getElementById('general_connect_timeout');
+    var maxHostsField=document.getElementById('general_max_hosts');
+    if(timeoutField&&data.default_per_host_timeout_ms) timeoutField.value=data.default_per_host_timeout_ms;
+    if(connectField&&data.default_connect_timeout_ms) connectField.value=data.default_connect_timeout_ms;
+    if(maxHostsField&&data.default_max_hosts) maxHostsField.value=data.default_max_hosts;
+    updateGeneralMode();
+  }catch(e){
+    console.warn('General discovery defaults load failed',e);
+  }
+}
+
+async function startGeneralDiscovery(){
+  status('Avvio general discovery...', false);
+  try{
+    var mode=document.getElementById('general_mode').value;
+    var target=(document.getElementById('general_target').value||'').trim();
+    var iface=(document.getElementById('general_iface')?document.getElementById('general_iface').value:'');
+    var timeout=parseInt(document.getElementById('general_timeout').value,10);
+    var connectTimeout=parseInt(document.getElementById('general_connect_timeout').value,10);
+    var maxHosts=parseInt(document.getElementById('general_max_hosts').value,10);
+    var portsText=document.getElementById('general_ports').value;
+    if(!target){
+      status('Specificare un target per la general discovery',true);
+      return;
+    }
+    var payload={ mode:mode, target:target };
+    if(iface && iface.length) payload.interface=iface;
+    if(!isNaN(timeout)) payload.per_host_timeout_ms=timeout;
+    if(!isNaN(connectTimeout)) payload.connect_timeout_ms=connectTimeout;
+    if(!isNaN(maxHosts)) payload.max_hosts=maxHosts;
+    if(mode==='ports'){
+      var portsSource=(portsText&&portsText.trim().length)?portsText:'';
+      var ports=[];
+      if(!portsSource && generalDiscoveryDefaults && Array.isArray(generalDiscoveryDefaults.ports)){
+        ports=generalDiscoveryDefaults.ports.slice();
+      }else{
+        ports=parsePortList(portsSource);
+      }
+      if(!ports||!ports.length){
+        status('Inserire almeno una porta valida',true);
+        return;
+      }
+      payload.ports=ports;
+    }
+    var resp=await fetch('/api/discovery/general/start',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    var result=await resp.json();
+    if(result.success){
+      status('General discovery avviata - ID: '+result.discovery_id);
+      activeDiscoveries.set(result.discovery_id,{
+        protocol:'General Discovery',
+        target:target,
+        mode:mode,
+        startTime:Date.now()
+      });
+      if(!discoveryPollInterval){
+        startDiscoveryPolling();
+      }
+    }else{
+      status('General discovery fallita: '+(result.message||'errore'),true);
+    }
+  }catch(e){
+    status('Errore general discovery: '+e.message,true);
+  }
+}
+
+function startDiscoveryPolling() {
+  discoveryPollInterval = setInterval(pollDiscoveryStatus, 5000);
+}
+
+function stopDiscoveryPolling() {
+  if (discoveryPollInterval) {
+    clearInterval(discoveryPollInterval);
+    discoveryPollInterval = null;
+  }
+}
+
+async function pollDiscoveryStatus() {
+  if (discoveryPollBusy) return;
+  discoveryPollBusy = true;
+  try {
+    // Get all discoveries
+    var response = await fetch('/api/discovery/list', { cache: 'no-store' });
+    var data = await response.json();
+
+    updateActiveDiscoveriesDisplay(data.discoveries);
+
+    // Check for completed discoveries
+    for (let discovery of data.discoveries) {
+      if (discovery.status === 'completed' && activeDiscoveries.has(discovery.id)) {
+        // Show results
+        if (discovery.results) {
+          var resultsText = typeof discovery.results === 'object'
+            ? JSON.stringify(discovery.results, null, 2)
+            : discovery.results;
+          document.getElementById('disc_result').textContent = resultsText;
+          status('Discovery '+discovery.protocol+' completed successfully');
+        }
+        activeDiscoveries.delete(discovery.id);
+      } else if ((discovery.status === 'failed' || discovery.status === 'cancelled') && activeDiscoveries.has(discovery.id)) {
+        status('Discovery '+discovery.protocol+' '+discovery.status+': '+(discovery.error || 'Unknown error'), true);
+        activeDiscoveries.delete(discovery.id);
+      }
+    }
+
+    // Stop polling if no active discoveries
+    if (activeDiscoveries.size === 0) {
+      stopDiscoveryPolling();
+    }
+  } catch (e) {
+    console.error('Polling error:', e);
+  } finally {
+    discoveryPollBusy = false;
+  }
+}
+
+function updateActiveDiscoveriesDisplay(discoveries) {
+  const container = document.getElementById('active_discoveries');
+
+  const active = discoveries.filter(d => d.status === 'running');
+  const recent = discoveries.filter(d => d.status !== 'running');
+
+  if (active.length === 0 && recent.length === 0) {
+    container.innerHTML = 'No discoveries';
+    return;
+  }
+
+  let html = '';
+
+  if (active.length > 0) {
+    html += '<h4>🚀 Running:</h4>';
+    for (let disc of active) {
+      const duration = Math.round((Date.now() - disc.start_time_ms) / 1000);
+      const live = disc.live || {};
+      let kpi = '';
+      if (live && (live.hosts_enumerated || live.hosts_scanned)) {
+        kpi = ` | scanned ${live.hosts_scanned||0}/${live.hosts_enumerated||0}, conn ${live.hosts_connected||0}, mei ${live.responses_mei||0}, probe ${live.responses_probe||0}`;
+        if (live.ip_in_scansione) kpi += ` | ip: ${live.ip_in_scansione}`;
+      }
+      const modeLabel = disc.mode ? ` (${disc.mode})` : '';
+      html += `<div class="job-status status-running">
+        ${disc.protocol}${modeLabel} on ${disc.target} - ${duration}s - ${disc.progress_percent.toFixed(1)}%${kpi}
+        <div style="background:#eee;border-radius:6px;height:8px;margin:.3rem 0;">
+          <div style="background:#06a;height:8px;border-radius:6px;width:${disc.progress_percent.toFixed(1)}%"></div>
+        </div>
+        <button class="btn btn-sm" onclick="cancelDiscovery('${disc.id}')">Cancel</button>
+      </div>`;
+    }
+  }
+
+  if (recent.length > 0) {
+    html += '<h4>📋 Recent (last 10 min):</h4>';
+    for (let disc of recent.slice(0, 5)) { // Show only last 5
+      const statusClass = disc.status === 'completed' ? 'status-completed' : 'status-error';
+      const duration = Math.round((disc.end_time_ms - disc.start_time_ms) / 1000);
+      const modeInfo = disc.mode ? ` (${disc.mode})` : '';
+      html += `<div class="job-status ${statusClass}">
+        ${disc.protocol}${modeInfo} on ${disc.target} - ${disc.status} in ${duration}s
+      </div>`;
+    }
+  }
+
+  container.innerHTML = html;
+}
+
+async function cancelDiscovery(discoveryId) {
+  try {
+    var response = await fetch('/api/discovery/cancel', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({discovery_id: discoveryId})
+    });
+
+    var result = await response.json();
+    if (result.success) {
+      status('Discovery cancelled');
+      activeDiscoveries.delete(discoveryId);
+    } else {
+      status('Failed to cancel: '+result.message, true);
+    }
+  } catch (e) {
+    status('Cancel error: '+e.message, true);
+  }
+}
+
+async function loadJobs(override){
+try{
+var jobs = override || null;
+if (!jobs) {
+  var r=await fetch('/api/scanner/jobs', { cache: 'no-store' });
+  jobs=await r.json();
+}
+var tbody=document.querySelector('#jobs_table tbody');
+tbody.innerHTML='';
+jobs.forEach(job=>{
+var row=tbody.insertRow();
+row.innerHTML='<td>'+job.id+'</td><td>'+job.name+'</td><td>'+job.protocol+'</td><td>'+job.target+'</td><td>'+(job.enabled?'✅':'❌')+'</td><td><button class="btn" onclick="runJob('+job.id+')">Run</button> <button class="btn" onclick="viewJobResult('+job.id+')">View Result</button> <button class="btn danger" onclick="deleteJob('+job.id+')">Delete</button></td>';
+});
+status('Jobs loaded');
+}catch(e){status('Error loading jobs: '+e.message,true);}
+}
+
+function showCreateJob(){
+document.getElementById('create_job').style.display='block';
+}
+function hideCreateJob(){
+document.getElementById('create_job').style.display='none';
+}
+
+// Protocol-specific vulnerability scan types (safe, non-destructive checks)
+const VULN_SCAN_TYPES = {
+  2: { // S7
+    help: 'S7 scan supports read-only risk assessment by default. "Proof" checks send control commands and are gated by SecurityManager (lab only).',
+    types: [
+      { id: 'fingerprint_szl', label: 'Fingerprint (SZL)', def: true },
+      { id: 'comm_limits', label: 'Communication info (SetupComm)', def: true },
+      { id: 'block_inventory', label: 'Block inventory (counts)', def: true },
+      { id: 'read_probes', label: 'Read probes (M/I/Q/DB, 1 byte)', def: false },
+      { id: 'protection_level', label: 'CPU protection level', def: true },
+      { id: 'unauthenticated_info', label: 'Unauthenticated info access', def: true },
+      { id: 'stop_capability_assessment', label: 'STOP capability (risk assessment)', def: false },
+      { id: 'proof_plc_stop', label: 'PROOF: send STOP (OFFENSIVE)', def: false },
+      { id: 'proof_plc_start', label: 'PROOF: send START/Restart (OFFENSIVE)', def: false }
+    ]
+  },
+  5: { // PROFINET
+    help: 'PROFINET scan uses DCP Identify-All (L2) and evaluates security class/signature/default-name risks.',
+    types: [
+      { id: 'dcp_identify_all', label: 'DCP Identify-All', def: true },
+      { id: 'security_class', label: 'Security Class evaluation', def: true },
+      { id: 'digital_signature', label: 'Signature presence/validity', def: true },
+      { id: 'default_name', label: 'Default/generic device name', def: true },
+      { id: 'unencrypted_comm_note', label: 'Unencrypted RT/DCP note', def: true },
+      { id: 'dcp_set_risk', label: 'DCP Set reconfiguration risk (note)', def: true }
+    ]
+  },
+  3: { // OPC UA
+    help: 'OPC UA scanner supports baseline checks by default; DoS-oriented checks are available but disabled by default.',
+    types: [
+      { id: 'anonymous_access', label: 'Anonymous access', def: true },
+      { id: 'weak_security_policies', label: 'Weak security policies', def: true },
+      { id: 'certificate_validation', label: 'Certificate validation', def: true },
+      { id: 'default_credentials', label: 'Default credentials', def: true },
+      { id: 'idor_vulnerability', label: 'Authorization/IDOR assessment', def: true },
+      { id: 'certificate_chain_loop', label: 'Certificate chain loop', def: true },
+      { id: 'brute_force_resilience', label: 'Brute force resilience', def: false },
+      { id: 'condition_refresh_dos', label: 'ConditionRefresh DoS (active)', def: false },
+      { id: 'chunk_flooding_dos', label: 'Chunk flooding DoS (active)', def: false },
+      { id: 'browse_loop_dos', label: 'Browse loop DoS (active)', def: false }
+    ]
+  },
+  4: { // EtherNet/IP
+    help: 'EtherNet/IP scanner executes identity/session/security checks; active-risk capability probes are optional.',
+    types: [
+      { id: 'identity_integrity', label: 'Identity integrity (ListIdentity)', def: true },
+      { id: 'session_security', label: 'Session security checks', def: true },
+      { id: 'cip_security_advertisement', label: 'CIP Security advertisement', def: true },
+      { id: 'list_services_consistency', label: 'ListServices consistency', def: true },
+      { id: 'io_channel_exposure', label: 'I/O channel exposure (UDP/2222)', def: true },
+      { id: 'explicit_write_capability_assessment', label: 'Write capability assessment (active)', def: false },
+      { id: 'reset_capability_assessment', label: 'Reset capability assessment (active)', def: false },
+      { id: 'forward_open_risk_assessment', label: 'ForwardOpen risk assessment (active)', def: false }
+    ]
+  }
+};
+
+function updateJobScanTypesUI(){
+  var protoEl = document.getElementById('job_protocol');
+  var group = document.getElementById('job_scan_types_group');
+  var box = document.getElementById('job_scan_types');
+  var help = document.getElementById('job_scan_types_help');
+  if(!protoEl || !group || !box) return;
+
+  var pid = parseInt(protoEl.value||'0',10);
+  var cfg = VULN_SCAN_TYPES[pid];
+  if(!cfg){
+    group.style.display = 'none';
+    box.innerHTML = '';
+    if(help) help.textContent = '';
+    return;
+  }
+
+  group.style.display = 'block';
+  box.innerHTML = '';
+  if(help) help.textContent = cfg.help || '';
+  cfg.types.forEach(t=>{
+    var wrap = document.createElement('label');
+    wrap.style.display = 'inline-flex';
+    wrap.style.alignItems = 'center';
+    wrap.style.gap = '.35rem';
+    wrap.style.background = '#f2f6ff';
+    wrap.style.border = '1px solid #cfe0ff';
+    wrap.style.borderRadius = '999px';
+    wrap.style.padding = '.25rem .55rem';
+
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !!t.def;
+    cb.setAttribute('data-scan-type', t.id);
+    wrap.appendChild(cb);
+
+    var span = document.createElement('span');
+    span.textContent = t.label;
+    wrap.appendChild(span);
+
+    box.appendChild(wrap);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  var protoEl = document.getElementById('job_protocol');
+  if(protoEl) protoEl.addEventListener('change', updateJobScanTypesUI);
+  updateJobScanTypesUI();
+});
+
+async function createJob(){
+try{
+var scanTypes = [];
+try{
+  var box = document.getElementById('job_scan_types');
+  if (box) {
+    box.querySelectorAll('input[type=checkbox][data-scan-type]').forEach(cb=>{
+      if (cb.checked) scanTypes.push(cb.getAttribute('data-scan-type'));
+    });
+  }
+}catch(_){}
+var job={
+name:document.getElementById('job_name').value||'Unnamed Job',
+protocol:parseInt(document.getElementById('job_protocol').value),
+target:document.getElementById('job_target').value||'192.168.1.100:502',
+scan_types:scanTypes,
+interval_sec:parseInt(document.getElementById('job_interval').value)||3600,
+enabled:false
+};
+var r=await fetch('/api/scanner/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(job)});
+if(!r.ok)throw new Error('HTTP '+r.status);
+status('Job created successfully');
+hideCreateJob();
+loadJobs();
+}catch(e){status('Error creating job: '+e.message,true);}
+}
+
+async function runJob(id){
+try{
+var r=await fetch('/api/scanner/run?id='+id,{method:'POST'});
+if(!r.ok)throw new Error('HTTP '+r.status);
+status('Job '+id+' started');
+// Best-effort: fetch result when the scan finishes (poll a few times).
+var attempts=0;
+var poll=async function(){
+  attempts++;
+  try{
+    await viewJobResult(id);
+  }catch(_){}
+  // If still empty or failed, retry a few times.
+  var box=document.getElementById('scan_result_box');
+  var has=(box && box.textContent && box.textContent.trim().length>0);
+  if(!has && attempts<8){
+    setTimeout(poll, 700);
+  }
+};
+setTimeout(poll, 500);
+}catch(e){status('Error running job: '+e.message,true);}
+}
+
+async function viewJobResult(id){
+try{
+var r=await fetch('/api/scanner/result?id='+id,{cache:'no-store'});
+if(!r.ok)throw new Error('HTTP '+r.status);
+var txt=await r.text();
+var obj = parseJsonSafe(txt);
+setSummaryBox('scan_summary', buildScannerSummary(obj));
+try{ txt = JSON.stringify(obj || JSON.parse(txt), null, 2); }catch(_){}
+var box=document.getElementById('scan_result_box');
+if(box){ box.textContent = txt; }
+status('Loaded result for job '+id);
+}catch(e){
+status('No result for job '+id+': '+e.message,true);
+}
+}
+
+async function deleteJob(id){
+if(!confirm('Delete job '+id+'?'))return;
+try{
+var r=await fetch('/api/scanner/jobs?id='+id,{method:'DELETE'});
+if(!r.ok)throw new Error('HTTP '+r.status);
+status('Job '+id+' deleted');
+loadJobs();
+}catch(e){status('Error deleting job: '+e.message,true);}
+}
+
+// Fuzzing job management functions
+var fuzzJobsRefreshTimer = null;
+var runningJobs = new Set(); // Track running job IDs
+var lastFuzzJobsById = {};   // Last jobs snapshot from API
+
+function getProtocolName(protocolId) {
+    const protocols = {
+        1: 'Modbus TCP',
+        2: 'S7 Communication',
+        3: 'OPC UA',
+        4: 'EtherNet/IP',
+        5: 'PROFINET'
+    };
+    return protocols[protocolId] || 'Unknown';
+}
+
+function startAutoRefresh() {
+    if (fuzzJobsRefreshTimer) clearInterval(fuzzJobsRefreshTimer);
+    fuzzJobsRefreshTimer = setInterval(loadFuzzJobs, 5000); // Refresh every 5 seconds
+    updateRefreshButton();
+}
+
+function stopAutoRefresh() {
+    if (fuzzJobsRefreshTimer) {
+        clearInterval(fuzzJobsRefreshTimer);
+        fuzzJobsRefreshTimer = null;
+    }
+    updateRefreshButton();
+}
+
+function toggleAutoRefresh() {
+    if (fuzzJobsRefreshTimer) {
+        stopAutoRefresh();
+        status('Auto-refresh stopped');
+    } else {
+        startAutoRefresh();
+        loadFuzzJobs(); // Immediate refresh
+        status('Auto-refresh enabled (every 5s)');
+    }
+}
+
+function updateRefreshButton() {
+    var btn = document.getElementById('fuzz-refresh-btn');
+    if (btn) {
+        if (fuzzJobsRefreshTimer) {
+            btn.innerHTML = '🔄 Auto-Refresh ON';
+            btn.style.background = '#388e3c';
+        } else {
+            btn.innerHTML = '🔄 Refresh Jobs';
+            btn.style.background = '#007';
+        }
+    }
+}
+
+// Load attack profiles based on selected protocol
+async function loadAttackProfiles() {
+    const protocolSelect = document.getElementById('fuzz_protocol');
+    const profileSelect = document.getElementById('fuzz_profile');
+    const targetInput = document.getElementById('fuzz_target');
+    const formatHelp = document.getElementById('target_format_help');
+    const modbusConfig = document.getElementById('modbus_extra_config');
+    const s7Config = document.getElementById('s7_extra_config');
+
+    const protocol = protocolSelect.value;
+
+    // Show/hide Modbus advanced configuration
+    if (protocol === '1') { // 1 = Modbus TCP
+        modbusConfig.style.display = 'block';
+    } else {
+        modbusConfig.style.display = 'none';
+    }
+
+    // Show/hide S7 advanced configuration
+    if (protocol === '2') { // 2 = S7
+        if (s7Config) s7Config.style.display = 'block';
+    } else {
+        if (s7Config) s7Config.style.display = 'none';
+    }
+
+    try {
+        const response = await fetch(`/api/fuzz/profiles?protocol=${protocol}`);
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+
+        const data = await response.json();
+
+        // Clear existing options
+        profileSelect.innerHTML = '';
+
+        // Add profiles for this protocol
+         data.profiles.forEach(profile => {
+             const option = document.createElement('option');
+             option.value = profile.id;
+             const implemented = (profile.implemented !== false);
+             const unsafe = (profile.unsafe === true);
+             option.dataset.implemented = implemented ? 'true' : 'false';
+             option.dataset.unsafe = unsafe ? 'true' : 'false';
+             option.textContent = implemented ? profile.name : (profile.name + ' (TODO)');
+             option.dataset.baseText = option.textContent;
+             option.title = profile.description; // Tooltip
+             if (!implemented) option.disabled = true;
+             profileSelect.appendChild(option);
+         });
+
+        // Update target placeholder and help text based on first profile
+        if (data.profiles.length > 0) {
+            const firstProfile = data.profiles.find(p => p && p.implemented !== false) || data.profiles[0];
+            if (firstProfile.target_format) {
+                const example = firstProfile.target_format.match(/\(e\.g\., ([^)]+)\)/);
+                if (example) {
+                    targetInput.placeholder = example[1];
+                }
+                formatHelp.textContent = `Format: ${firstProfile.target_format}`;
+            }
+        }
+
+        applyProfileOptionPolicy();
+        updateS7ParamVisibility();
+
+        // Select a sensible default (first enabled option) if nothing is selected yet.
+        if (!profileSelect.selectedOptions || profileSelect.selectedOptions.length === 0) {
+            const firstEnabled = Array.from(profileSelect.options).find(o => !o.disabled);
+            if (firstEnabled) firstEnabled.selected = true;
+        }
+
+    } catch (error) {
+        console.error('Error loading attack profiles:', error);
+        // Fallback to default profile
+        profileSelect.innerHTML = '<option value="default">Default Fuzzing</option>';
+        targetInput.placeholder = "192.168.1.100:502";
+        formatHelp.textContent = "Format: IP:PORT";
+        updateS7ParamVisibility();
+    }
+}
+
+function updateS7ParamVisibility() {
+    const protocol = (document.getElementById('fuzz_protocol') || {}).value || '';
+    const profSel = document.getElementById('fuzz_profile');
+    const writeCard = document.getElementById('s7_write_params');
+    const plcCard = document.getElementById('s7_plc_control_params');
+    const dbGroup = document.getElementById('s7_db_number_group');
+    const areaSel = document.getElementById('s7_write_area');
+    if (writeCard) writeCard.style.display = 'none';
+    if (plcCard) plcCard.style.display = 'none';
+    if (dbGroup) dbGroup.style.display = 'block';
+
+    if (protocol !== '2' || !profSel) return;
+
+    const selected = Array.from(profSel.selectedOptions || []).map(o => o.value);
+    const hasWrite = selected.includes('unauthorized_write');
+    const hasPlc = selected.includes('plc_stop');
+    if (writeCard) writeCard.style.display = hasWrite ? 'block' : 'none';
+    if (plcCard) plcCard.style.display = hasPlc ? 'block' : 'none';
+
+    if (areaSel && dbGroup) {
+        const isDb = (areaSel.value === 'DB');
+        dbGroup.style.display = isDb ? 'block' : 'none';
+    }
+}
+
+function applyProfileOptionPolicy() {
+    const profileSelect = document.getElementById('fuzz_profile');
+    const safeCb = document.getElementById('fuzz_safe');
+    if (!profileSelect || !safeCb) return;
+
+    const safeMode = !!safeCb.checked;
+    Array.from(profileSelect.options).forEach(opt => {
+        const implemented = (opt.dataset.implemented !== 'false');
+        const unsafe = (opt.dataset.unsafe === 'true');
+        // Only disable truly unavailable (TODO) options. Unsafe options remain selectable,
+        // but are blocked at job creation time when Safe Mode is enabled.
+        opt.disabled = !implemented;
+
+        // Keep labels stable and add a hint when Safe Mode blocks execution.
+        const baseText = opt.dataset.baseText || opt.textContent;
+        if (safeMode && unsafe) opt.textContent = baseText + " (requires Safe Mode OFF)";
+        else opt.textContent = baseText;
+    });
+}
+
+async function loadFuzzJobs(override){
+try{
+    var response = override || null;
+    if (!response) {
+        var r = await fetch('/api/fuzz/jobs', { cache: 'no-store' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        response = await r.json();
+    }
+    var jobs = response.jobs || [];
+    lastFuzzJobsById = {};
+    jobs.forEach(j => { if (j && j.id != null) lastFuzzJobsById[j.id] = j; });
+
+    var tbody = document.querySelector('#fuzz_jobs_table tbody');
+    tbody.innerHTML = '';
+
+    jobs.forEach(job => {
+        var row = tbody.insertRow();
+        var statusText = 'Ready';
+        var statusClass = 'status-ready';
+
+        // Prefer server-reported running status, fallback to local tracking.
+        if (job.running || runningJobs.has(job.id)) {
+            statusText = 'Running';
+            statusClass = 'status-running';
+        }
+
+        row.innerHTML = `
+            <td><strong>${job.id}</strong></td>
+            <td>${getProtocolName(job.protocol)}</td>
+            <td><code style="background:#f5f5f5;padding:2px 4px;border-radius:3px">${job.target}</code></td>
+            <td><span style="background:#e3f2fd;color:#1976d2;padding:2px 6px;border-radius:8px;font-size:0.8rem">${job.profile || 'Basic'}</span></td>
+            <td>${job.safe_mode ? '<span style="color:#388e3c">🔒 Safe</span>' : '<span style="color:#f57c00">⚠️ Unsafe</span>'}</td>
+            <td>${job.rate_per_sec}/s</td>
+            <td>${job.max_cases}</td>
+            <td><span class="job-status ${statusClass}">${statusText}</span></td>
+            <td>
+                <div class="fuzz-actions">
+                    <button class="btn" onclick="runFuzzJob(${job.id})" style="font-size:0.8rem;padding:0.3rem 0.6rem" title="Start fuzzing job">▶️ Run</button>
+                    <button class="btn" onclick="viewFuzzResult(${job.id})" style="font-size:0.8rem;padding:0.3rem 0.6rem" title="Show last job result JSON">📄 Result</button>
+                    <button class="btn danger" onclick="deleteFuzzJob(${job.id})" style="font-size:0.8rem;padding:0.3rem 0.6rem" title="Delete fuzzing job">🗑️</button>
+                </div>
+            </td>
+        `;
+    });
+
+    status('Loaded ' + jobs.length + ' fuzzing jobs');
+}catch(e){
+    status('Error loading fuzzing jobs: ' + e.message, true);
+}
+}
+
+function showCreateFuzzJob(){
+    document.getElementById('create_fuzz_job').style.display = 'block';
+    document.getElementById('fuzz_results_card').style.display = 'none';
+    loadAttackProfiles(); // Load profiles for default protocol (Modbus TCP)
+}
+
+// Add event listener for protocol change to reload attack profiles
+document.addEventListener('DOMContentLoaded', function() {
+    const protocolSelect = document.getElementById('fuzz_protocol');
+    if (protocolSelect) {
+        protocolSelect.addEventListener('change', loadAttackProfiles);
+    }
+    const safeCb = document.getElementById('fuzz_safe');
+    if (safeCb) {
+        safeCb.addEventListener('change', function(){
+            applyProfileOptionPolicy();
+            updateS7ParamVisibility();
+        });
+    }
+    const profileSel = document.getElementById('fuzz_profile');
+    if (profileSel) {
+        profileSel.addEventListener('change', updateS7ParamVisibility);
+    }
+    const areaSel = document.getElementById('s7_write_area');
+    if (areaSel) {
+        areaSel.addEventListener('change', updateS7ParamVisibility);
+    }
+});
+
+function hideCreateFuzzJob(){
+    document.getElementById('create_fuzz_job').style.display = 'none';
+}
+
+function showFuzzResults(message) {
+    var obj = parseJsonSafe(message);
+    setSummaryBox('fuzz_summary', buildFuzzSummary(obj));
+    document.getElementById('fuzz_result').textContent = message;
+    document.getElementById('fuzz_results_card').style.display = 'block';
+}
+
+function hideFuzzResults() {
+    document.getElementById('fuzz_results_card').style.display = 'none';
+    setSummaryBox('fuzz_summary', '');
+}
+
+async function createFuzzJob(){
+try{
+    var job = {
+        protocol: parseInt(document.getElementById('fuzz_protocol').value),
+        target: document.getElementById('fuzz_target').value || '192.168.1.100:502',
+        rate_per_sec: parseInt(document.getElementById('fuzz_rate').value) || 10,
+        max_cases: parseInt(document.getElementById('fuzz_max').value) || 100,
+        duration_ms: parseInt(document.getElementById('fuzz_duration').value) || 60000,
+        safe_mode: document.getElementById('fuzz_safe').checked
+    };
+
+    const profileSel = document.getElementById('fuzz_profile');
+    const profiles = Array.from(profileSel.selectedOptions || []).map(o => o.value).filter(v => !!v);
+    const selectedOpts = Array.from(profileSel.selectedOptions || []);
+    const anyUnsafeSelected = selectedOpts.some(o => (o && o.dataset && o.dataset.unsafe === 'true'));
+    if (job.safe_mode && anyUnsafeSelected) {
+        status('Unsafe profile selected: disable Safe Mode to create this job.', true);
+        showFuzzResults(JSON.stringify({
+            error: "safe_mode_blocks_unsafe_profile",
+            detail: "Disable Safe Mode to use offensive profiles like unauthorized_write / plc_stop."
+        }, null, 2));
+        return;
+    }
+
+    // Add Modbus extra_config if protocol is Modbus TCP (1)
+    if(job.protocol === 1) {
+        var extraConfig = {};
+
+        // Parse critical registers
+        var criticalRegs = document.getElementById('modbus_critical_regs').value;
+        if(criticalRegs) {
+            extraConfig.critical_registers = criticalRegs.split(',').map(r => parseInt(r.trim())).filter(r => !isNaN(r));
+        }
+
+        // Parse unit ID range
+        var unitMin = parseInt(document.getElementById('modbus_unit_min').value);
+        var unitMax = parseInt(document.getElementById('modbus_unit_max').value);
+        if(!isNaN(unitMin) && !isNaN(unitMax)) {
+            extraConfig.unit_id_range = { min: unitMin, max: unitMax };
+        }
+
+        // Timing delay
+        var timingDelay = parseInt(document.getElementById('modbus_timing_delay').value);
+        if(!isNaN(timingDelay)) {
+            extraConfig.timing_delay_ms = timingDelay;
+        }
+
+        // Stealth mode
+        if(document.getElementById('modbus_stealth').checked) {
+            extraConfig.stealth_mode = true;
+        }
+
+        // Discovery depth
+        var discoveryDepth = document.getElementById('modbus_discovery_depth').value;
+        if(discoveryDepth) {
+            extraConfig.discovery_depth = discoveryDepth;
+        }
+
+        // Force broadcast
+        if(document.getElementById('modbus_force_broadcast').checked) {
+            extraConfig.force_broadcast = true;
+        }
+
+        // Add extra_config as JSON string if any options were set
+        if(Object.keys(extraConfig).length > 0) {
+            job.extra_config = JSON.stringify(extraConfig);
+        }
+    }
+
+    // Add S7 extra_config (rack/slot/timeout + optional single-shot parameters)
+    function buildS7ExtraConfigForProfile(profileId){
+        const cfg = {};
+        const rack = parseInt((document.getElementById('s7_rack') || {}).value);
+        const slot = parseInt((document.getElementById('s7_slot') || {}).value);
+        const timeout = parseInt((document.getElementById('s7_timeout_ms') || {}).value);
+        if (!isNaN(rack)) cfg.rack = rack;
+        if (!isNaN(slot)) cfg.slot = slot;
+        if (!isNaN(timeout)) cfg.timeout_ms = timeout;
+
+        if (profileId === 'unauthorized_write') {
+            cfg.write_area = (document.getElementById('s7_write_area') || {}).value || 'DB';
+            const dbn = parseInt((document.getElementById('s7_db_number') || {}).value);
+            const off = parseInt((document.getElementById('s7_byte_offset') || {}).value);
+            const hex = ((document.getElementById('s7_value_hex') || {}).value || '').trim();
+            if (!isNaN(dbn)) cfg.db_number = dbn;
+            if (!isNaN(off)) cfg.byte_offset = off;
+            if (hex) cfg.value_hex = hex;
+        }
+
+        if (profileId === 'plc_stop') {
+            cfg.plc_control = (document.getElementById('s7_plc_control') || {}).value || 'stop';
+        }
+
+        return cfg;
+    }
+
+    const toCreate = (profiles.length > 0) ? profiles : [""];
+    const created = [];
+    for (const prof of toCreate) {
+        const one = Object.assign({}, job);
+        if (prof) one.profile = prof;
+        if (one.protocol === 2) {
+            const cfg = buildS7ExtraConfigForProfile(prof || one.profile || '');
+            if (cfg && Object.keys(cfg).length > 0) {
+                one.extra_config = JSON.stringify(cfg);
+            }
+        }
+
+        var r = await fetch('/api/fuzz/jobs', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(one)
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        created.push(await r.json());
+    }
+
+    showFuzzResults(JSON.stringify({created}, null, 2));
+    status('Created ' + created.length + ' fuzzing job(s)');
+    hideCreateFuzzJob();
+    loadFuzzJobs();
+
+}catch(e){
+    status('Error creating fuzzing job: ' + e.message, true);
+}
+}
+
+async function viewFuzzResult(id){
+try{
+    var r = await fetch('/api/fuzz/result?job_id=' + id, { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var txt = await r.text();
+    try {
+        showFuzzResults(JSON.stringify(JSON.parse(txt), null, 2));
+    } catch(_) {
+        showFuzzResults(txt);
+    }
+}catch(e){
+    status('Error loading fuzz result: ' + e.message, true);
+}
+}
+
+function pollFuzzResultUntilReady(id, maxWaitMs){
+    const started = Date.now();
+    async function tick(){
+        if ((Date.now() - started) > maxWaitMs) return;
+        try{
+            var r = await fetch('/api/fuzz/result?job_id=' + id, { cache: 'no-store' });
+            if (r.ok) {
+                var txt = await r.text();
+                // If no result yet, server returns {"error":"no_result"}
+                if (txt && txt.indexOf('\"error\":\"no_result\"') === -1) {
+                    try {
+                        showFuzzResults(JSON.stringify(JSON.parse(txt), null, 2));
+                    } catch(_) {
+                        showFuzzResults(txt);
+                    }
+                    runningJobs.delete(id);
+                    if (runningJobs.size === 0) stopAutoRefresh();
+                    loadFuzzJobs();
+                    return;
+                }
+            }
+        } catch(_) {
+        }
+        setTimeout(tick, 3000);
+    }
+    setTimeout(tick, 1500);
+}
+
+async function runFuzzJob(id){
+try{
+    var r = await fetch('/api/fuzz/run', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({job_id: id})
+    });
+
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    var result = await r.text();
+    showFuzzResults(result);
+    status('Fuzzing job ' + id + ' started');
+
+    // Track this job as running
+    runningJobs.add(id);
+
+    // Start auto-refresh to track progress
+    startAutoRefresh();
+
+    // Poll for completion JSON and show it automatically when available.
+    const job = lastFuzzJobsById[id] || null;
+    let estMs = 65000;
+    if (job) {
+        if (job.duration_ms && job.duration_ms > 0) estMs = job.duration_ms + 2500;
+        else if (job.max_cases && job.rate_per_sec) estMs = Math.ceil((job.max_cases / Math.max(1, job.rate_per_sec)) * 1000) + 2500;
+    }
+    pollFuzzResultUntilReady(id, Math.max(10000, estMs + 20000));
+
+    // Immediate refresh to show running status
+    loadFuzzJobs();
+
+}catch(e){
+    status('Error running fuzzing job: ' + e.message, true);
+}
+}
+
+async function deleteFuzzJob(id){
+if(!confirm('Delete fuzzing job ' + id + '?')) return;
+try{
+    var r = await fetch('/api/fuzz/jobs?id=' + id, {method: 'DELETE'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    status('Fuzzing job ' + id + ' deleted');
+    loadFuzzJobs(); // Refresh the table
+
+}catch(e){
+    status('Error deleting fuzzing job: ' + e.message, true);
+}
+}
+
+async function stopAllFuzz(){
+if(!confirm('Stop all running fuzzing jobs?')) return;
+try{
+    var r = await fetch('/api/fuzz/stop', {method: 'POST'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    var result = await r.text();
+    showFuzzResults(result);
+    status('All fuzzing jobs stopped');
+
+    // Clear all running job tracking
+    runningJobs.clear();
+    stopAutoRefresh();
+
+    // Refresh jobs to update status
+    loadFuzzJobs();
+
+}catch(e){
+    status('Error stopping fuzzing jobs: ' + e.message, true);
+}
+}
+
+// (removed) direct /api/s7/ops one-shot actions. Use fuzzing profiles/jobs instead.
+
+<!-- Removed duplicate fetch override: single override with NO_QUEUE remains above -->
+
+const generalModeSelect = document.getElementById('general_mode');
+if (generalModeSelect) {
+  generalModeSelect.addEventListener('change', updateGeneralMode);
+}
+
+(async () => {
+  try {
+    let boot = null;
+    try {
+      const r = await fetch('/api/page/bootstrap?name=scanner', { cache: 'no-store' });
+      if (r && r.ok) {
+        boot = await r.json();
+      }
+    } catch (e) {
+      boot = null;
+    }
+
+    if (boot && boot.data) {
+      await loadJobs(boot.data.scanner_jobs || []);
+      await loadFuzzJobs(boot.data.fuzz_jobs || {});
+      await loadGeneralDiscoveryDefaults(boot.data.general_discovery_defaults || null);
+      await loadExistingDiscoveries(boot.data.discovery_list || null);
+    } else {
+      await loadJobs();
+      await loadFuzzJobs();
+      await loadGeneralDiscoveryDefaults();
+      await loadExistingDiscoveries();
+    }
+
+    if (generalModeSelect) {
+      updateGeneralMode();
+    }
+  } catch (err) {
+    console.error('Scanner page initial load failed:', err);
+  }
+})();
+
+// Load existing discoveries on page load
+async function loadExistingDiscoveries(override) {
+  try {
+    var data = override || null;
+    if (!data) {
+      var response = await fetch('/api/discovery/list', { cache: 'no-store' });
+      data = await response.json();
+    }
+
+    // Check for any running discoveries and start polling
+    const runningDiscoveries = data.discoveries.filter(d => d.status === 'running');
+    if (runningDiscoveries.length > 0) {
+      for (let disc of runningDiscoveries) {
+        activeDiscoveries.set(disc.id, {
+          protocol: disc.protocol,
+          target: disc.target,
+          mode: disc.mode || '',
+          startTime: disc.start_time_ms
+        });
+      }
+      if (!discoveryPollInterval) {
+        startDiscoveryPolling();
+      }
+    }
+
+    updateActiveDiscoveriesDisplay(data.discoveries);
+  } catch (e) {
+    console.error('Failed to load existing discoveries:', e);
+  }
+}
+
+// =============== SCHEDULED SCANS FUNCTIONS ===============
+
+function formatCronSchedule(sched) {
+  const parts = [];
+  if (sched.minute >= 0) parts.push(`min=${sched.minute}`);
+  if (sched.hour >= 0) parts.push(`hour=${sched.hour}`);
+  if (sched.day_of_month >= 1) parts.push(`day=${sched.day_of_month}`);
+  if (sched.month >= 1) parts.push(`month=${sched.month}`);
+  if (sched.day_of_week >= 0) {
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    parts.push(`dow=${days[sched.day_of_week]}`);
+  }
+  return parts.length > 0 ? parts.join(', ') : 'Every minute';
+}
+
+function formatTimestamp(ms) {
+  if (!ms || ms === 0) return 'Never';
+  const date = new Date(ms);
+  return date.toLocaleString();
+}
+
+async function loadSchedules() {
+  try {
+    const r = await fetch('/api/schedule/list');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    const data = await r.json();
+    if (!data.success) {
+      status('Failed to load schedules: ' + data.message, true);
+      return;
+    }
+
+    const tbody = document.querySelector('#schedules_table tbody');
+    tbody.innerHTML = '';
+
+    const schedules = data.schedules || [];
+    schedules.forEach(sched => {
+      const row = tbody.insertRow();
+      const typeLabel = sched.type === 'vulnerability' ? '🛡️ Vuln' : '🔎 Disc';
+      const enabledIcon = sched.enabled ? '✅' : '❌';
+      const cronText = formatCronSchedule(sched);
+      const nextRun = formatTimestamp(sched.next_run_ms);
+
+      row.innerHTML = `
+        <td><strong>${sched.name}</strong><br><small style="color:#999">${sched.last_result || 'Not run yet'}</small></td>
+        <td>${typeLabel}</td>
+        <td><code style="background:#f5f5f5;padding:2px 6px;border-radius:3px">${sched.target}</code></td>
+        <td><small>${cronText}</small></td>
+        <td><small>${nextRun}</small></td>
+        <td>${enabledIcon}</td>
+        <td>
+          <button class="btn btn-sm" onclick="triggerSchedule('${sched.id}')" title="Run now">▶️</button>
+          <button class="btn btn-sm" onclick="toggleSchedule('${sched.id}', ${!sched.enabled})" title="${sched.enabled ? 'Disable' : 'Enable'}">${sched.enabled ? '⏸️' : '▶️'}</button>
+          <button class="btn btn-sm" onclick="editSchedule('${sched.id}')" title="Edit">✏️</button>
+          <button class="btn btn-sm danger" onclick="deleteSchedule('${sched.id}')" title="Delete">🗑️</button>
+        </td>
+      `;
+    });
+
+    status('Loaded ' + schedules.length + ' scheduled scans');
+  } catch (e) {
+    status('Error loading schedules: ' + e.message, true);
+  }
+}
+
+function showCreateSchedule() {
+  document.getElementById('create_schedule').style.display = 'block';
+  document.getElementById('edit_schedule').style.display = 'none';
+}
+
+function hideCreateSchedule() {
+  document.getElementById('create_schedule').style.display = 'none';
+}
+
+async function createSchedule() {
+  try {
+    const schedule = {
+      name: document.getElementById('sched_name').value || 'Unnamed Schedule',
+      type: document.getElementById('sched_type').value,
+      target: document.getElementById('sched_target').value || '192.168.1.0/24',
+      minute: parseInt(document.getElementById('sched_minute').value) || -1,
+      hour: parseInt(document.getElementById('sched_hour').value) || -1,
+      day_of_month: parseInt(document.getElementById('sched_day_month').value) || -1,
+      month: parseInt(document.getElementById('sched_month').value) || -1,
+      day_of_week: parseInt(document.getElementById('sched_day_week').value) || -1,
+      enabled: document.getElementById('sched_enabled').checked
+    };
+
+    const r = await fetch('/api/schedule/create', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(schedule)
+    });
+
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    const data = await r.json();
+    if (data.success) {
+      status('Schedule created successfully');
+      hideCreateSchedule();
+      loadSchedules();
+
+      // Clear form
+      document.getElementById('sched_name').value = '';
+      document.getElementById('sched_target').value = '';
+      document.getElementById('sched_minute').value = '';
+      document.getElementById('sched_hour').value = '';
+      document.getElementById('sched_day_month').value = '';
+      document.getElementById('sched_month').value = '';
+      document.getElementById('sched_day_week').value = '';
+    } else {
+      status('Failed to create schedule: ' + data.message, true);
+    }
+  } catch (e) {
+    status('Error creating schedule: ' + e.message, true);
+  }
+}
+
+async function editSchedule(id) {
+  try {
+    // Load current schedule data
+    const r = await fetch('/api/schedule/list');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    const data = await r.json();
+    const schedule = data.schedules.find(s => s.id === id);
+
+    if (!schedule) {
+      status('Schedule not found', true);
+      return;
+    }
+
+    // Populate edit form
+    document.getElementById('edit_sched_id').value = schedule.id;
+    document.getElementById('edit_sched_name').value = schedule.name;
+    document.getElementById('edit_sched_type').value = schedule.type;
+    document.getElementById('edit_sched_target').value = schedule.target;
+    document.getElementById('edit_sched_minute').value = schedule.minute;
+    document.getElementById('edit_sched_hour').value = schedule.hour;
+    document.getElementById('edit_sched_day_month').value = schedule.day_of_month;
+    document.getElementById('edit_sched_month').value = schedule.month;
+    document.getElementById('edit_sched_day_week').value = schedule.day_of_week;
+    document.getElementById('edit_sched_enabled').checked = schedule.enabled;
+
+    // Show edit form
+    document.getElementById('edit_schedule').style.display = 'block';
+    document.getElementById('create_schedule').style.display = 'none';
+  } catch (e) {
+    status('Error loading schedule for edit: ' + e.message, true);
+  }
+}
+
+function hideEditSchedule() {
+  document.getElementById('edit_schedule').style.display = 'none';
+}
+
+async function updateSchedule() {
+  try {
+    const schedule = {
+      id: document.getElementById('edit_sched_id').value,
+      name: document.getElementById('edit_sched_name').value,
+      type: document.getElementById('edit_sched_type').value,
+      target: document.getElementById('edit_sched_target').value,
+      minute: parseInt(document.getElementById('edit_sched_minute').value),
+      hour: parseInt(document.getElementById('edit_sched_hour').value),
+      day_of_month: parseInt(document.getElementById('edit_sched_day_month').value),
+      month: parseInt(document.getElementById('edit_sched_month').value),
+      day_of_week: parseInt(document.getElementById('edit_sched_day_week').value),
+      enabled: document.getElementById('edit_sched_enabled').checked
+    };
+
+    const r = await fetch('/api/schedule/update', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(schedule)
+    });
+
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    const data = await r.json();
+    if (data.success) {
+      status('Schedule updated successfully');
+      hideEditSchedule();
+      loadSchedules();
+    } else {
+      status('Failed to update schedule: ' + data.message, true);
+    }
+  } catch (e) {
+    status('Error updating schedule: ' + e.message, true);
+  }
+}
+
+async function deleteSchedule(id) {
+  if (!confirm('Delete this scheduled scan?')) return;
+
+  try {
+    const r = await fetch('/api/schedule/delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id: id})
+    });
+
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    const data = await r.json();
+    if (data.success) {
+      status('Schedule deleted');
+      loadSchedules();
+    } else {
+      status('Failed to delete schedule: ' + data.message, true);
+    }
+  } catch (e) {
+    status('Error deleting schedule: ' + e.message, true);
+  }
+}
+
+async function toggleSchedule(id, enable) {
+  try {
+    const r = await fetch('/api/schedule/toggle', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id: id, enabled: enable})
+    });
+
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    const data = await r.json();
+    if (data.success) {
+      status(enable ? 'Schedule enabled' : 'Schedule disabled');
+      loadSchedules();
+    } else {
+      status('Failed to toggle schedule: ' + data.message, true);
+    }
+  } catch (e) {
+    status('Error toggling schedule: ' + e.message, true);
+  }
+}
+
+async function triggerSchedule(id) {
+  if (!confirm('Run this scan now?')) return;
+
+  try {
+    const r = await fetch('/api/schedule/trigger', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id: id})
+    });
+
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    const data = await r.json();
+    if (data.success) {
+      status('Schedule triggered - scan started');
+      setTimeout(loadSchedules, 2000); // Refresh after 2 seconds to show updated status
+    } else {
+      status('Failed to trigger schedule: ' + data.message, true);
+    }
+  } catch (e) {
+    status('Error triggering schedule: ' + e.message, true);
+  }
+}
+</script>
+</html>
+
+)HTML";
+
+// Compile-time size constant (actual content length)
+static constexpr size_t SCANNER_HTML_GEN_SIZE = 86804;
