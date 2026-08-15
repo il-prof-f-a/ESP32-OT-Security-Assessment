@@ -225,7 +225,7 @@ th{background:#f8f9fa; color:#333}
             <label for="learning_mode">Modalità Learning</label>
           </div>
         </div>
-
+        
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0">
           <div>
             <label>Delay Attivazione (min)</label>
@@ -244,7 +244,7 @@ th{background:#f8f9fa; color:#333}
             <input type="number" id="observation_hours" min="1" max="168">
           </div>
         </div>
-
+        
         <div class="row">
           <button class="btn primary" onclick="saveConfig()">💾 Salva Configurazione</button>
           <button class="btn danger" onclick="clearAllLearning()" title="Elimina tutti i device appresi">🗑️ Reset Learning</button>
@@ -272,7 +272,7 @@ th{background:#f8f9fa; color:#333}
             <div class="stat-label">Non Trusted</div>
           </div>
         </div>
-
+        
         <div class="row">
           <button class="btn" onclick="refreshStats()">🔄 Aggiorna</button>
           <button class="btn ghost" onclick="exportData()">📥 Esporta Dati</button>
@@ -318,10 +318,10 @@ th{background:#f8f9fa; color:#333}
 (function() {
     const urlParams = new URLSearchParams(window.location.search);
     const sessionToken = urlParams.get('sid');
-
+    
     if (sessionToken) {
         console.log('Session token found');
-
+        
         // Override fetch to automatically add Bearer token to API calls
         const originalFetch = window.fetch;
         if (!window.__apiFetchQueue) {
@@ -342,7 +342,7 @@ th{background:#f8f9fa; color:#333}
             window.__apiFetchQueue = queued.catch(() => {});
             return queued;
         };
-
+        
         // Update navigation links to include session token
         document.querySelectorAll('.nav-btn').forEach(link => {
             const href = link.getAttribute('href');
@@ -484,7 +484,7 @@ th{background:#f8f9fa; color:#333}
       try {
         const response = await fetch('/api/ids/presence/config');
         config = await response.json();
-
+        
         document.getElementById('enabled').checked = config.enabled || false;
         document.getElementById('learning_mode').checked = config.learning_mode || false;
         document.getElementById('activation_delay').value = config.activation_delay_minutes || 10;
@@ -761,7 +761,7 @@ th{background:#f8f9fa; color:#333}
 
       try {
         const response = await fetch('/api/ids/presence/clear', { method: 'POST' });
-
+        
         if (response.ok) {
           showToast('🗑️ Tutti i device appresi sono stati eliminati', 'success');
           await refreshDevices();
@@ -798,7 +798,7 @@ th{background:#f8f9fa; color:#333}
         presence_clock_ms: presenceClockMs,
         timestamp: new Date().toISOString()
       }, null, 2);
-
+      
       const blob = new Blob([dataStr], {type: 'application/json'});
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -808,7 +808,7 @@ th{background:#f8f9fa; color:#333}
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-
+      
       showToast('Dati esportati', 'success');
     }
 
@@ -831,7 +831,7 @@ th{background:#f8f9fa; color:#333}
       const toast = document.getElementById('toast');
       toast.textContent = message;
       toast.classList.add('show');
-
+      
       setTimeout(() => {
         toast.classList.remove('show');
       }, 3000);
@@ -850,4 +850,4 @@ th{background:#f8f9fa; color:#333}
 )HTML";
 
 // Compile-time size constant (actual content length)
-static constexpr size_t NETWORK_PRESENCE_HTML_GEN_SIZE = 31721;
+static constexpr size_t NETWORK_PRESENCE_HTML_GEN_SIZE = 31799;

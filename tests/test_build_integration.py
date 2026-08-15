@@ -25,11 +25,72 @@ class BuildIntegrationTests(unittest.TestCase):
     def test_every_platformio_environment_runs_provisioning_first(self):
         platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
         sections = re.split(r"(?=^\[env:)", platformio, flags=re.MULTILINE)[1:]
-        self.assertEqual(len(sections), 2)
+        self.assertEqual(len(sections), 3)
         for section in sections:
             self.assertIn("pre:scripts/platformio_provision.py", section)
 
-        self.assertNotIn("[env:waveshare-esp32p4-eth]", platformio)
+        self.assertIn("[env:waveshare-esp32p4-eth]", platformio)
+
+    def test_platformio_p4_environment_uses_a_local_waveshare_board_definition(self):
+        platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
+        board = json.loads(
+            (PROJECT_ROOT / "boards/waveshare-esp32p4-eth.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        p4 = platformio.split("[env:waveshare-esp32p4-eth]", 1)[1].split(
+            "[env:", 1
+        )[0]
+        self.assertIn("board = waveshare-esp32p4-eth", p4)
+        self.assertIn(
+            "https://github.com/pioarduino/platform-espressif32.git#4cf6992078a95fb9ab8352fe7811f4eec0d359af",
+            p4,
+        )
+        self.assertIn("pre:scripts/fix_esp32p4_toolchain_path.py", p4)
+        self.assertIn("board_build.sdkconfig_defaults = sdkconfig.esp32p4.defaults", p4)
+        self.assertEqual(board["build"]["mcu"], "esp32p4")
+        self.assertIn("espidf", board["frameworks"])
+        self.assertEqual(board["vendor"], "Waveshare")
+
+    def test_network_presence_tracker_keeps_required_arithmetic_operators(self):
+        source = (PROJECT_ROOT / "src/assessment/network_presence_tracker.cpp").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            "double final_score = (continuity_score * config_.continuity_weight) +",
+            source,
+        )
+        self.assertIn(
+            "size_t expected_size = sizeof(PersistentStorageHeader) +",
+            source,
+        )
+
+        opcua_vulnerability = (
+            PROJECT_ROOT / "src/protocols/opcua_vulnerability_tests.cpp"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'PSRAMUtils::createPSRAMString("Endpoint allows anonymous: ") +',
+            opcua_vulnerability,
+        )
+        self.assertIn(
+            'psram_string key = cert.subject_common_name + PSRAMUtils::createPSRAMString(":") +',
+            opcua_vulnerability,
+        )
+
+        opcua_plugin = (PROJECT_ROOT / "src/protocols/opcua_plugin.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            '\\"server_url\\":\\\"" +',
+            opcua_plugin,
+        )
+
+        security = (PROJECT_ROOT / "src/security/security_manager.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('masked_hash = std::string(entry.hash.c_str(), 8) + "***" +', security)
 
     def test_target_transport_policy_is_explicit(self):
         platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")

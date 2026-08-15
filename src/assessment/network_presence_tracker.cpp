@@ -734,8 +734,8 @@ double NetworkPresenceTracker::calculatePresenceScore(const NetworkDeviceInfo& d
     }
 
     // Combined weighted score
-    double final_score = (continuity_score * config_.continuity_weight)
-                        (diversity_score * config_.diversity_weight)
+    double final_score = (continuity_score * config_.continuity_weight) +
+                        (diversity_score * config_.diversity_weight) +
                         (frequency_score * config_.frequency_weight);
 
     return std::min(1.0, final_score);
@@ -1260,7 +1260,7 @@ bool NetworkPresenceTracker::loadFromPersistentStorage() {
     }
 
     // Validate file size matches expected device count
-    size_t expected_size = sizeof(PersistentStorageHeader)
+    size_t expected_size = sizeof(PersistentStorageHeader) +
                           (header.device_count * sizeof(PersistentDeviceRecord));
     if (data.size() != expected_size) {
         LOG_WARNINGF(TAG_NET_PRESENCE, "Persistent storage size mismatch (expected %zu, got %zu)",

@@ -240,10 +240,10 @@ input[type="checkbox"]{width:auto; margin-right:.5rem}
   (function() {
     const urlParams = new URLSearchParams(window.location.search);
     const sessionToken = urlParams.get('sid');
-
+    
     if (sessionToken) {
         console.log('Session token found');
-
+        
         // Override fetch to automatically add Bearer token to API calls
         const originalFetch = window.fetch;
         if (!window.__apiFetchQueue) {
@@ -264,7 +264,7 @@ input[type="checkbox"]{width:auto; margin-right:.5rem}
             window.__apiFetchQueue = queued.catch(() => {});
             return queued;
         };
-
+        
         // Update navigation links to include session token
         document.querySelectorAll('.nav-btn').forEach(link => {
             const href = link.getAttribute('href');

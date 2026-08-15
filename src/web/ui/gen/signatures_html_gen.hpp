@@ -184,10 +184,10 @@ th{background:#f8f9fa; color:#333}
     (function() {
     const urlParams = new URLSearchParams(window.location.search);
     const sessionToken = urlParams.get('sid');
-
+    
     if (sessionToken) {
         console.log('Session token found');
-
+        
         // Override fetch to automatically add Bearer token to API calls
         const originalFetch = window.fetch;
         if (!window.__apiFetchQueue) {
@@ -209,7 +209,7 @@ th{background:#f8f9fa; color:#333}
             window.__apiFetchQueue = queued.catch(() => {});
             return queued;
         };
-
+        
         // Update navigation links to include session token
         document.querySelectorAll('.nav-btn').forEach(link => {
             const href = link.getAttribute('href');
@@ -727,4 +727,4 @@ document.getElementById('editModal').addEventListener('click', function(e) {
 )HTML";
 
 // Compile-time size constant (actual content length)
-static constexpr size_t SIGNATURES_HTML_GEN_SIZE = 25320;
+static constexpr size_t SIGNATURES_HTML_GEN_SIZE = 25340;

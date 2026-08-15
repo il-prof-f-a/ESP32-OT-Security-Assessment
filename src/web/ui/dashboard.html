@@ -147,7 +147,7 @@ small{color:#666}
     </div>
     <pre id="disc"></pre>
   </div>
-
+  
   <div class="card" style="display:none">
     <h2>🧨 Fuzzing (safe mode)</h2>
     <div class="row">
@@ -171,7 +171,7 @@ small{color:#666}
     </div>
     <pre id="fzz"></pre>
   </div>
-
+  
   <div class="card" style="display:none">
     <h2>📈 Advanced IDS Stats</h2>
     <div class="row mono">
@@ -186,7 +186,7 @@ small{color:#666}
       <button class="btn" style="background:#555" onclick="idsChartsClear()">Pulisci grafici</button>
     </div>
   </div>
-
+  
   <div class="card" style="display:none">
     <h2>🧾 Signatures DB</h2>
     <div class="row mono">
@@ -196,7 +196,7 @@ small{color:#666}
     </div>
     <small>Il file verrà salvato in <code>/data/signatures.json</code> e caricato nell’IDS.</small>
   </div>
-
+  
   <div class="card">
     <h2>📝 Event Format</h2>
     <div class="row mono">
@@ -207,7 +207,7 @@ small{color:#666}
       <button class="btn" onclick="saveFmt()">Salva</button>
     </div>
   </div>
-
+  
   <div class="card" style="display:none">
     <h2>🛡️ Advanced IDS</h2>
     <div class="row">
@@ -226,7 +226,7 @@ small{color:#666}
     <small style="color:#666;margin-top:.5rem;display:block">Nota: Configurazioni specifiche per protocollo (es. Modbus) sono ora gestite nella pagina IDS avanzato</small>
     <pre id="ids_stats"></pre>
   </div>
-
+  
   <div class="card" style="display:none">
     <h2>🛰️ Reporting</h2>
     <div class="row">
@@ -236,7 +236,7 @@ small{color:#666}
     </div>
     <div id="rpTable"></div>
   </div>
-
+  
   <div class="card" style="display:none">
     <h2>🧩 Reporting Endpoints</h2>
     <p class="mono">Configura destinazioni (MQTT, Webhook, Email, File) e salva su NVS.</p>
@@ -246,7 +246,7 @@ small{color:#666}
       <button class="btn" onclick="reSave()">Salva & Applica</button>
     </div>
   </div>
-
+  
   <div class="card" style="display:none">
     <h2>🗄️ Log Retention</h2>
     <div class="row">
@@ -267,10 +267,10 @@ small{color:#666}
 (function() {
     const urlParams = new URLSearchParams(window.location.search);
     const sessionToken = urlParams.get('sid');
-
+    
     if (sessionToken) {
         console.log('Session token found');
-
+        
         // Override fetch to automatically add Bearer token to API calls
         const originalFetch = window.fetch;
         if (!window.__apiFetchQueue) {
@@ -292,7 +292,7 @@ small{color:#666}
             window.__apiFetchQueue = queued.catch(() => {});
             return queued;
         };
-
+        
         // Update navigation links to include session token
         document.querySelectorAll('.nav-btn').forEach(link => {
             const href = link.getAttribute('href');
@@ -354,18 +354,18 @@ async function rpLoad(overrideCfg, overrideEndpoints, overrideQ){
   const cfg = overrideCfg || await fetch('/api/report/channels').then(r=>r.json()).catch(_=>({}));
   const endpoints = overrideEndpoints || await fetch('/api/report/endpoints').then(r=>r.json()).catch(_=>({}));
   const q = overrideQ || await fetch('/api/report/queue').then(r=>r.json()).catch(_=>({queued:0}));
-
+  
   document.getElementById('rpQueued').textContent = 'Queued: '+(q.queued||0);
-
+  
   // Lista di tutti i reporter possibili
   const allReporters = ['mqtt', 'webhook', 'email', 'file'];
-
+  
   let html = '<table style="width:100%;border-collapse:collapse"><tr><th style="text-align:left">Canale</th><th>Formato</th><th>Abilitato</th><th>Configurato</th><th>Azione</th></tr>';
-
+  
   for (const name of allReporters) {
     const c = cfg[name] || {enabled: false, format: 0}; // Default se non presente
     const hasEndpoint = endpoints[name] && Object.keys(endpoints[name]).length > 0;
-
+    
     const sel=`
       <select id="fmt_${name}">
         <option value="0" ${c.format==0?'selected':''}>JSON</option>
@@ -376,7 +376,7 @@ async function rpLoad(overrideCfg, overrideEndpoints, overrideQ){
     const chk=`<input type="checkbox" id="en_${name}" ${c.enabled?'checked':''}>`;
     const status = hasEndpoint ? '<span style="color:green">✓</span>' : '<span style="color:red">✗</span>';
     const btn=`<button class="btn" onclick="rpSave('${name}')">Salva</button>`;
-
+    
     html += `<tr><td class="mono">${name}</td><td>${sel}</td><td style="text-align:center">${chk}</td><td style="text-align:center">${status}</td><td>${btn}</td></tr>`;
   }
   html += '</table>';
@@ -653,13 +653,13 @@ async function exportConfig(){
       alert('Errore durante l\\\\esportazione: ' + response.status + ' ' + response.statusText);
       return;
     }
-
+    
     // Create download
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-
+    
     // Extract filename from Content-Disposition header
     const contentDisp = response.headers.get('Content-Disposition');
     let filename = 'esp32-security-config.json';
@@ -667,13 +667,13 @@ async function exportConfig(){
       const matches = contentDisp.match(/filename="(.+)"/);
       if (matches && matches[1]) filename = matches[1];
     }
-
+    
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
-
+    
     alert('✅ Configurazione esportata come: ' + filename);
   } catch(e) {
     console.error('Export error:', e);
@@ -684,31 +684,31 @@ async function exportConfig(){
 async function importConfig(event) {
   const file = event.target.files[0];
   if (!file) return;
-
+  
   if (!file.name.toLowerCase().endsWith('.json')) {
     alert('❌ Seleziona un file JSON valido');
     return;
   }
-
+  
   if (!confirm('⚠️ L\\\\importazione sostituirà l\\\\intera configurazione corrente. Continuare?')) {
     event.target.value = ''; // Reset file input
     return;
   }
-
+  
   try {
     const fileContent = await file.text();
-
+    
     // Validate JSON format first
     JSON.parse(fileContent);
-
+    
     const response = await fetch('/api/config/import', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: fileContent
     });
-
+    
     const result = await response.json();
-
+    
     if (response.ok && result.success) {
       alert('✅ ' + result.message + '\\\\nDimensione: ' + result.size + ' bytes');
       refresh(); // Reload the current config display
@@ -736,10 +736,10 @@ async function saveToNVSandFS() {
   try {
     const statusDiv = document.getElementById('save-status');
     statusDiv.innerHTML = '<div style="color:#007;font-weight:bold;padding:.5rem;background:#e3f2fd;border:1px solid #007;border-radius:4px">⏳ Salvando configurazione completa (NVS + LittleFS)...</div>';
-
+    
     // Get current configuration from the text editor
     const configText = document.getElementById('cfg').textContent;
-
+    
     // Validate JSON
     let configObj;
     try {
@@ -747,36 +747,36 @@ async function saveToNVSandFS() {
     } catch(e) {
       throw new Error('JSON non valido: ' + e.message);
     }
-
+    
     // Save to NVS and LittleFS using POST to /api/config
     const saveResponse = await fetch('/api/config', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(configObj)
     });
-
+    
     if (!saveResponse.ok) {
       throw new Error('Errore HTTP ' + saveResponse.status + ': ' + saveResponse.statusText);
     }
-
+    
     const result = await saveResponse.text();
-
+    
     if (result === 'OK') {
       statusDiv.innerHTML = '<div style="color:#28a745;font-weight:bold;padding:.5rem;background:#d4edda;border:1px solid #28a745;border-radius:4px">✅ Configurazione salvata con successo su NVS e LittleFS!<br><small>La configurazione sarà caricata automaticamente al prossimo riavvio.</small></div>';
     } else {
       throw new Error('Risposta inaspettata dal server: ' + result);
     }
-
+    
     // Auto-hide success message after 8 seconds
     setTimeout(() => {
       statusDiv.innerHTML = '';
     }, 8000);
-
+    
   } catch(e) {
     const statusDiv = document.getElementById('save-status');
     statusDiv.innerHTML = '<div style="color:#dc3545;font-weight:bold;padding:.5rem;background:#f8d7da;border:1px solid #dc3545;border-radius:4px">❌ Errore nel salvataggio completo:<br>' + e.message + '</div>';
     console.error('SaveToNVSandFS error:', e);
-
+    
     // Keep error message longer
     setTimeout(() => {
       statusDiv.innerHTML = '';
@@ -832,15 +832,15 @@ async function connectWiFi(){
       // Gestione del nuovo comportamento: salvataggio + riavvio
       if (result.success && result.message === 'wifi_credentials_saved_rebooting') {
         alert(
-          `✓ Credenziali WiFi salvate con successo!\n\n`
-          `Il dispositivo si sta riavviando e si connetterà alla rete "${ssid}".\n\n`
-          `ISTRUZIONI:\n`
-          `1. Il riavvio richiederà circa 10-15 secondi\n`
-          `2. Connettiti alla stessa rete WiFi (${ssid}) dal tuo computer/smartphone\n`
-          `3. Trova l'indirizzo IP del dispositivo:\n`
-          `   - Controlla il router/DHCP server\n`
-          `   - Usa uno scanner di rete (es. Fing, Advanced IP Scanner)\n`
-          `4. Accedi al web server: http://[IP_DISPOSITIVO]/\n\n`
+          `✓ Credenziali WiFi salvate con successo!\n\n` +
+          `Il dispositivo si sta riavviando e si connetterà alla rete "${ssid}".\n\n` +
+          `ISTRUZIONI:\n` +
+          `1. Il riavvio richiederà circa 10-15 secondi\n` +
+          `2. Connettiti alla stessa rete WiFi (${ssid}) dal tuo computer/smartphone\n` +
+          `3. Trova l'indirizzo IP del dispositivo:\n` +
+          `   - Controlla il router/DHCP server\n` +
+          `   - Usa uno scanner di rete (es. Fing, Advanced IP Scanner)\n` +
+          `4. Accedi al web server: http://[IP_DISPOSITIVO]/\n\n` +
           `La pagina si ricaricherà automaticamente tra qualche secondo.`
         );
 
@@ -1238,3 +1238,4 @@ async function reloadSig(){
 }
 </script>
 </html>
+

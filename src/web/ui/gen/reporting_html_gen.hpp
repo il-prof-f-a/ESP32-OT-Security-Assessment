@@ -1,7 +1,7 @@
 /* auto-generated from reporting.html */
 #pragma once
 static const char* REPORTING_HTML_GEN = R"HTML(
-<!doctype html>
+﻿<!doctype html>
 <html><meta charset="utf-8"/><title>Reporting Configuration</title>
 <style>body{font-family:system-ui;margin:1rem;background:#f6f6f6}.card{background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);padding:1rem;margin-bottom:1rem}.btn{background:#007;color:#fff;border:none;padding:.5rem 1rem;border-radius:6px;cursor:pointer;margin-right:.5rem}textarea{width:100%;height:200px;padding:.4rem;border:1px solid #ccc;border-radius:4px;font-family:monospace}.status{padding:.5rem;border-radius:4px;margin-bottom:.8rem}.status.ok{background:#d4edda;color:#155724}.status.err{background:#f8d7da;color:#721c24}
     .nav-btn{
@@ -384,7 +384,7 @@ static const char* REPORTING_HTML_GEN = R"HTML(
 (function() {
     const urlParams = new URLSearchParams(window.location.search);
     const sessionToken = urlParams.get('sid');
-
+    
     if (sessionToken) {
         console.log('Session token found');
         window.__sidToken = sessionToken;
@@ -410,7 +410,7 @@ static const char* REPORTING_HTML_GEN = R"HTML(
             window.__apiFetchQueue = queued.catch(() => {});
             return queued;
         };
-
+        
         // Update navigation links to include session token
         document.querySelectorAll('.nav-btn').forEach(link => {
             const href = link.getAttribute('href');
@@ -869,7 +869,7 @@ try{
    var endpointsResp=await fetch('/api/report/endpoints', { cache: 'no-store' });
    endpoints=await endpointsResp.json();
  }
-
+ 
  renderChannelsUI(channels, endpoints);
  updateReportStreamChannelOptions(channels);
  status('Channels loaded');
@@ -1037,31 +1037,31 @@ function getFileReporterLogName() {
 async function downloadLog(logName) {
     try {
         status('📥 Downloading ' + logName + '...', false);
-
+        
         // Create download link
         const url = '/api/logs/download?name=' + encodeURIComponent(logName);
         const link = document.createElement('a');
         link.href = url;
         link.download = logName;
         link.style.display = 'none';
-
+        
         // Add auth header via fetch and blob
         const response = await fetch(url);
         if (!response.ok) {
             throw new Error('Download failed: HTTP ' + response.status);
         }
-
+        
         const blob = await response.blob();
         const blobUrl = window.URL.createObjectURL(blob);
-
+        
         link.href = blobUrl;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-
+        
         // Cleanup
         setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
-
+        
         status('✅ Downloaded ' + logName + ' successfully!', false);
     } catch (e) {
         status('❌ Download failed: ' + e.message, true);
@@ -1225,7 +1225,9 @@ async function removeFilter(channelName, type, pattern) {
 window.addEventListener('beforeunload', () => stopReportStream());
 </script></html>
 
+
+
 )HTML";
 
 // Compile-time size constant (actual content length)
-static constexpr size_t REPORTING_HTML_GEN_SIZE = 40712;
+static constexpr size_t REPORTING_HTML_GEN_SIZE = 40778;

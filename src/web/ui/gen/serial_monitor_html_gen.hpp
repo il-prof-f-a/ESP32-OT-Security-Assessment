@@ -41,11 +41,11 @@ body{font-family:system-ui;margin:1rem;background:#f6f6f6}
     <div class="config-section">
         <div class="form-group">
             <label>
-                <input type="checkbox" id="enabled" checked>
+                <input type="checkbox" id="enabled" checked> 
                 Enable Serial Reporting
             </label>
         </div>
-
+        
         <div class="form-group">
             <label for="log-level">Log Level:</label>
             <select id="log-level" class="form-control">
@@ -55,7 +55,7 @@ body{font-family:system-ui;margin:1rem;background:#f6f6f6}
                 <option value="DEBUG">DEBUG</option>
             </select>
         </div>
-
+        
         <div class="form-group">
             <label>Protocol Filters:</label>
             <div class="checkbox-group">
@@ -81,7 +81,7 @@ body{font-family:system-ui;margin:1rem;background:#f6f6f6}
                 </div>
             </div>
         </div>
-
+        
         <div class="form-group">
             <label>Event Types:</label>
             <div class="checkbox-group">
@@ -99,20 +99,20 @@ body{font-family:system-ui;margin:1rem;background:#f6f6f6}
                 </div>
             </div>
         </div>
-
+        
         <div class="form-group">
             <label for="max-rate">Max Events/sec:</label>
             <input type="number" id="max-rate" class="form-control" value="10" min="1" max="100">
         </div>
-
+        
         <div class="form-group">
             <label>
-                <input type="checkbox" id="show-details" checked>
+                <input type="checkbox" id="show-details" checked> 
                 Show Event Details
             </label>
         </div>
     </div>
-
+    
     <div class="controls">
         <button class="btn" onclick="loadConfig()">Load Config</button>
         <button class="btn" onclick="saveConfig()">Save Config</button>
@@ -139,7 +139,7 @@ body{font-family:system-ui;margin:1rem;background:#f6f6f6}
 (function() {
     const urlParams = new URLSearchParams(window.location.search);
     const sessionToken = urlParams.get('sid');
-
+    
     if (sessionToken) {
         const originalFetch = window.fetch;
         if (!window.__apiFetchQueue) {
@@ -160,7 +160,7 @@ body{font-family:system-ui;margin:1rem;background:#f6f6f6}
             window.__apiFetchQueue = queued.catch(() => {});
             return queued;
         };
-
+        
         document.querySelectorAll('.nav-btn').forEach(link => {
             const href = link.getAttribute('href');
             if (href && !href.includes('sid=')) {
@@ -185,13 +185,13 @@ async function loadConfig(override) {
             return await response.json();
         })();
         const cfg = config.configuration || config;
-
+        
         // Update form fields
         document.getElementById('enabled').checked = !!config.enabled;
         document.getElementById('log-level').value = cfg.log_level || 'INFO';
         document.getElementById('max-rate').value = (typeof cfg.max_rate_per_sec === 'number') ? cfg.max_rate_per_sec : 100;
         document.getElementById('show-details').checked = !!cfg.show_details;
-
+        
         // Update protocol checkboxes
         const protos = Array.isArray(cfg.include_protocols) ? cfg.include_protocols : [];
         document.getElementById('protocol-modbus').checked = protos.includes('modbus');
@@ -199,13 +199,13 @@ async function loadConfig(override) {
         document.getElementById('protocol-opcua').checked = protos.includes('opcua');
         document.getElementById('protocol-ethernetip').checked = protos.includes('ethernetip');
         document.getElementById('protocol-profinet').checked = protos.includes('profinet');
-
+        
         // Update event type checkboxes
         const events = Array.isArray(cfg.include_events) ? cfg.include_events : [];
         document.getElementById('event-traffic').checked = events.includes('traffic');
         document.getElementById('event-alert').checked = events.includes('alert');
         document.getElementById('event-discovery').checked = events.includes('discovery');
-
+        
         status('Configuration loaded successfully');
     } catch (e) {
         status('Error loading config: ' + e.message, true);
@@ -226,27 +226,27 @@ async function saveConfig() {
                 include_events: []
             }
         };
-
+        
         // Collect protocol filters
         if (document.getElementById('protocol-modbus').checked) config.configuration.include_protocols.push('modbus');
         if (document.getElementById('protocol-s7').checked) config.configuration.include_protocols.push('s7');
         if (document.getElementById('protocol-opcua').checked) config.configuration.include_protocols.push('opcua');
         if (document.getElementById('protocol-ethernetip').checked) config.configuration.include_protocols.push('ethernetip');
         if (document.getElementById('protocol-profinet').checked) config.configuration.include_protocols.push('profinet');
-
+        
         // Collect event type filters
         if (document.getElementById('event-traffic').checked) config.configuration.include_events.push('traffic');
         if (document.getElementById('event-alert').checked) config.configuration.include_events.push('alert');
         if (document.getElementById('event-discovery').checked) config.configuration.include_events.push('discovery');
-
+        
         const response = await fetch('/api/report/serial/config', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(config)
         });
-
+        
         if (!response.ok) throw new Error('HTTP ' + response.status);
-
+        
         status('Configuration saved successfully');
     } catch (e) {
         status('Error saving config: ' + e.message, true);
@@ -259,11 +259,11 @@ let lastLogTimestamp = 0;
 
 function startSerialOutput() {
     if (serialInterval) return; // Already running
-
+    
     const refreshRate = parseInt(document.getElementById('refresh-rate').value) || 2000;
     serialInterval = setInterval(loadIncrementalLogs, refreshRate);
     loadIncrementalLogs(); // Load immediately
-
+    
     status('Serial output monitoring started');
 }
 
@@ -286,13 +286,13 @@ async function loadIncrementalLogs() {
         // Get latest logs since last timestamp
         const response = await fetch('/api/logs?name=app.log&tail=50&since=' + lastLogTimestamp);
         if (!response.ok) return;
-
+        
         const logs = await response.text();
         if (!logs.trim()) return;
-
+        
         const outputArea = document.getElementById('output-area');
         const lines = logs.trim().split('\n');
-
+        
         // Process each line and prepend to output (newest at top)
         lines.forEach(line => {
             if (line.trim()) {
@@ -304,19 +304,19 @@ async function loadIncrementalLogs() {
                         lastLogTimestamp = timestamp;
                     }
                 }
-
+                
                 // Prepend line to output area (newest on top)
                 const newLine = document.createTextNode(line + '\n');
                 outputArea.insertBefore(newLine, outputArea.firstChild);
             }
         });
-
+        
         // Limit output to max 500 lines to prevent memory issues
         const allLines = outputArea.textContent.split('\n');
         if (allLines.length > 500) {
             outputArea.textContent = allLines.slice(0, 500).join('\n');
         }
-
+        
     } catch (e) {
         console.error('Error loading incremental logs:', e);
     }
@@ -346,4 +346,4 @@ async function loadIncrementalLogs() {
 )HTML";
 
 // Compile-time size constant (actual content length)
-static constexpr size_t SERIAL_MONITOR_HTML_GEN_SIZE = 14120;
+static constexpr size_t SERIAL_MONITOR_HTML_GEN_SIZE = 14314;

@@ -67,12 +67,12 @@ pre{background:#f8f9fa; padding:.6rem; border-radius:6px; overflow:auto; max-hei
     <div class="container">
         <h1>🔧 Network Diagnostics</h1>
         <p>Comprehensive Ethernet debugging tools for T-POE Pro hardware troubleshooting</p>
-
+        
         <!-- Phase 1: Hardware Diagnostics -->
         <div class="card">
             <h2>⚡ Phase 1: Hardware Diagnostics</h2>
             <p>PHY registers, link status, and hardware-level connectivity</p>
-
+            
             <button onclick="loadHardwareDiagnostics()" class="btn-primary">Run Hardware Diagnostics</button>
             <div id="hardware-results" class="diagnostic-results"></div>
         </div>
@@ -81,7 +81,7 @@ pre{background:#f8f9fa; padding:.6rem; border-radius:6px; overflow:auto; max-hei
         <div class="card">
             <h2>🌐 Phase 2: IP Stack Debugging</h2>
             <p>Ping tests, routing table, ARP analysis</p>
-
+            
             <button onclick="loadIPStackDiagnostics()" class="btn-primary">Run IP Stack Diagnostics</button>
             <div id="ipstack-results" class="diagnostic-results"></div>
         </div>
@@ -90,7 +90,7 @@ pre{background:#f8f9fa; padding:.6rem; border-radius:6px; overflow:auto; max-hei
         <div class="card">
             <h2>📡 Phase 3: Network Layer Analysis</h2>
             <p>Network discovery, ARP debugging, broadcast testing</p>
-
+            
             <button onclick="loadNetworkLayerAnalysis()" class="btn-primary">Run Network Analysis</button>
             <div class="form-group">
                 <label for="scan-type">Scan Type:</label>
@@ -107,7 +107,7 @@ pre{background:#f8f9fa; padding:.6rem; border-radius:6px; overflow:auto; max-hei
         <div class="card">
             <h2>🛠️ Phase 4: Driver Level Debugging</h2>
             <p>RMII configuration, MAC statistics, driver integrity</p>
-
+            
             <button onclick="loadDriverDiagnostics()" class="btn-primary">Run Driver Diagnostics</button>
             <div id="driver-results" class="diagnostic-results"></div>
         </div>
@@ -133,10 +133,10 @@ pre{background:#f8f9fa; padding:.6rem; border-radius:6px; overflow:auto; max-hei
         (function() {
     const urlParams = new URLSearchParams(window.location.search);
     const sessionToken = urlParams.get('sid');
-
+    
     if (sessionToken) {
         console.log('Session token found');
-
+        
         // Override fetch to automatically add Bearer token to API calls
         const originalFetch = window.fetch;
         if (!window.__apiFetchQueue) {
@@ -157,7 +157,7 @@ pre{background:#f8f9fa; padding:.6rem; border-radius:6px; overflow:auto; max-hei
             window.__apiFetchQueue = queued.catch(() => {});
             return queued;
         };
-
+        
         // Update navigation links to include session token
         document.querySelectorAll('.nav-btn').forEach(link => {
             const href = link.getAttribute('href');
@@ -179,11 +179,11 @@ pre{background:#f8f9fa; padding:.6rem; border-radius:6px; overflow:auto; max-hei
                         'Content-Type': 'application/json'
                     }
                 });
-
+                
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
-
+                
                 return await response.json();
             } catch (error) {
                 console.error('API call failed:', error);
@@ -200,11 +200,11 @@ pre{background:#f8f9fa; padding:.6rem; border-radius:6px; overflow:auto; max-hei
                     },
                     body: JSON.stringify(data)
                 });
-
+                
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
-
+                
                 return await response.json();
             } catch (error) {
                 console.error('API call failed:', error);
@@ -220,13 +220,13 @@ pre{background:#f8f9fa; padding:.6rem; border-radius:6px; overflow:auto; max-hei
             }
 
             let html = '<div class="diagnostic-details">';
-
+            
             for (const [key, value] of Object.entries(data)) {
                 if (key === 'status' || key === 'timestamp') continue;
-
+                
                 html += `<div class="detail-item">`;
                 html += `<strong>${key.replace(/_/g, ' ').toUpperCase()}:</strong>`;
-
+                
                 if (typeof value === 'boolean') {
                     html += `<span class="${value ? 'status-ok' : 'status-error'}">${value ? '✅ OK' : '❌ FAILED'}</span>`;
                 } else if (typeof value === 'object') {
@@ -236,7 +236,7 @@ pre{background:#f8f9fa; padding:.6rem; border-radius:6px; overflow:auto; max-hei
                 }
                 html += `</div>`;
             }
-
+            
             html += '</div>';
             container.innerHTML = html;
         }
@@ -304,25 +304,25 @@ pre{background:#f8f9fa; padding:.6rem; border-radius:6px; overflow:auto; max-hei
         function updateSummary() {
             const summaryCard = document.getElementById('summary-card');
             const summaryContent = document.getElementById('summary-content');
-
+            
             if (Object.keys(diagnosticsData).length === 0) {
                 summaryCard.style.display = 'none';
                 return;
             }
-
+            
             let html = '<div class="summary-grid">';
-
+            
             for (const [phase, data] of Object.entries(diagnosticsData)) {
                 const hasError = data.error;
                 const status = hasError ? 'error' : 'success';
                 const icon = hasError ? '❌' : '✅';
-
+                
                 html += `<div class="summary-item summary-${status}">`;
                 html += `<h4>${icon} ${phase.toUpperCase()}</h4>`;
                 html += `<p>${hasError ? 'Failed' : 'Completed'}</p>`;
                 html += `</div>`;
             }
-
+            
             html += '</div>';
             summaryContent.innerHTML = html;
             summaryCard.style.display = 'block';
@@ -334,7 +334,7 @@ pre{background:#f8f9fa; padding:.6rem; border-radius:6px; overflow:auto; max-hei
                 device: 'ESP32 T-POE Pro',
                 diagnostics: diagnosticsData
             };
-
+            
             const blob = new Blob([JSON.stringify(results, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -350,4 +350,4 @@ pre{background:#f8f9fa; padding:.6rem; border-radius:6px; overflow:auto; max-hei
 )HTML";
 
 // Compile-time size constant (actual content length)
-static constexpr size_t DIAGNOSTICS_HTML_GEN_SIZE = 14234;
+static constexpr size_t DIAGNOSTICS_HTML_GEN_SIZE = 14506;

@@ -591,7 +591,7 @@ async function saveFeatures(){
          }
          const path = (typeof url === 'string') ? url : (url && url.url) || '';
          const noQueue = NO_QUEUE.some(re => re.test(path));
-
+ 
          const opts = {...options};
         // Use an explicit conditional here: some JS engines are picky with spread + logical OR.
         opts.headers = { ...((options && options.headers) ? options.headers : {}) };
@@ -1459,7 +1459,7 @@ var lastFuzzJobsById = {};   // Last jobs snapshot from API
 function getProtocolName(protocolId) {
     const protocols = {
         1: 'Modbus TCP',
-        2: 'S7 Communication',
+        2: 'S7 Communication', 
         3: 'OPC UA',
         4: 'EtherNet/IP',
         5: 'PROFINET'
@@ -1529,16 +1529,16 @@ async function loadAttackProfiles() {
     } else {
         if (s7Config) s7Config.style.display = 'none';
     }
-
+    
     try {
         const response = await fetch(`/api/fuzz/profiles?protocol=${protocol}`);
         if (!response.ok) throw new Error('HTTP ' + response.status);
-
+        
         const data = await response.json();
-
+        
         // Clear existing options
         profileSelect.innerHTML = '';
-
+        
         // Add profiles for this protocol
          data.profiles.forEach(profile => {
              const option = document.createElement('option');
@@ -1553,7 +1553,7 @@ async function loadAttackProfiles() {
              if (!implemented) option.disabled = true;
              profileSelect.appendChild(option);
          });
-
+        
         // Update target placeholder and help text based on first profile
         if (data.profiles.length > 0) {
             const firstProfile = data.profiles.find(p => p && p.implemented !== false) || data.profiles[0];
@@ -1574,7 +1574,7 @@ async function loadAttackProfiles() {
             const firstEnabled = Array.from(profileSelect.options).find(o => !o.disabled);
             if (firstEnabled) firstEnabled.selected = true;
         }
-
+        
     } catch (error) {
         console.error('Error loading attack profiles:', error);
         // Fallback to default profile
@@ -1641,21 +1641,21 @@ try{
     var jobs = response.jobs || [];
     lastFuzzJobsById = {};
     jobs.forEach(j => { if (j && j.id != null) lastFuzzJobsById[j.id] = j; });
-
+    
     var tbody = document.querySelector('#fuzz_jobs_table tbody');
     tbody.innerHTML = '';
-
+    
     jobs.forEach(job => {
         var row = tbody.insertRow();
         var statusText = 'Ready';
         var statusClass = 'status-ready';
-
+        
         // Prefer server-reported running status, fallback to local tracking.
         if (job.running || runningJobs.has(job.id)) {
             statusText = 'Running';
             statusClass = 'status-running';
         }
-
+        
         row.innerHTML = `
             <td><strong>${job.id}</strong></td>
             <td>${getProtocolName(job.protocol)}</td>
@@ -1674,7 +1674,7 @@ try{
             </td>
         `;
     });
-
+    
     status('Loaded ' + jobs.length + ' fuzzing jobs');
 }catch(e){
     status('Error loading fuzzing jobs: ' + e.message, true);
@@ -1821,7 +1821,7 @@ try{
 
         return cfg;
     }
-
+    
     const toCreate = (profiles.length > 0) ? profiles : [""];
     const created = [];
     for (const prof of toCreate) {
@@ -1847,7 +1847,7 @@ try{
     status('Created ' + created.length + ' fuzzing job(s)');
     hideCreateFuzzJob();
     loadFuzzJobs();
-
+    
 }catch(e){
     status('Error creating fuzzing job: ' + e.message, true);
 }
@@ -1903,19 +1903,19 @@ try{
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({job_id: id})
     });
-
+    
     if (!r.ok) throw new Error('HTTP ' + r.status);
-
+    
     var result = await r.text();
     showFuzzResults(result);
     status('Fuzzing job ' + id + ' started');
-
+    
     // Track this job as running
     runningJobs.add(id);
-
+    
     // Start auto-refresh to track progress
     startAutoRefresh();
-
+    
     // Poll for completion JSON and show it automatically when available.
     const job = lastFuzzJobsById[id] || null;
     let estMs = 65000;
@@ -1924,10 +1924,10 @@ try{
         else if (job.max_cases && job.rate_per_sec) estMs = Math.ceil((job.max_cases / Math.max(1, job.rate_per_sec)) * 1000) + 2500;
     }
     pollFuzzResultUntilReady(id, Math.max(10000, estMs + 20000));
-
+    
     // Immediate refresh to show running status
     loadFuzzJobs();
-
+    
 }catch(e){
     status('Error running fuzzing job: ' + e.message, true);
 }
@@ -1938,10 +1938,10 @@ if(!confirm('Delete fuzzing job ' + id + '?')) return;
 try{
     var r = await fetch('/api/fuzz/jobs?id=' + id, {method: 'DELETE'});
     if (!r.ok) throw new Error('HTTP ' + r.status);
-
+    
     status('Fuzzing job ' + id + ' deleted');
     loadFuzzJobs(); // Refresh the table
-
+    
 }catch(e){
     status('Error deleting fuzzing job: ' + e.message, true);
 }
@@ -1952,18 +1952,18 @@ if(!confirm('Stop all running fuzzing jobs?')) return;
 try{
     var r = await fetch('/api/fuzz/stop', {method: 'POST'});
     if (!r.ok) throw new Error('HTTP ' + r.status);
-
+    
     var result = await r.text();
     showFuzzResults(result);
     status('All fuzzing jobs stopped');
-
+    
     // Clear all running job tracking
     runningJobs.clear();
     stopAutoRefresh();
-
+    
     // Refresh jobs to update status
     loadFuzzJobs();
-
+    
 }catch(e){
     status('Error stopping fuzzing jobs: ' + e.message, true);
 }

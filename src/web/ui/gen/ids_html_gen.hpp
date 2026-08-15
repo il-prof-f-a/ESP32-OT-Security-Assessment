@@ -299,10 +299,10 @@ summary{cursor:pointer; color:#333}
 (function() {
     const urlParams = new URLSearchParams(window.location.search);
     const sessionToken = urlParams.get('sid');
-
+    
     if (sessionToken) {
         console.log('Session token found');
-
+        
         // Override fetch to automatically add Bearer token to API calls
         const originalFetch = window.fetch;
         if (!window.__apiFetchQueue) {
@@ -323,7 +323,7 @@ summary{cursor:pointer; color:#333}
             window.__apiFetchQueue = queued.catch(() => {});
             return queued;
         };
-
+        
         // Update navigation links to include session token
         document.querySelectorAll('.nav-btn').forEach(link => {
             const href = link.getAttribute('href');
@@ -508,7 +508,7 @@ summary{cursor:pointer; color:#333}
     function renderProtoCatalogControls(){
       const sel = $('#catalogProto');
       if(!sel) return;
-      sel.innerHTML = '<option value="">Seleziona protocollo dal catalogo…</option>'
+      sel.innerHTML = '<option value="">Seleziona protocollo dal catalogo…</option>' +
         Object.entries(protocolCatalog).map(([id,name])=>`<option value="${id}">${name}</option>`).join('');
       // Suggerimenti rapidi: protocolli del catalogo non ancora presenti
       const existing = new Set(Object.keys(model.per_protocol||{}).map(slug));
@@ -1135,4 +1135,4 @@ summary{cursor:pointer; color:#333}
 )HTML";
 
 // Compile-time size constant (actual content length)
-static constexpr size_t IDS_HTML_GEN_SIZE = 52317;
+static constexpr size_t IDS_HTML_GEN_SIZE = 52339;

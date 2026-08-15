@@ -62,17 +62,17 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
 
     <div class="container">
         <h1>🌐 Network Diagnostics</h1>
-
+        
         <div class="card">
             <h2>Network Interfaces</h2>
             <div id="interfaces-info">Loading...</div>
             <p><strong>⚠️ Important:</strong> All security attacks use <strong>Ethernet only</strong>. WiFi is for management access only.</p>
         </div>
-
+        
         <div class="card">
             <h2>🔌 Ethernet Configuration</h2>
             <p>Configure Ethernet interface used for all security attacks and fuzzing operations.</p>
-
+            
             <div id="ethernet-config">Loading...</div>
 
             <div class="form-group">
@@ -88,7 +88,7 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
                     <label for="eth-promiscuous">Enable promiscuous mode (L2 capture)</label>
                 </div>
             </div>
-
+            
             <div class="form-group">
                 <label for="eth-mode">IP Configuration:</label>
                 <select id="eth-mode">
@@ -96,7 +96,7 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
                     <option value="static">Static IP</option>
                 </select>
             </div>
-
+            
             <div id="static-config" style="display: none;">
                 <div class="form-group">
                     <label for="static-ip">IP Address:</label>
@@ -115,12 +115,12 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
                     <input type="text" id="static-dns" placeholder="8.8.8.8">
                 </div>
             </div>
-
+            
             <button id="save-ethernet-btn" class="btn btn-primary">Save Ethernet Configuration</button>
-
+            
             <div id="ethernet-result" style="margin-top: 10px;"></div>
         </div>
-
+        
         <div class="card">
             <h2>WiFi Management</h2>
             <p>Configura la rete WiFi per l'accesso alla console di gestione.</p>
@@ -153,7 +153,7 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
                 <input type="number" id="ping-count" min="1" max="10" value="4">
             </div>
             <button id="ping-btn" class="btn btn-primary">Run Ping</button>
-
+            
             <div id="ping-results" style="margin-top: 20px;"></div>
         </div>
     </div>
@@ -734,4 +734,4 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
 )HTML";
 
 // Compile-time size constant (actual content length)
-static constexpr size_t NETWORK_HTML_GEN_SIZE = 33626;
+static constexpr size_t NETWORK_HTML_GEN_SIZE = 33722;

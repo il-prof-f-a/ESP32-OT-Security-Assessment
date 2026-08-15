@@ -743,7 +743,7 @@ std::vector<std::pair<std::string, std::string>> SecurityManager::listApiKeysMas
         // Mask the hash: show first 8 chars and last 4 chars
         std::string masked_hash;
         if (entry.hash.size() > 12) {
-            masked_hash = std::string(entry.hash.c_str(), 8) + "***"
+            masked_hash = std::string(entry.hash.c_str(), 8) + "***" +
                          std::string(entry.hash.c_str() + entry.hash.size() - 4, 4);
         } else {
             masked_hash = "***";

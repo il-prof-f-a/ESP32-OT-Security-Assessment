@@ -54,12 +54,13 @@ class PublicDocumentationTests(unittest.TestCase):
         self.assertTrue(license_text.startswith("# PolyForm Noncommercial License 1.0.0"))
         self.assertIn("Required Notice: Copyright 2026 Francesco Adriani.", license_text)
 
-    def test_readme_uses_native_esp_idf_for_the_p4_target(self):
+    def test_readme_documents_both_p4_build_paths(self):
         readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
 
         self.assertIn("idf.py -B", readme)
         self.assertIn("IDF_TARGET=esp32p4", readme)
-        self.assertNotIn("pio run -e waveshare-esp32p4-eth", readme)
+        self.assertIn("pio run -e waveshare-esp32p4-eth", readme)
+        self.assertIn("pioarduino/platform-espressif32", readme)
 
 
 if __name__ == "__main__":

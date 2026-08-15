@@ -2385,7 +2385,7 @@ bool OPCUAPlugin::testAnonymousConnection(const std::string& server_url) {
 
     // Check if anonymous login is allowed
     if (server_info.anonymous_login_allowed) {
-        std::string vuln_json = "{\"type\":\"opcua.anonymous.enabled\",\"server_url\":\""
+        std::string vuln_json = "{\"type\":\"opcua.anonymous.enabled\",\"server_url\":\"" +
                                server_url + "\",\"severity\":\"CRITICAL\"}";
         psram_string target_ps = PSRAMUtils::createPSRAMString(server_url.c_str());
         reportVulnerabilityPSRAM(

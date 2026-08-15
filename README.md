@@ -100,8 +100,8 @@ Image provenance and attribution are recorded in [docs/assets/hardware/SOURCES.m
 
 - Git with submodule support;
 - Python 3.10 or newer;
-- [PlatformIO Core](https://docs.platformio.org/en/latest/core/installation/index.html), or the PlatformIO extension for Visual Studio Code, for the ESP32 and ESP32-S3 targets;
-- [ESP-IDF 5.5](https://docs.espressif.com/projects/esp-idf/en/v5.5/esp32p4/get-started/index.html) for the ESP32-P4 target;
+- [PlatformIO Core](https://docs.platformio.org/en/latest/core/installation/index.html), or the PlatformIO extension for Visual Studio Code, for all three target environments;
+- [ESP-IDF 5.5](https://docs.espressif.com/projects/esp-idf/en/v5.5/esp32p4/get-started/index.html) is also supported for the ESP32-P4 native build path;
 - a USB data cable and the appropriate serial driver for the selected board.
 
 Clone recursively because `esp_littlefs` contains its own LittleFS submodule:
@@ -150,7 +150,7 @@ pio run -e esp32-s3-eth
 
 ## Build and flash
 
-Use PlatformIO for LILYGO T-POE Pro and Waveshare ESP32-S3-ETH:
+Use PlatformIO for all three boards:
 
 ```bash
 # LILYGO T-POE Pro (HTTP-only management in the current firmware)
@@ -158,9 +158,18 @@ pio run -e t-poe-pro
 
 # Waveshare ESP32-S3-ETH
 pio run -e esp32-s3-eth
+
+# Waveshare ESP32-P4-ETH
+pio run -e waveshare-esp32p4-eth
 ```
 
-The official PlatformIO Espressif 32 platform does not currently support ESP32-P4. Build the Waveshare ESP32-P4-ETH profile with native ESP-IDF 5.5 instead:
+The P4 environment pins the `pioarduino/platform-espressif32` fork to the
+hardware-tested revision and uses the local board definition plus the
+RISC-V toolchain compatibility script in `scripts/fix_esp32p4_toolchain_path.py`.
+The stock `espressif32@6.12.0` platform must not be substituted: it selects an
+Xtensa toolchain for `esp32p4`. A native ESP-IDF 5.5 build remains available as
+an alternative. This forked PlatformIO path is experimental and pinned to keep
+the build inputs reproducible while upstream ESP32-P4 support evolves:
 
 ```bash
 # Run this from an activated ESP-IDF 5.5 shell.
