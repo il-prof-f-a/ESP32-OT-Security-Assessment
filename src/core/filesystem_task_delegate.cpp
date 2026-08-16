@@ -304,7 +304,7 @@ void FilesystemTaskDelegate::processMessages() {
         // Check for file I/O requests first (higher priority)
         if (xQueueReceive(fileio_request_queue_, &fileio_req, 0) == pdTRUE) {
             // Process file I/O request
-            fileio_resp = FileIOResponse{};
+            memset(&fileio_resp, 0, sizeof(fileio_resp));
             fileio_resp.request_id = fileio_req.request_id;
             fileio_resp.result = OperationResult::FAILURE;
 

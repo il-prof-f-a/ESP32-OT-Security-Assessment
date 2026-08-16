@@ -780,7 +780,9 @@ void Engine::processNVSOperation(Operation* op) {
     }
 
     op->result->error = err;
-    if (err != ESP_OK) {
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        // Expected on first read of an unset key: not an error, keep logs clean.
+    } else if (err != ESP_OK) {
         failed_operations_++;
         if (!op->result->error_message) {
             op->result->error_message = allocate_psram_string(esp_err_to_name(err));

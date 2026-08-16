@@ -848,7 +848,8 @@ extern "C" void app_main(void) {
             LOG_INFOF(TAG, "WiFi STA: %s",
                      inet_ntoa(wifi_ip_info.ip));
             has_ip = true;
-            TimeManager::requestSyncForNetif(wifi_sta_netif, "WiFi STA initial");
+            // Time sync is triggered asynchronously via the IP_EVENT_STA_GOT_IP handler
+            // and processed non-blocking in the main loop (TimeManager::processPendingSync).
         }
     }
 

@@ -14,17 +14,18 @@ extern "C" {
 }
 
 // Static member definitions
-time_t TimeManager::base_time_ = 0;
-uint64_t TimeManager::base_millis_ = 0;
-bool TimeManager::synchronized_ = false;
-bool TimeManager::last_sync_success_ = false;
+volatile time_t TimeManager::base_time_ = 0;
+volatile uint64_t TimeManager::base_millis_ = 0;
+volatile bool TimeManager::synchronized_ = false;
+volatile bool TimeManager::last_sync_success_ = false;
 TimeManager::SyncMethod TimeManager::sync_method_ = SyncMethod::NTP;
 psram_string TimeManager::ntp_primary_;
 psram_string TimeManager::ntp_secondary_;
 psram_string TimeManager::ntp_tertiary_;
 psram_string TimeManager::http_time_url_;
 TimerHandle_t TimeManager::sync_timer_ = nullptr;
-volatile bool TimeManager::ntp_sync_done_ = false;
+bool TimeManager::sntp_initialized_ = false;
+volatile bool TimeManager::http_sync_in_progress_ = false;
 psram_string TimeManager::http_response_buffer_;
 ConfigurationManager* TimeManager::config_ctx_ = nullptr;
 WiFiManager* TimeManager::wifi_ctx_ = nullptr;
@@ -91,6 +92,14 @@ void TimeManager::notifyWiFiHasIP() {
 }
 
 void TimeManager::processPendingSync() {
+    // Log the first successful sync here (safe main-loop context). The NTP callback
+    // only updates state flags to avoid overflowing the lwIP tcpip thread stack.
+    static bool sync_completion_logged = false;
+    if (!sync_completion_logged && synchronized_) {
+        sync_completion_logged = true;
+        LOG_INFOF("TimeManager", "Time synchronized (timestamp: %ld)", static_cast<long>(getCurrentTime()));
+    }
+
     uint8_t triggers;
     portENTER_CRITICAL(&sync_spinlock_);
     triggers = pending_triggers_;
@@ -112,25 +121,13 @@ void TimeManager::processPendingSync() {
         if (!netifHasIPv4(target) && wifi_ctx_) {
             target = wifi_ctx_->sta();
         }
-
-        bool success = runTimeSyncOnNetif(target, "Periodic timer");
-        if (!success && config_ctx_) {
-            if (!synchronized_) {
-                success = TimeManager::initialize(config_ctx_->getNetworkConfig());
-            } else {
-                success = TimeManager::syncTime();
-            }
-
-            if (!success) {
-                LOG_WARNING("TimeManager", "Periodic timer sync fallback failed");
-            }
-        }
+        runTimeSyncOnNetif(target, "Periodic timer");
     }
 }
 
 void TimeManager::requestSyncForNetif(esp_netif_t* netif, const char* origin) {
     if (!runTimeSyncOnNetif(netif, origin)) {
-        LOG_WARNINGF("TimeManager", "Unable to synchronize time for interface (%s)", origin ? origin : "manual");
+        LOG_WARNINGF("TimeManager", "Unable to request time sync for interface (%s)", origin ? origin : "manual");
     }
 }
 
@@ -149,22 +146,17 @@ bool TimeManager::initialize(const NetworkConfig& config) {
         sync_method_ = SyncMethod::HTTP;
         http_time_url_ = config.http_time_sync.empty() ? PSRAMUtils::createPSRAMString("http://worldtimeapi.org/api/timezone/Europe/Rome") : config.http_time_sync;
         LOG_INFOF("TimeManager", "Using HTTP sync with URL: %s", http_time_url_.c_str());
+        startPeriodicSync();
     } else {
         LOG_ERRORF("TimeManager", "Invalid time_sync method: %s", config.time_sync.c_str());
         return false;
     }
 
-    if (!syncTime()) {
-        LOG_WARNING("TimeManager", "Initial time synchronization failed");
-        return false;
-    }
-
-    if (!periodic_timer_started_) {
-        startPeriodicSync();
-    }
+    // Non-blocking: the actual network sync runs asynchronously (SNTP task / HTTP worker).
+    bool ok = syncTime();
 
     LOG_INFO("TimeManager", "Time synchronization initialized successfully");
-    return true;
+    return ok;
 }
 
 void TimeManager::applyTimezone(const NetworkConfig& config) {
@@ -194,24 +186,64 @@ uint64_t TimeManager::getCurrentTimeMs() {
 }
 
 bool TimeManager::syncTime() {
-    LOG_INFO("TimeManager", "Starting time synchronization");
+    LOG_INFO("TimeManager", "Requesting time synchronization");
 
-    bool success = false;
     if (sync_method_ == SyncMethod::HTTP) {
-        success = syncViaHTTP(http_time_url_);
-    } else {
-        success = syncViaNTP(ntp_primary_, ntp_secondary_, ntp_tertiary_);
+        return triggerHttpSync();
     }
 
-    last_sync_success_ = success;
-    if (success) {
-        synchronized_ = true;
-        LOG_INFOF("TimeManager", "Time synchronized successfully via %s", (sync_method_ == SyncMethod::HTTP) ? "HTTP" : "NTP");
-    } else {
-        LOG_ERRORF("TimeManager", "Time synchronization failed via %s", (sync_method_ == SyncMethod::HTTP) ? "HTTP" : "NTP");
+    return triggerNtpSync();
+}
+
+bool TimeManager::configureSntpOnce() {
+    if (sntp_initialized_) {
+        return true;
     }
 
-    return success;
+    esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
+    esp_sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED);
+    esp_sntp_set_sync_interval(30UL * 60UL * 1000UL);
+    esp_sntp_set_time_sync_notification_cb(ntpSyncCallback);
+
+    esp_sntp_setservername(0, ntp_primary_.c_str());
+    if (!ntp_secondary_.empty()) {
+        esp_sntp_setservername(1, ntp_secondary_.c_str());
+    }
+    if (!ntp_tertiary_.empty()) {
+        esp_sntp_setservername(2, ntp_tertiary_.c_str());
+    }
+
+    // Starts an asynchronous sync; completion is signalled via ntpSyncCallback.
+    esp_sntp_init();
+    sntp_initialized_ = true;
+    LOG_INFO("TimeManager", "SNTP initialized (asynchronous sync started)");
+    return true;
+}
+
+bool TimeManager::triggerNtpSync() {
+    if (!sntp_initialized_) {
+        return configureSntpOnce();
+    }
+
+    // Re-arm SNTP to run an immediate sync without reconfiguring servers/mode.
+    if (!sntp_restart()) {
+        LOG_WARNING("TimeManager", "SNTP restart failed (SNTP not enabled)");
+        return false;
+    }
+    return true;
+}
+
+void TimeManager::ntpSyncCallback(struct timeval *tv) {
+    // IMPORTANT: runs in the lwIP tcpip thread (via sntp_recv), which has a small
+    // stack. Keep it minimal: only update state, never log/format here.
+    if (!tv || tv->tv_sec <= 0) {
+        return;
+    }
+
+    base_time_ = tv->tv_sec;
+    base_millis_ = esp_timer_get_time() / 1000ULL;
+    synchronized_ = true;
+    last_sync_success_ = true;
 }
 
 void TimeManager::startPeriodicSync() {
@@ -274,6 +306,9 @@ bool TimeManager::runTimeSyncOnNetif(esp_netif_t* netif, const char* origin) {
         LOG_WARNINGF("TimeManager", "Failed to set default netif (%s): %s", label, esp_err_to_name(set_res));
     }
 
+    last_synced_netif_ = netif;
+
+    // Non-blocking: request a sync (async) instead of waiting for completion here.
     bool success = false;
     if (!synchronized_) {
         success = TimeManager::initialize(config_ctx_->getNetworkConfig());
@@ -282,14 +317,43 @@ bool TimeManager::runTimeSyncOnNetif(esp_netif_t* netif, const char* origin) {
     }
 
     if (success) {
-        last_synced_netif_ = netif;
-        time_t current_time = TimeManager::getCurrentTime();
-        LOG_INFOF("TimeManager", "Time sync completed (%s): %s", label, ctime(&current_time));
+        LOG_INFOF("TimeManager", "Time sync requested (%s)", label);
     } else {
-        LOG_WARNINGF("TimeManager", "Time synchronization attempt failed (%s)", label);
+        LOG_WARNINGF("TimeManager", "Time synchronization request failed (%s)", label);
     }
 
     return success;
+}
+
+bool TimeManager::triggerHttpSync() {
+    if (http_sync_in_progress_) {
+        LOG_INFO("TimeManager", "HTTP time sync already in progress");
+        return true;
+    }
+
+    BaseType_t created = xTaskCreate(httpSyncTask, "http_time_sync", 8192, nullptr, 5, nullptr);
+    if (created != pdPASS) {
+        LOG_ERROR("TimeManager", "Failed to create HTTP time sync task");
+        return false;
+    }
+
+    http_sync_in_progress_ = true;
+    return true;
+}
+
+void TimeManager::httpSyncTask(void* arg) {
+    (void)arg;
+
+    bool success = syncViaHTTP(http_time_url_);
+    if (success) {
+        synchronized_ = true;
+        last_sync_success_ = true;
+    } else {
+        last_sync_success_ = false;
+    }
+
+    http_sync_in_progress_ = false;
+    vTaskDelete(nullptr);
 }
 
 bool TimeManager::syncViaHTTP(const psram_string& url) {
@@ -373,47 +437,6 @@ bool TimeManager::syncViaHTTP(const psram_string& url) {
     return false;
 }
 
-bool TimeManager::syncViaNTP(const psram_string& primary, const psram_string& secondary, const psram_string& tertiary) {
-    LOG_INFOF("TimeManager", "Attempting NTP sync with servers: %s, %s, %s", primary.c_str(), secondary.c_str(), tertiary.c_str());
-
-    esp_sntp_stop();
-    esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
-    esp_sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED);
-    esp_sntp_set_sync_interval(30UL * 60UL * 1000UL);
-    esp_sntp_set_time_sync_notification_cb(ntpSyncCallback);
-
-    esp_sntp_setservername(0, primary.c_str());
-    if (!secondary.empty()) {
-        esp_sntp_setservername(1, secondary.c_str());
-    }
-    if (!tertiary.empty()) {
-        esp_sntp_setservername(2, tertiary.c_str());
-    }
-
-    ntp_sync_done_ = false;
-    esp_sntp_init();
-
-    const int max_wait_ms = 30000;
-    const int check_interval_ms = 1000;
-    int elapsed = 0;
-
-    while (!ntp_sync_done_ && elapsed < max_wait_ms) {
-        vTaskDelay(pdMS_TO_TICKS(check_interval_ms));
-        elapsed += check_interval_ms;
-
-        sntp_sync_status_t status = esp_sntp_get_sync_status();
-        LOG_INFOF("TimeManager", "NTP sync progress: %d seconds, status: %d", elapsed / 1000, (int)status);
-    }
-
-    if (!ntp_sync_done_) {
-        LOG_ERRORF("TimeManager", "NTP synchronization timeout after %d seconds", max_wait_ms / 1000);
-        return false;
-    }
-
-    time_t now = time(nullptr);
-    return setSystemTime(now);
-}
-
 esp_err_t TimeManager::httpEventHandler(esp_http_client_event_t *evt) {
     if (evt->event_id == HTTP_EVENT_ON_DATA && evt->data_len > 0) {
         http_response_buffer_.append(static_cast<const char*>(evt->data), evt->data_len);
@@ -424,18 +447,13 @@ esp_err_t TimeManager::httpEventHandler(esp_http_client_event_t *evt) {
     return ESP_OK;
 }
 
-void TimeManager::ntpSyncCallback(struct timeval *tv) {
-    (void)tv;
-    ntp_sync_done_ = true;
-}
-
 void TimeManager::periodicSyncCallback(TimerHandle_t) {
     markSyncPending(SYNC_TRIGGER_PERIODIC);
 }
 
 bool TimeManager::setSystemTime(time_t timestamp) {
     if (timestamp <= 0) {
-        LOG_ERRORF("TimeManager", "Invalid timestamp: %ld", timestamp);
+        LOG_ERRORF("TimeManager", "Invalid timestamp: %ld", static_cast<long>(timestamp));
         return false;
     }
 
@@ -456,7 +474,7 @@ bool TimeManager::setSystemTime(time_t timestamp) {
     char time_str[64];
     strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", &timeinfo);
 
-    LOG_INFOF("TimeManager", "System time set to: %s (timestamp: %ld)", time_str, timestamp);
+    LOG_INFOF("TimeManager", "System time set to: %s (timestamp: %ld)", time_str, static_cast<long>(timestamp));
     return true;
 }
 

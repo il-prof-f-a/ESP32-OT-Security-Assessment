@@ -42,8 +42,11 @@ public:
 
 private:
     static void applyTimezone(const NetworkConfig& config);
+    static bool configureSntpOnce();
+    static bool triggerNtpSync();
+    static bool triggerHttpSync();
+    static void httpSyncTask(void* arg);
     static bool syncViaHTTP(const psram_string& url);
-    static bool syncViaNTP(const psram_string& primary, const psram_string& secondary, const psram_string& tertiary);
     static esp_err_t httpEventHandler(esp_http_client_event_t *evt);
     static void ntpSyncCallback(struct timeval *tv);
     static void periodicSyncCallback(TimerHandle_t xTimer);
@@ -61,17 +64,18 @@ private:
     static bool netifHasIPv4(esp_netif_t* netif);
     static void handleWiFiEvent(void* arg, esp_event_base_t base, int32_t id, void* event_data);
 
-    static time_t base_time_;
-    static uint64_t base_millis_;
-    static bool synchronized_;
-    static bool last_sync_success_;
+    static volatile time_t base_time_;
+    static volatile uint64_t base_millis_;
+    static volatile bool synchronized_;
+    static volatile bool last_sync_success_;
     static SyncMethod sync_method_;
     static psram_string ntp_primary_;
     static psram_string ntp_secondary_;
     static psram_string ntp_tertiary_;
     static psram_string http_time_url_;
     static TimerHandle_t sync_timer_;
-    static volatile bool ntp_sync_done_;
+    static bool sntp_initialized_;
+    static volatile bool http_sync_in_progress_;
     static psram_string http_response_buffer_;
 
     static ConfigurationManager* config_ctx_;

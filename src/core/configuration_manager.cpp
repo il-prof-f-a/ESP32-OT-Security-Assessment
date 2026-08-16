@@ -263,7 +263,13 @@ bool ConfigurationManager::saveConfigJSON(const psram_string& json_ps) {
 
 
 
-    AsyncStorage::Global::nvsSet(kNVS_NAMESPACE, "config_json", json_ps);
+    // NVS has a ~4 KB limit per value; the full config JSON (~6 KB) exceeds it, so the
+    // redundant full-JSON NVS copy always fails with ESP_ERR_NVS_VALUE_TOO_LONG. The
+    // authoritative copy lives on the filesystem with a CRC in NVS, so only mirror small
+    // configs into NVS and skip the copy for large ones.
+    if (json_ps.size() <= 3500) {
+        AsyncStorage::Global::nvsSet(kNVS_NAMESPACE, "config_json", json_ps);
+    }
 
     saveConfigSourceToNVS(ConfigSource::WEB_INTERFACE);
 
