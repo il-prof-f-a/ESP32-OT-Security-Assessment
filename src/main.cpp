@@ -440,6 +440,11 @@ extern "C" void app_main(void) {
 
     // WATCHDOG CONFIGURATION - Now that config is loaded, configure watchdog
     WatchdogConfig wdt_cfg = cfg.getWatchdogConfig();
+    // Enforce a minimum timeout: the main loop feeds the watchdog every 10 s, so a
+    // timeout below 60 s leaves almost no margin and caused spurious TWDT triggers.
+    if (wdt_cfg.timeout_seconds < 60) {
+        wdt_cfg.timeout_seconds = 60;
+    }
     if (wdt_cfg.enabled) {
         LOG_INFOF(TAG, "Configuring Task Watchdog from config: timeout=%lus, panic=%s, idle_cores=%s",
                  (unsigned long)wdt_cfg.timeout_seconds,
@@ -1051,8 +1056,8 @@ extern "C" void app_main(void) {
         }
 
 
-        // WATCHDOG HEARTBEAT - Reset watchdog every 30 seconds if enabled
-        if (wdt_cfg.enabled && now - last_watchdog_reset >= 30) {
+        // WATCHDOG HEARTBEAT - Reset watchdog every 10 seconds if enabled
+        if (wdt_cfg.enabled && now - last_watchdog_reset >= 10) {
             esp_task_wdt_reset(); // Reset watchdog timer
             last_watchdog_reset = now;
         }
