@@ -74,6 +74,13 @@ class BuildIntegrationTests(unittest.TestCase):
             script.rindex("_fix_riscv_toolchain_layout()"),
         )
 
+    def test_p4_profile_selects_the_pre_v3_silicon_family(self):
+        defaults = (PROJECT_ROOT / "sdkconfig.esp32p4.defaults").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y", defaults)
+
     def test_network_presence_tracker_keeps_required_arithmetic_operators(self):
         source = (PROJECT_ROOT / "src/assessment/network_presence_tracker.cpp").read_text(
             encoding="utf-8"

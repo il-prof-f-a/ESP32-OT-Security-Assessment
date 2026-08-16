@@ -212,6 +212,7 @@ def _patch_missing_idf_package_dirs():
     fallback_packages_dir = os.path.join(project_core_dir, "packages")
     tools_dir = os.path.join(project_core_dir, "tools")
     fallback_names = {
+        "toolchain-riscv32-esp",
         "tool-cmake",
         "tool-ninja",
         "tool-esp-rom-elfs",
@@ -298,6 +299,5 @@ def _patch_missing_idf_package_dirs():
     platform_cls._pkgdir_fallback_patch_applied = True
 
 
-_fix_riscv_toolchain_layout()
 _patch_missing_idf_package_dirs()
-
+_fix_riscv_toolchain_layout()

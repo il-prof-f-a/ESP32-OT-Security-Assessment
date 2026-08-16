@@ -216,6 +216,13 @@ Xtensa toolchain for `esp32p4`. A native ESP-IDF 5.5 build remains available as
 an alternative. This forked PlatformIO path is experimental and pinned to keep
 the build inputs reproducible while upstream ESP32-P4 support evolves:
 
+The Waveshare ESP32-P4-ETH profile explicitly selects the board's pre-v3
+ESP32-P4 silicon family (`CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y`). Do not reuse
+this profile for a v3.x ESP32-P4 board; choose the matching ESP-IDF revision
+overlay instead. If you change the revision profile locally, remove the
+generated `sdkconfig.waveshare-esp32p4-eth` file before rebuilding so PlatformIO
+can regenerate it from the selected defaults.
+
 ```bash
 # Run this from an activated ESP-IDF 5.5 shell.
 idf.py -B build-esp32p4 -D IDF_TARGET=esp32p4 build
