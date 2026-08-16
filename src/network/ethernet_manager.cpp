@@ -505,7 +505,30 @@ bool EthernetManager::setupMAC_PHY(esp_eth_mac_t** out_mac, esp_eth_phy_t** out_
     *out_phy = esp_eth_phy_new_w5500(&phy_cfg);
 
 #else
+#if CONFIG_IDF_TARGET_ESP32P4
+    // ESP-IDF 5.5.3 added mdc_freq_hz at the end of this struct, but the
+    // P4 version of ETH_ESP32_EMAC_DEFAULT_CONFIG() still initializes it
+    // before emac_dataif_gpio. C++ rejects that designated-initializer order.
+    // Initialize the struct in declaration order instead of using the macro.
+    eth_esp32_emac_config_t emac_cfg = {};
+    emac_cfg.interface = EMAC_DATA_INTERFACE_RMII;
+    emac_cfg.dma_burst_len = ETH_DMA_BURST_LEN_32;
+    emac_cfg.intr_priority = 0;
+#if SOC_EMAC_USE_MULTI_IO_MUX || SOC_EMAC_MII_USE_GPIO_MATRIX
+    emac_cfg.emac_dataif_gpio.rmii.tx_en_num = ETH_RMII_TX_EN_GPIO;
+    emac_cfg.emac_dataif_gpio.rmii.txd0_num = ETH_RMII_TXD0_GPIO;
+    emac_cfg.emac_dataif_gpio.rmii.txd1_num = ETH_RMII_TXD1_GPIO;
+    emac_cfg.emac_dataif_gpio.rmii.crs_dv_num = ETH_RMII_CRS_DV_GPIO;
+    emac_cfg.emac_dataif_gpio.rmii.rxd0_num = ETH_RMII_RXD0_GPIO;
+    emac_cfg.emac_dataif_gpio.rmii.rxd1_num = ETH_RMII_RXD1_GPIO;
+#endif
+#if !SOC_EMAC_RMII_CLK_OUT_INTERNAL_LOOPBACK
+    emac_cfg.clock_config_out_in.rmii.clock_mode = EMAC_CLK_EXT_IN;
+    emac_cfg.clock_config_out_in.rmii.clock_gpio = (emac_rmii_clock_gpio_t)-1;
+#endif
+#else
     eth_esp32_emac_config_t emac_cfg = ETH_ESP32_EMAC_DEFAULT_CONFIG();
+#endif
     emac_cfg.smi_gpio.mdc_num  = (gpio_num_t)ETH_MDC_GPIO;
     emac_cfg.smi_gpio.mdio_num = (gpio_num_t)ETH_MDIO_GPIO;
 

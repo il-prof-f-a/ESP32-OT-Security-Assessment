@@ -53,6 +53,27 @@ class BuildIntegrationTests(unittest.TestCase):
         self.assertIn("espidf", board["frameworks"])
         self.assertEqual(board["vendor"], "Waveshare")
 
+    def test_p4_emac_configuration_does_not_use_broken_designated_initializer_macro(self):
+        source = (PROJECT_ROOT / "src/network/ethernet_manager.cpp").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("#if CONFIG_IDF_TARGET_ESP32P4", source)
+        self.assertIn("eth_esp32_emac_config_t emac_cfg = {};", source)
+        self.assertIn("emac_cfg.emac_dataif_gpio.rmii.tx_en_num", source)
+        self.assertIn("emac_cfg.clock_config_out_in.rmii.clock_mode", source)
+
+    def test_p4_toolchain_fallback_is_installed_before_lookup(self):
+        script = (PROJECT_ROOT / "scripts/fix_esp32p4_toolchain_path.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('"toolchain-riscv32-esp"', script)
+        self.assertLess(
+            script.rindex("_patch_missing_idf_package_dirs()"),
+            script.rindex("_fix_riscv_toolchain_layout()"),
+        )
+
     def test_network_presence_tracker_keeps_required_arithmetic_operators(self):
         source = (PROJECT_ROOT / "src/assessment/network_presence_tracker.cpp").read_text(
             encoding="utf-8"

@@ -100,7 +100,8 @@ Image provenance and attribution are recorded in [docs/assets/hardware/SOURCES.m
 
 - Git with submodule support;
 - Python 3.10 or newer;
-- [PlatformIO Core](https://docs.platformio.org/en/latest/core/installation/index.html), or the PlatformIO extension for Visual Studio Code, for all three target environments;
+- the repository setup script, which creates a local `.venv` and installs PlatformIO Core plus esptool;
+- the [PlatformIO extension for Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=platformio.platformio-ide) for the graphical workflow;
 - [ESP-IDF 5.5](https://docs.espressif.com/projects/esp-idf/en/v5.5/esp32p4/get-started/index.html) is also supported for the ESP32-P4 native build path;
 - a USB data cable and the appropriate serial driver for the selected board.
 
@@ -116,6 +117,50 @@ If the repository was cloned without submodules, repair it with:
 ```bash
 git submodule update --init --recursive
 ```
+
+## Quick installation
+
+The setup scripts install all project-local host dependencies into `.venv`,
+initialize the `esp_littlefs` submodule, and leave the system Python packages
+untouched. Python and Git themselves must already be installed. PlatformIO
+downloads the Espressif frameworks and toolchains during the first build, so
+that build can take several minutes.
+
+On Windows PowerShell:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\setup_platformio.ps1
+# Optional: install the VS Code PlatformIO extension as well.
+.\scripts\setup_platformio.ps1 -InstallVsCodeExtension
+```
+
+On Linux or macOS:
+
+```bash
+chmod +x scripts/*.sh
+./scripts/setup_platformio.sh
+# Optional VS Code extension installation.
+INSTALL_VSCODE_EXTENSION=1 ./scripts/setup_platformio.sh
+```
+
+For command-line work, activate the local environment (or call its Python
+executable explicitly):
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+```bash
+source .venv/bin/activate
+```
+
+Open the `ESP32-OT-Security-Assessment` folder in VS Code after setup. Select
+the local `.venv` interpreter if prompted, then use **PlatformIO: Build**,
+**PlatformIO: Upload**, and **PlatformIO: Monitor**. The PlatformIO task tree
+shows `t-poe-pro`, `esp32-s3-eth`, and `waveshare-esp32p4-eth`; no serial port is
+hard-coded in the repository, so select the connected COM/TTY port in the
+PlatformIO device picker.
 
 ## Automatic credential provisioning
 
@@ -187,11 +232,85 @@ See PlatformIO's [open ESP32-P4 support request](https://github.com/platformio/p
 Connect the board, then let PlatformIO detect the serial port or provide it explicitly:
 
 ```bash
+pio run -e t-poe-pro -t upload --upload-port COM10
 pio run -e esp32-s3-eth -t upload --upload-port COM10
 pio device monitor --port COM10 --baud 115200
 ```
 
 On Linux, a port typically resembles `/dev/ttyUSB0` or `/dev/ttyACM0`.
+
+### One-command build, flash, and monitor wrappers
+
+The wrappers use `.venv` automatically when it exists and accept the target and
+serial port explicitly. Build only:
+
+```powershell
+.\scripts\build_flash.ps1 -Target t-poe-pro
+```
+
+Build, flash, and then attach the serial monitor on Windows:
+
+```powershell
+.\scripts\build_flash.ps1 -Target t-poe-pro -Port COM10 -Upload -Monitor
+```
+
+The equivalent POSIX command is:
+
+```bash
+./scripts/build_flash.sh --target t-poe-pro --port /dev/ttyUSB0 --upload --monitor
+```
+
+Use `--no-build` (or `-NoBuild`) only when the selected build artifacts already
+exist. The wrapper does not guess a port and refuses upload/monitor operations
+without one.
+
+### Explicit esptool workflow
+
+The Python helper builds the selected PlatformIO environment and then invokes
+esptool. This is useful in CI or when the PlatformIO graphical upload task is
+not available:
+
+```bash
+python scripts/flash_esptool.py --target t-poe-pro --port COM10
+```
+
+To flash artifacts from a build that has already completed:
+
+```bash
+python scripts/flash_esptool.py --target t-poe-pro --port COM10 --no-build
+```
+
+The helper uses the target-specific esptool chip (`esp32`, `esp32s3`, or
+`esp32p4`) and the partition table in `partitions.csv`. The current layout is:
+
+| Image | Flash offset |
+|---|---:|
+| Bootloader | `0x1000` |
+| Partition table | `0x8000` |
+| Factory application (`firmware.bin`) | `0x200000` |
+
+For a fully explicit command, first build the target and replace `BUILD_DIR`
+with the resulting PlatformIO directory:
+
+```bash
+python -m esptool --chip esp32 --port COM10 --baud 921600 write-flash \
+  --flash-mode dio --flash-freq 40m --flash-size detect \
+  0x1000 "BUILD_DIR/bootloader.bin" \
+  0x8000 "BUILD_DIR/partitions.bin" \
+  0x200000 "BUILD_DIR/firmware.bin"
+```
+
+On Windows the default build directory is usually
+`%USERPROFILE%\\.platformio\\build\\ESP32-OT-Security-Assessment\\t-poe-pro`;
+on Linux/macOS it is normally
+`~/.platformio/build/ESP32-OT-Security-Assessment/t-poe-pro`. Use `esp32s3`
+for `esp32-s3-eth` and `esp32p4` for `waveshare-esp32p4-eth`.
+
+If the board does not appear, use a USB **data** cable and enter bootloader mode
+(hold **BOOT**, press and release **RESET**, then release **BOOT**) before
+retrying. Install the board's USB/UART driver if no COM/TTY device is visible.
+The default esptool reset sequence returns the board to the application after a
+successful write; do not interrupt power while the flash is in progress.
 
 ## Testing
 

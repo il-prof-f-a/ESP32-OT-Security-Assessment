@@ -95,6 +95,24 @@ class NetworkEngine;
   #ifndef ETH_PHY_TYPE
     #define ETH_PHY_TYPE            101  // 8720=LAN8720, 101=IP101, 83848=DP83848, 8201=RTL8201
   #endif
+  #ifndef ETH_RMII_TX_EN_GPIO
+    #define ETH_RMII_TX_EN_GPIO      49
+  #endif
+  #ifndef ETH_RMII_TXD0_GPIO
+    #define ETH_RMII_TXD0_GPIO       34
+  #endif
+  #ifndef ETH_RMII_TXD1_GPIO
+    #define ETH_RMII_TXD1_GPIO       35
+  #endif
+  #ifndef ETH_RMII_CRS_DV_GPIO
+    #define ETH_RMII_CRS_DV_GPIO     28
+  #endif
+  #ifndef ETH_RMII_RXD0_GPIO
+    #define ETH_RMII_RXD0_GPIO       29
+  #endif
+  #ifndef ETH_RMII_RXD1_GPIO
+    #define ETH_RMII_RXD1_GPIO       30
+  #endif
 
 #elif defined(BOARD_TPOE_PRO)
   // LilyGO T-POE Pro (ESP32 internal EMAC + LAN8720)

@@ -62,6 +62,34 @@ class PublicDocumentationTests(unittest.TestCase):
         self.assertIn("pio run -e waveshare-esp32p4-eth", readme)
         self.assertIn("pioarduino/platform-espressif32", readme)
 
+    def test_readme_documents_installation_and_flash_workflows(self):
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+
+        for fragment in (
+            "setup_platformio.ps1",
+            "setup_platformio.sh",
+            "build_flash.ps1",
+            "build_flash.sh",
+            "pio run -e t-poe-pro -t upload --upload-port COM10",
+            "pio device monitor --port COM10 --baud 115200",
+            "python scripts/flash_esptool.py --target t-poe-pro --port COM10",
+            "0x1000",
+            "0x8000",
+            "0x200000",
+            "bootloader mode",
+        ):
+            self.assertIn(fragment, readme)
+
+    def test_onboarding_scripts_are_present(self):
+        for name in (
+            "setup_platformio.ps1",
+            "setup_platformio.sh",
+            "build_flash.ps1",
+            "build_flash.sh",
+            "flash_esptool.py",
+        ):
+            self.assertTrue((PROJECT_ROOT / "scripts" / name).is_file(), name)
+
 
 if __name__ == "__main__":
     unittest.main()
