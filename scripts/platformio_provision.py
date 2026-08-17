@@ -13,6 +13,8 @@ if str(scripts_dir) not in sys.path:
 from credential_provisioning import provision
 
 
-result = provision(project_dir, Path(env.subst("$BUILD_DIR")))  # type: ignore[name-defined]
+result = provision(
+    project_dir, Path(env.subst("$BUILD_DIR")), board=env.subst("$PIOENV")
+)  # type: ignore[name-defined]
 env.Append(CPPPATH=[str(result.header_path.parent)])  # type: ignore[name-defined]
 print(f"Credential provisioning ready: {result.credentials_dir}")

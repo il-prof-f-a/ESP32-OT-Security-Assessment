@@ -319,6 +319,62 @@ def _default_config(admin_password: str) -> dict:
     }
 
 
+def _board_config_candidates(config_dir: Path, board: str | None) -> list[Path]:
+    """Return config candidates in priority order: per-board, then shared."""
+    candidates = [config_dir / "config.json"]
+    if board:
+        candidates.insert(0, config_dir / f"config.{board}.json")
+    return candidates
+
+
+def _read_config_preserving_admin(path: Path, admin_password: str) -> bytes:
+    """Read an existing config verbatim, injecting the admin credential if absent."""
+    raw = path.read_bytes()
+    try:
+        config = json.loads(raw.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ValueError(f"Config file is not valid JSON: {path}") from exc
+    if not isinstance(config, dict):
+        raise ValueError(f"Config file must contain a JSON object: {path}")
+
+    security = config.get("security")
+    if not isinstance(security, dict):
+        security = {}
+        config["security"] = security
+    if not security.get("admin_password") and not security.get("admin_password_hash"):
+        security["admin_password"] = admin_password
+        raw = _json_bytes(config)
+        _atomic_write(path, raw)
+    return raw
+
+
+def _load_or_create_config(
+    config_dir: Path, board: str | None, admin_password: str
+) -> tuple[Path, bytes]:
+    """Return (path, bytes) of the runtime configuration to embed.
+
+    credentials/config.<board>.json is the per-board reference configuration
+    and credentials/config.json is the shared fallback. The first existing
+    candidate is used verbatim, so manual edits (for example a static Ethernet
+    address, or switching to DHCP) survive every subsequent build. Only when
+    no candidate exists is a conservative default generated into the
+    board-specific file (or the shared file when no board is set).
+
+    The administrator credential is always guaranteed: an existing file lacking
+    both security.admin_password and security.admin_password_hash gets the
+    manifest password injected.
+    """
+    candidates = _board_config_candidates(config_dir, board)
+    for path in candidates:
+        if path.is_file():
+            return path, _read_config_preserving_admin(path, admin_password)
+
+    path = candidates[0]
+    config = _json_bytes(_default_config(admin_password))
+    _atomic_write(path, config)
+    return path, config
+
+
 def _der_length(length: int) -> bytes:
     if length < 0x80:
         return bytes([length])
@@ -511,6 +567,7 @@ def provision(
     project_dir: Path | str,
     build_dir: Path | str,
     environ: Mapping[str, str] | None = None,
+    board: str | None = None,
 ) -> ProvisioningResult:
     project = Path(project_dir).resolve()
     build = Path(build_dir).resolve()
@@ -520,14 +577,14 @@ def provision(
         os.chmod(credentials, 0o700)
 
     manifest_path = credentials / "credentials.json"
-    config_path = credentials / "config.json"
     certificate_path = credentials / "server.crt"
     private_key_path = credentials / "server.key"
     header_path = build / "generated" / "esp32_ot_generated_credentials.h"
 
     manifest = _load_or_create_manifest(manifest_path)
-    config = _json_bytes(_default_config(manifest["admin"]["password"]))
-    _atomic_write(config_path, config)
+    config_path, config = _load_or_create_config(
+        credentials, board, manifest["admin"]["password"]
+    )
 
     if not certificate_path.is_file() or not private_key_path.is_file():
         certificate, private_key = _generate_self_signed_certificate(
@@ -558,11 +615,17 @@ def main() -> int:
     parser.add_argument("--project-dir", type=Path, default=Path.cwd())
     parser.add_argument("--build-dir", type=Path, required=True)
     parser.add_argument("--credentials-dir", type=Path)
+    parser.add_argument("--board", type=str, default=None)
     arguments = parser.parse_args()
     environment = dict(os.environ)
     if arguments.credentials_dir:
         environment[ENV_CREDENTIALS_DIR] = str(arguments.credentials_dir)
-    result = provision(arguments.project_dir, arguments.build_dir, environment)
+    result = provision(
+        arguments.project_dir,
+        arguments.build_dir,
+        environment,
+        board=arguments.board or None,
+    )
     print(f"Credential material ready in {result.credentials_dir}")
     print(f"Generated build header: {result.header_path}")
     return 0

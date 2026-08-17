@@ -46,11 +46,27 @@ if(NOT DEFINED PYTHON OR "${PYTHON}" STREQUAL "")
 endif()
 
 set(ESP32_OT_GENERATED_INCLUDE_DIR "${CMAKE_BINARY_DIR}/generated")
+
+# Resolve a board key for per-board configuration, mirroring the PlatformIO
+# environment name so both build paths share the same config file.
+if(NOT "${_PIO_ENV}" STREQUAL "")
+  set(_BOARD "${_PIO_ENV}")
+elseif("${_IDF_TGT}" STREQUAL "esp32")
+  set(_BOARD "t-poe-pro")
+elseif("${_IDF_TGT}" STREQUAL "esp32s3")
+  set(_BOARD "esp32-s3-eth")
+elseif("${_IDF_TGT}" STREQUAL "esp32p4")
+  set(_BOARD "waveshare-esp32p4-eth")
+else()
+  set(_BOARD "")
+endif()
+
 execute_process(
   COMMAND "${PYTHON}"
           "${CMAKE_SOURCE_DIR}/scripts/credential_provisioning.py"
           --project-dir "${CMAKE_SOURCE_DIR}"
           --build-dir "${CMAKE_BINARY_DIR}"
+          --board "${_BOARD}"
   RESULT_VARIABLE _ESP32_OT_PROVISION_RESULT
   OUTPUT_VARIABLE _ESP32_OT_PROVISION_OUTPUT
   ERROR_VARIABLE _ESP32_OT_PROVISION_ERROR

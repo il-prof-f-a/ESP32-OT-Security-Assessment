@@ -125,6 +125,88 @@ class CredentialProvisioningTests(unittest.TestCase):
         ):
             self.assertEqual(path.read_bytes(), snapshots[path.name])
 
+    def test_existing_config_is_preserved_and_used_as_reference(self):
+        first = provision(self.project, self.build, self.environment)
+
+        edited = json.loads(first.config_path.read_text(encoding="utf-8"))
+        edited["network"]["ethernet"]["dhcp"] = False
+        edited["network"]["ethernet"]["ip"] = "192.168.1.50"
+        edited["network"]["ethernet"]["gateway"] = "192.168.1.1"
+        edited["network"]["ethernet"]["netmask"] = "255.255.255.0"
+        first.config_path.write_text(json.dumps(edited, indent=2) + "\n", encoding="utf-8")
+
+        second = provision(self.project, self.build, self.environment)
+
+        reloaded = json.loads(second.config_path.read_text(encoding="utf-8"))
+        self.assertFalse(reloaded["network"]["ethernet"]["dhcp"])
+        self.assertEqual(reloaded["network"]["ethernet"]["ip"], "192.168.1.50")
+        self.assertEqual(reloaded["network"]["ethernet"]["gateway"], "192.168.1.1")
+        self.assertEqual(reloaded["network"]["ethernet"]["netmask"], "255.255.255.0")
+
+        header = second.header_path.read_text(encoding="utf-8")
+        self.assertIn("192.168.1.50", header)
+
+    def test_existing_config_without_admin_credential_gets_manifest_password(self):
+        first = provision(self.project, self.build, self.environment)
+        manifest = json.loads(first.manifest_path.read_text(encoding="utf-8"))
+
+        edited = json.loads(first.config_path.read_text(encoding="utf-8"))
+        del edited["security"]["admin_password"]
+        first.config_path.write_text(json.dumps(edited, indent=2) + "\n", encoding="utf-8")
+
+        second = provision(self.project, self.build, self.environment)
+
+        reloaded = json.loads(second.config_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            reloaded["security"]["admin_password"], manifest["admin"]["password"]
+        )
+
+    def test_board_specific_config_is_preferred_over_shared(self):
+        first = provision(self.project, self.build, self.environment)
+
+        shared = json.loads(first.config_path.read_text(encoding="utf-8"))
+        shared["network"]["ethernet"]["ip"] = "192.168.9.1"
+        first.config_path.write_text(json.dumps(shared, indent=2) + "\n", encoding="utf-8")
+
+        board_path = self.credentials / "config.t-poe-pro.json"
+        board = json.loads(first.config_path.read_text(encoding="utf-8"))
+        board["network"]["ethernet"]["ip"] = "192.168.1.50"
+        board_path.write_text(json.dumps(board, indent=2) + "\n", encoding="utf-8")
+
+        result = provision(
+            self.project, self.build, self.environment, board="t-poe-pro"
+        )
+
+        self.assertEqual(result.config_path, board_path)
+        embedded = json.loads(result.config_path.read_text(encoding="utf-8"))
+        self.assertEqual(embedded["network"]["ethernet"]["ip"], "192.168.1.50")
+
+    def test_missing_board_config_falls_back_to_shared(self):
+        first = provision(self.project, self.build, self.environment)
+
+        shared = json.loads(first.config_path.read_text(encoding="utf-8"))
+        shared["network"]["ethernet"]["ip"] = "192.168.9.1"
+        first.config_path.write_text(json.dumps(shared, indent=2) + "\n", encoding="utf-8")
+
+        result = provision(
+            self.project, self.build, self.environment, board="esp32-s3-eth"
+        )
+
+        self.assertEqual(result.config_path, first.config_path)
+        embedded = json.loads(result.config_path.read_text(encoding="utf-8"))
+        self.assertEqual(embedded["network"]["ethernet"]["ip"], "192.168.9.1")
+
+    def test_missing_both_generates_board_specific_config(self):
+        board = "waveshare-esp32p4-eth"
+        board_path = self.credentials / f"config.{board}.json"
+
+        result = provision(self.project, self.build, self.environment, board=board)
+
+        self.assertEqual(result.config_path, board_path)
+        self.assertTrue(board_path.is_file())
+        config = json.loads(board_path.read_text(encoding="utf-8"))
+        self.assertEqual(config["network"]["ethernet"]["dhcp"], True)
+
     def test_partial_tls_state_is_repaired_without_rotating_passwords(self):
         first = provision(self.project, self.build, self.environment)
         manifest_before = first.manifest_path.read_bytes()

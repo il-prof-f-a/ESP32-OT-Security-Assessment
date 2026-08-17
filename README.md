@@ -175,11 +175,64 @@ The credential directory is selected in this order:
 The generated directory contains:
 
 - `credentials.json` — generated administrator and provisioning-AP credentials;
-- `config.json` — conservative initial runtime configuration;
+- `config.<board>.json` — per-board reference configuration, with `config.json` as the shared fallback;
 - `server.crt` — self-signed server certificate;
 - `server.key` — matching private key.
 
 These paths are ignored by Git. Back them up securely if the deployed device must keep the same identity. Deleting them intentionally causes the next build to create a new credential set. Do not paste their contents into issues, logs, screenshots, or commits.
+
+### Reference configuration
+
+Each board has its own reference configuration. At build time the configuration
+embedded into the firmware is resolved in this order:
+
+1. `credentials/config.<board>.json` — the board-specific file, used verbatim
+   when present;
+2. `credentials/config.json` — the shared fallback;
+3. neither — a conservative default (all external integrations disabled, DHCP
+   enabled on Ethernet) is generated into the board-specific file.
+
+| Board | Config file |
+| --- | --- |
+| LILYGO T-POE Pro | `credentials/config.t-poe-pro.json` |
+| Waveshare ESP32-S3-ETH | `credentials/config.esp32-s3-eth.json` |
+| Waveshare ESP32-P4-ETH | `credentials/config.waveshare-esp32p4-eth.json` |
+
+The board key is the PlatformIO environment name (`t-poe-pro`, `esp32-s3-eth`,
+`waveshare-esp32p4-eth`); the native `idf.py` path maps the ESP-IDF target to
+the same name, so both build paths share one file per board. A file is read
+**verbatim** on every later build, so manual edits survive rebuilds. Use it to
+set the network profile without the web UI:
+
+```json
+{
+  "network": {
+    "ethernet": {
+      "enabled": true,
+      "dhcp": false,
+      "ip": "192.168.1.50",
+      "gateway": "192.168.1.1",
+      "netmask": "255.255.255.0"
+    }
+  }
+}
+```
+
+The administrator password lives in `credentials.json` and is injected into the
+config when it is generated, or into an existing config that has no
+administrator credential. The config is compiled into the firmware as the
+embedded default via the generated header `esp32_ot_generated_credentials.h`.
+
+At runtime the effective configuration is resolved in this priority order:
+
+1. `/data/config/config.json` on the device filesystem (web UI writes go here);
+2. the embedded default (the board-specific file above);
+3. the backup copy `/data/config/config.json.bak`.
+
+The firmware validates only a small boot-critical subset (debug level, security
+boot flags, and Ethernet/Wi-Fi `enabled` and `dhcp`). Missing optional fields
+fall back to compiled-in defaults, and missing protocol fields are re-injected
+and persisted automatically, so a partial hand-edited config remains usable.
 
 To keep credentials outside the checkout:
 
