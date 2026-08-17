@@ -175,7 +175,7 @@ extern "C" void app_main(void) {
         }
     }
 
-    LOG_INFO(TAG, "Boot T-POE Pro - Security System");
+    LOG_INFO(TAG, "Boot ESP32-OT-Security-Assessment - Security System");
 
     // RESET REASON MONITORING - Detect crashes and abnormal restarts
     esp_reset_reason_t reset_reason = esp_reset_reason();
