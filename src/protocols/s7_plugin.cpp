@@ -606,9 +606,9 @@ bool S7Plugin::activeScanJSON(const std::string& target,
     const uint64_t t0_ms = (uint64_t)(esp_timer_get_time() / 1000ULL);
 
     // Try common TSAP combinations.
-    // Per test robusti, proviamo SEMPRE entrambe le famiglie principali:
-    // - rack=0 slot=0  -> dst TSAP 0x0100 (S7-1200/1500, a seconda della configurazione)
-    // - rack=0 slot=2  -> dst TSAP 0x0102 (S7-300/400 tipico)
+    // For robust tests, we ALWAYS try both main families:
+    // - rack=0 slot=0  -> dst TSAP 0x0100 (S7-1200/1500, depending on the configuration)
+    // - rack=0 slot=2  -> dst TSAP 0x0102 (S7-300/400 typical)
     struct TsapAttempt { uint16_t src; uint16_t dst; };
     const TsapAttempt attempts_full[] = {
         {0x0100, 0x0100},
@@ -4184,7 +4184,7 @@ bool S7Plugin::buildFlowKey(const NetworkPacket& packet, FlowKey& key) {
 
     // Verifica TPKT version
     if (data[0] != 0x03) {
-        return false;  // Non è TPKT
+        return false;  // Not TPKT
     }
 
     // COTP Length Indicator
@@ -4200,8 +4200,8 @@ bool S7Plugin::buildFlowKey(const NetworkPacket& packet, FlowKey& key) {
     key.src_port = packet.src_port;
     key.dst_port = packet.dst_port;
 
-    // Protocol specific: usa rack/slot se disponibile oppure session identifier
-    // Per semplicità usiamo una stringa vuota (tutti i flussi S7 sulla stessa connessione TCP
+    // Protocol specific: use rack/slot if available or session identifier
+    // For simplicity we use an empty string (all S7 flows on the same TCP connection
     // condividono la stessa FlowKey). In alternativa si potrebbe usare src-ref/dst-ref da COTP CR/CC.
     // Per ora: chiave semplice basata solo su IP:port
     key.protocol_specific = psram_string("", alloc);
@@ -4221,8 +4221,8 @@ bool S7Plugin::classifyPacketOperation(const NetworkPacket& packet,
     const uint8_t* s7 = locateS7Pdu(packet.data, packet.length, s7_len);
 
     if (!s7 || s7_len < 10) {
-        // Non c'è S7 PDU valido, potrebbe essere solo COTP handshake
-        // Verifica se è COTP CR/CC
+        // There is no valid S7 PDU, it could just be a COTP handshake
+        // Check if it is COTP CR/CC
         if (packet.length >= 7) {
             uint8_t cotp_type = packet.data[5];
 
@@ -4252,12 +4252,12 @@ bool S7Plugin::classifyPacketOperation(const NetworkPacket& packet,
     uint8_t rosctr = s7[1];  // Message Type
 
     if (protocol_id != 0x32) {
-        return false;  // Non è S7
+        return false;  // Not S7
     }
 
-    // Verifica se è un messaggio di errore (Error class field)
+    // Check if it is an error message (Error class field)
     // Nel formato S7, gli errori sono indicati nei campi Error class/Error code
-    // Per semplicità, verifichiamo ROSCTR Ack (0x02) che spesso indica errore
+    // For simplicity, we check ROSCTR Ack (0x02) which often indicates an error
     if (rosctr == 0x02) {
         // ACK senza dati - potrebbe essere errore
         is_error = true;
@@ -4316,7 +4316,7 @@ bool S7Plugin::classifyPacketOperation(const NetworkPacket& packet,
         return true;
     }
 
-    // Nessun function code trovato
+    // No function code found
     char details[64];
     snprintf(details, sizeof(details), "ROSCTR=0x%02X NoParam", rosctr);
     operation_type = psram_string("OTHER", alloc);
@@ -4365,7 +4365,7 @@ void S7Plugin::raiseHandshakeAlert(const NetworkPacket& packet, S7FlowContext* c
 }
 
 void S7Plugin::updateProtocolState(const NetworkPacket& packet, FlowData& flow) {
-    // S7 ha una state machine più complessa di Modbus:
+    // S7 has a more complex state machine than Modbus:
     // INIT -> CONNECTING (COTP CR) -> ESTABLISHED (COTP CC) ->
     // CONNECTING (S7 Setup Comm) -> AUTHENTICATED (Setup Comm Ack) ->
     // DATA_EXCHANGE -> CLOSING -> CLOSED

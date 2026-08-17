@@ -424,7 +424,7 @@ bool WiFiManager::parseWiFiConfig(std::string& ssid, std::string& pass, bool& en
     ssid.clear();
     pass.clear();
 
-    // PRIORITÀ 1: Leggi da NVS (chiavi separate salvate da /api/wifi/connect)
+    // PRIORITY 1: Read from NVS (separate keys saved by /api/wifi/connect)
     psram_string nvs_ssid, nvs_pass;
     uint8_t nvs_enabled = 0;
 
@@ -442,7 +442,7 @@ bool WiFiManager::parseWiFiConfig(std::string& ssid, std::string& pass, bool& en
         return true;
     }
 
-    // PRIORITÀ 2: Leggi dal file di configurazione JSON
+    // PRIORITY 2: Read from the JSON configuration file
     size_t json_size = 0;
     char* json_buf = cfg_->getRawConfigInPSRAM(&json_size);
     if (!json_buf || json_size == 0) return false;

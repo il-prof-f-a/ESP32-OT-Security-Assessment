@@ -693,7 +693,7 @@ static void jsonAppendStringArrayField(psram_string& out,
 }
 
 bool OPCUAPlugin::isPacketWriter(const NetworkPacket& pkt) const {
-    if (pkt.dst_port != OPCUA_PORT) return false;  // Request verso server OPC UA
+    if (pkt.dst_port != OPCUA_PORT) return false;  // Request to OPC UA server
 
     const uint8_t* frame = nullptr;
     size_t frame_len = 0;
@@ -712,7 +712,7 @@ bool OPCUAPlugin::isPacketWriter(const NetworkPacket& pkt) const {
         }
     }
 
-    // Fallback legacy per payload testuale/non standard
+    // Legacy fallback for textual/non-standard payload
     return memfind(frame, frame_len, "WriteRequest", strlen("WriteRequest")) ||
            memfind(frame, frame_len, "CallRequest", strlen("CallRequest")) ||
            memfind(frame, frame_len, "DeleteNodes", strlen("DeleteNodes")) ||
@@ -1590,7 +1590,7 @@ bool OPCUAPlugin::doPacketAnalysis(const NetworkPacket& packet) {
             }
         }
 
-        // Fallback legacy payload-text detection per implementazioni non standard
+        // Legacy fallback payload-text detection for non-standard implementations
         if (!service_desc) {
             struct PatternDef {
                 const char* pattern;
@@ -2542,18 +2542,18 @@ bool OPCUAPlugin::validateServerCertificate(const OPCUAServer& server) {
 }
 
 bool OPCUAPlugin::checkSecurityConfiguration(const OPCUAServer& server) {
-    // Verifica configurazione di sicurezza del server OPC UA
+    // Verify OPC UA server security configuration
     bool has_secure_policy = false;
     bool has_secure_mode = false;
 
     LOG_INFOF("OPCUA_PLUGIN", "Checking security configuration for server: %s",
               server.endpoint_url.c_str());
 
-    // Verifica Security Policies
+    // Verify Security Policies
     for (const auto& policy : server.security_policies) {
         LOG_INFOF("OPCUA_PLUGIN", "  Security Policy: %s", policy.c_str());
 
-        // Considera sicure solo le policy con crittografia
+        // Consider only the policies with encryption as secure
         if (policy.find("#Basic256") != std::string::npos ||
             policy.find("#Basic256Sha256") != std::string::npos ||
             policy.find("#Aes128_Sha256_RsaOaep") != std::string::npos ||
@@ -2561,7 +2561,7 @@ bool OPCUAPlugin::checkSecurityConfiguration(const OPCUAServer& server) {
             has_secure_policy = true;
         }
 
-        // Policy deboli o insicure
+        // Weak or insecure policies
         if (policy.find("#None") != std::string::npos) {
             LOG_WARNING("OPCUA_PLUGIN", "  WARNING: Insecure SecurityPolicy#None detected!");
         }
@@ -2570,7 +2570,7 @@ bool OPCUAPlugin::checkSecurityConfiguration(const OPCUAServer& server) {
         }
     }
 
-    // Verifica Security Modes
+    // Verify Security Modes
     for (const auto& mode : server.security_modes) {
         LOG_INFOF("OPCUA_PLUGIN", "  Security Mode: %s", mode.c_str());
 
@@ -2584,12 +2584,12 @@ bool OPCUAPlugin::checkSecurityConfiguration(const OPCUAServer& server) {
         }
     }
 
-    // Verifica encryption
+    // Verify encryption
     if (!server.encryption_available) {
         LOG_WARNING("OPCUA_PLUGIN", "  WARNING: No encryption available on this server!");
     }
 
-    // Verifica anonymous login
+    // Verify anonymous login
     if (server.anonymous_login_allowed) {
         LOG_WARNING("OPCUA_PLUGIN", "  WARNING: Anonymous login is allowed!");
     }
@@ -2612,7 +2612,7 @@ bool OPCUAPlugin::checkSecurityConfiguration(const OPCUAServer& server) {
         LOG_WARNING("OPCUA_PLUGIN", "  WARNING: Certificate is self-signed");
     }
 
-    // Valutazione complessiva
+    // Overall assessment
     bool is_secure = has_secure_policy && has_secure_mode &&
                     server.encryption_available && !server.anonymous_login_allowed &&
                     certificate_ok;
@@ -3235,7 +3235,7 @@ bool OPCUAPlugin::classifyPacketOperation(const NetworkPacket& packet,
                              (unsigned)service_id);
                 }
             } else {
-                // Fallback legacy testuale
+                // Legacy textual fallback
                 if (memfind(data, data_len, "ReadRequest", strlen("ReadRequest")) ||
                     memfind(data, data_len, "BrowseRequest", strlen("BrowseRequest"))) {
                     operation_type = psram_string("READ", alloc);

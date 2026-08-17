@@ -11,7 +11,7 @@
 #include "../core/audit_manager.h"
 
 extern "C" void web_server_task(void *pv) {
-    // Prendi e libera subito gli argomenti
+    // Take and free the arguments immediately
     WebTaskArgs* a = static_cast<WebTaskArgs*>(pv);
 
     if (!a) {

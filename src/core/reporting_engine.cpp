@@ -244,7 +244,7 @@ void ReportingEngine::enableQueue(const PSRAMQueueConfig& qcfg, uint32_t flush_i
             queue_.reset();
         }
     }
-    // Usa configurazione centralizzata per report_flush task (con priorità inclusa)
+    // Use the centralized configuration for the report_flush task (with priority included)
     worker_ = TaskConfig::createTask(&ReportingEngine::workerThunk,
                                    "report_flush",
                                    TaskConfig::Presets::REPORT_FLUSH,
@@ -318,10 +318,10 @@ void ReportingEngine::workerThunk(void* arg) {
 void ReportingEngine::workerLoop() {
     uint64_t last_mem_maint_ms = 0;
     uint64_t last_cleanup_ms = 0;
-    const uint32_t MEM_CHECK_PERIOD_MS = 5000;   // controlla ogni 5s
-    const uint32_t CLEANUP_PERIOD_MS = 300000;   // cleanup ogni 5 minuti
+    const uint32_t MEM_CHECK_PERIOD_MS = 5000;   // check every 5s
+    const uint32_t CLEANUP_PERIOD_MS = 300000;   // cleanup every 5 minutes
     const uint32_t DRAM_THRESHOLD_BYTES = 30 * 1024; // 50KB
-    const uint32_t DRAM_LARGEST_MIN = 8 * 1024;  // 8KB blocco contiguo minimo
+    const uint32_t DRAM_LARGEST_MIN = 8 * 1024;  // 8KB minimum contiguous block
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(flush_interval_ms_));

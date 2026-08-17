@@ -11,7 +11,7 @@ extern "C" {
 
 static const char* TAG = "BaselineMgr";
 
-// Helper per nomi tipi anomalie
+// Helper for anomaly type names
 static const char* getAnomalyTypeName(AnomalyType type) {
     switch (type) {
         case AnomalyType::NONE: return "NONE";
@@ -45,7 +45,7 @@ bool ProtocolBaselineManager::initialize(ProtocolType protocol) {
 }
 
 bool ProtocolBaselineManager::loadBaseline(const char* filepath) {
-    // Usa FilesystemTaskDelegate per leggere da flash (sicuro da task PSRAM)
+    // Use FilesystemTaskDelegate to read from flash (safe from PSRAM task)
     auto& fs = FilesystemTaskDelegate::getInstance();
     if (!fs.isReady()) {
         LOG_WARNING(TAG, "FilesystemTaskDelegate not ready, cannot load baseline");
@@ -55,7 +55,7 @@ bool ProtocolBaselineManager::loadBaseline(const char* filepath) {
     psram_string file_content;
     if (!fs.readFileSync(std::string(filepath), file_content, 10000)) {
         LOG_WARNINGF(TAG, "Baseline file not found: %s (starting fresh)", filepath);
-        return false;  // Non è un errore critico, si parte da zero
+        return false;  // Not a critical error, we start from scratch
     }
 
     if (file_content.empty() || file_content.size() > 1024 * 1024) {
@@ -63,7 +63,7 @@ bool ProtocolBaselineManager::loadBaseline(const char* filepath) {
         return false;
     }
 
-    // Parse JSON usando cJSON
+    // Parse JSON using cJSON
     cJSON* root = cJSON_Parse(file_content.c_str());
 
     if (!root) {
@@ -71,7 +71,7 @@ bool ProtocolBaselineManager::loadBaseline(const char* filepath) {
         return false;
     }
 
-    // Carica configurazione threshold
+    // Load threshold configuration
     cJSON* item = cJSON_GetObjectItem(root, "pps_threshold_factor");
     if (item && cJSON_IsNumber(item)) baseline_.pps_threshold_factor = (float)item->valuedouble;
 
@@ -90,7 +90,7 @@ bool ProtocolBaselineManager::loadBaseline(const char* filepath) {
     item = cJSON_GetObjectItem(root, "total_packets");
     if (item && cJSON_IsNumber(item)) baseline_.total_packets = (uint64_t)item->valuedouble;
 
-    // Carica endpoints
+    // Load endpoints
     cJSON* endpoints_obj = cJSON_GetObjectItem(root, "endpoints");
     if (endpoints_obj) {
         cJSON* endpoints_array = cJSON_GetObjectItem(endpoints_obj, "list");
@@ -146,7 +146,7 @@ bool ProtocolBaselineManager::loadBaseline(const char* filepath) {
                 GET_BOOL_FIELD(is_writer, "is_writer");
                 GET_BOOL_FIELD(learning_complete, "learning_complete");
 
-                // Carica known_peers
+                // Load known_peers
                 cJSON* peers_array = cJSON_GetObjectItem(ep_node, "known_peers");
                 if (peers_array && cJSON_IsArray(peers_array)) {
                     cJSON* peer_item = NULL;
@@ -157,7 +157,7 @@ bool ProtocolBaselineManager::loadBaseline(const char* filepath) {
                     }
                 }
 
-                // Aggiungi endpoint alla mappa
+                // Add endpoint to the map
                 baseline_.endpoints[ep.ip_address] = ep;
             }
         }
@@ -170,8 +170,8 @@ bool ProtocolBaselineManager::loadBaseline(const char* filepath) {
 }
 
 bool ProtocolBaselineManager::saveBaseline(const char* filepath) {
-    // Costruisci JSON manualmente (più efficiente di cJSON per grandi strutture)
-    // Alloca buffer di output in PSRAM
+    // Build JSON manually (more efficient than cJSON for large structures)
+    // Allocate output buffer in PSRAM
     const size_t BUFFER_SIZE = 256 * 1024;  // 256KB buffer
     char* json_buf = (char*)heap_caps_malloc(BUFFER_SIZE, MALLOC_CAP_SPIRAM);
     if (!json_buf) {
@@ -202,7 +202,7 @@ bool ProtocolBaselineManager::saveBaseline(const char* filepath) {
         baseline_.total_packets
     );
 
-    // Serializza ogni endpoint
+    // Serialize each endpoint
     bool first_endpoint = true;
     for (const auto& pair : baseline_.endpoints) {
         const EndpointBaseline& ep = pair.second;
@@ -212,7 +212,7 @@ bool ProtocolBaselineManager::saveBaseline(const char* filepath) {
         }
         first_endpoint = false;
 
-        // Converti IP e MAC da PSRAM a string normale
+        // Convert IP and MAC from PSRAM to a normal string
         std::string ip_str = PSRAMUtils::fromPSRAMString(ep.ip_address);
         std::string mac_str = PSRAMUtils::fromPSRAMString(ep.mac_address);
 
@@ -257,7 +257,7 @@ bool ProtocolBaselineManager::saveBaseline(const char* filepath) {
             ep.learning_complete ? "true" : "false"
         );
 
-        // Serializza known_peers
+        // Serialize known_peers
         bool first_peer = true;
         for (const auto& peer : ep.known_peers) {
             if (!first_peer) {
@@ -268,7 +268,7 @@ bool ProtocolBaselineManager::saveBaseline(const char* filepath) {
             std::string peer_str = PSRAMUtils::fromPSRAMString(peer);
             offset += snprintf(json_buf + offset, BUFFER_SIZE - offset, "\"%s\"", peer_str.c_str());
 
-            // Verifica overflow buffer
+            // Check buffer overflow
             if (offset >= BUFFER_SIZE - 1024) {
                 LOG_ERROR(TAG, "JSON buffer overflow during baseline save");
                 heap_caps_free(json_buf);
@@ -279,14 +279,14 @@ bool ProtocolBaselineManager::saveBaseline(const char* filepath) {
         offset += snprintf(json_buf + offset, BUFFER_SIZE - offset, "]\n      }");
     }
 
-    // Chiudi JSON
+    // Close JSON
     offset += snprintf(json_buf + offset, BUFFER_SIZE - offset,
         "\n    ]\n"
         "  }\n"
         "}\n"
     );
 
-    // Scrivi su file tramite FilesystemTaskDelegate (sicuro da task PSRAM)
+    // Write to file via FilesystemTaskDelegate (safe from PSRAM task)
     auto& fs = FilesystemTaskDelegate::getInstance();
     if (!fs.isReady()) {
         LOG_ERROR(TAG, "FilesystemTaskDelegate not ready, cannot save baseline");
@@ -321,7 +321,7 @@ bool ProtocolBaselineManager::updateBaseline(const psram_string& endpoint_ip,
 
     uint64_t now_ms = esp_timer_get_time() / 1000;
 
-    // Ottieni o crea baseline endpoint
+    // Get or create baseline endpoint
     auto it = baseline_.endpoints.find(endpoint_ip);
     if (it == baseline_.endpoints.end()) {
         EndpointBaseline new_baseline;
@@ -336,13 +336,13 @@ bool ProtocolBaselineManager::updateBaseline(const psram_string& endpoint_ip,
     bool learning_completed_now = false;
     bool was_learning = !ep.learning_complete;
 
-    // Aggiorna contatori
+    // Update counters
     ep.total_packets++;
     ep.total_bytes += packet_size;
     ep.last_updated_ms = now_ms;
     ep.learning_samples++;
 
-    // Aggiorna distribuzione operazioni
+    // Update operation distribution
     if (operation_type == "READ") {
         ep.read_operations++;
     } else if (operation_type == "WRITE") {
@@ -354,7 +354,7 @@ bool ProtocolBaselineManager::updateBaseline(const psram_string& endpoint_ip,
         ep.diagnostic_operations++;
     }
 
-    // Aggiorna tasso errori
+    // Update error rate
     if (is_error) {
         ep.error_responses++;
     }
@@ -362,12 +362,12 @@ bool ProtocolBaselineManager::updateBaseline(const psram_string& endpoint_ip,
         ep.normal_error_rate = (float)ep.error_responses / (float)ep.total_packets;
     }
 
-    // Aggiorna stati visitati (bitmap)
+    // Update visited states (bitmap)
     if ((uint8_t)current_state < 16) {
         ep.normal_states_bitmap |= (1 << (uint8_t)current_state);
     }
 
-    // Aggiorna peer conosciuti
+    // Update known peers
     bool peer_known = false;
     for (const auto& known_peer : ep.known_peers) {
         if (known_peer == peer_ip) {
@@ -379,7 +379,7 @@ bool ProtocolBaselineManager::updateBaseline(const psram_string& endpoint_ip,
         ep.known_peers.push_back(peer_ip);
     }
 
-    // Calcola rate medio (semplificato - usa finestra temporale)
+    // Calculate average rate (simplified - uses time window)
     if (ep.first_seen_ms > 0 && now_ms > ep.first_seen_ms) {
         uint64_t elapsed_s = (now_ms - ep.first_seen_ms) / 1000;
         if (elapsed_s > 0) {
@@ -387,7 +387,7 @@ bool ProtocolBaselineManager::updateBaseline(const psram_string& endpoint_ip,
         }
     }
 
-    // Segna learning completo se raggiunti campioni minimi
+    // Mark learning complete if minimum samples reached
     if (was_learning && ep.learning_samples >= baseline_.min_learning_samples) {
         ep.learning_complete = true;
         learning_completed_now = true;
@@ -395,7 +395,7 @@ bool ProtocolBaselineManager::updateBaseline(const psram_string& endpoint_ip,
                   PSRAMUtils::fromPSRAMString(endpoint_ip).c_str());
     }
 
-    // Aggiorna statistiche globali
+    // Update global statistics
     baseline_.total_packets++;
     return learning_completed_now;
 }
@@ -410,23 +410,23 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
     uint32_t detected = 0;
     PSRAMAllocator<char> alloc;
 
-    // Trova baseline endpoint
+    // Find baseline endpoint
     auto it = baseline_.endpoints.find(endpoint_ip);
     if (it == baseline_.endpoints.end()) {
-        // Nuovo endpoint - non abbiamo baseline
+        // New endpoint - we have no baseline
         return 0;
     }
 
     const EndpointBaseline& ep = it->second;
 
-    // Se ancora in learning, non rilevare anomalie
+    // If still learning, do not detect anomalies
     if (!ep.learning_complete) {
         return 0;
     }
 
     uint64_t now_ms = esp_timer_get_time() / 1000;
 
-    // 1. Anomalia: Rate traffico insolito
+    // 1. Anomaly: Unusual traffic rate
     if (ep.avg_pps > 0) {
         float threshold_high = ep.avg_pps * baseline_.pps_threshold_factor;
         float threshold_low = ep.avg_pps / baseline_.pps_threshold_factor;
@@ -448,7 +448,7 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
             anomalies.push_back(anomaly);
             detected++;
         } else if (current_pps < threshold_low && current_pps > 0.1f) {
-            // Rate troppo basso potrebbe indicare DoS o device compromise
+            // Rate too low could indicate DoS or device compromise
             AnomalyDetection anomaly;
             anomaly.type = AnomalyType::UNUSUAL_TRAFFIC_RATE;
             anomaly.severity = 0.5f;
@@ -467,7 +467,7 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
         }
     }
 
-    // 2. Anomalia: Tasso errori eccessivo
+    // 2. Anomaly: Excessive error rate
     if (error_rate > ep.normal_error_rate + baseline_.error_rate_threshold) {
         AnomalyDetection anomaly;
         anomaly.type = AnomalyType::EXCESSIVE_ERRORS;
@@ -486,11 +486,11 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
         detected++;
     }
 
-    // 3. Anomalia: Operazione WRITE da dispositivo non autorizzato
+    // 3. Anomaly: WRITE operation from unauthorized device
     if (operation_type == "WRITE" && !ep.is_writer) {
         AnomalyDetection anomaly;
         anomaly.type = AnomalyType::UNEXPECTED_WRITER;
-        anomaly.severity = 0.9f;  // Alta severità
+        anomaly.severity = 0.9f;  // High severity
         anomaly.confidence = 1.0f;
         anomaly.endpoint_ip = endpoint_ip;
         anomaly.description = psram_string("Write operation from unauthorized endpoint", alloc);
@@ -501,7 +501,7 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
         detected++;
     }
 
-    // 4. Anomalia: Peer sconosciuto
+    // 4. Anomaly: Unknown peer
     if (!peer_ip.empty()) {
         bool peer_known = false;
         for (const auto& known_peer : ep.known_peers) {
@@ -512,7 +512,7 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
         }
 
         if (!peer_known && ep.known_peers.size() > 0) {
-            // Calcola percentuale nuovi peer
+            // Calculate percentage of new peers
             float new_peer_ratio = 1.0f / (float)(ep.known_peers.size() + 1);
 
             if (new_peer_ratio > baseline_.peer_change_threshold) {
@@ -535,7 +535,7 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
         }
     }
 
-    // 5. Anomalia: Stato non visitato normalmente
+    // 5. Anomaly: State not normally visited
     if ((uint8_t)current_state < 16) {
         uint16_t state_bit = (1 << (uint8_t)current_state);
         if (!(ep.normal_states_bitmap & state_bit)) {
@@ -567,7 +567,7 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
 bool ProtocolBaselineManager::isLearning(const psram_string& endpoint_ip) const {
     auto it = baseline_.endpoints.find(endpoint_ip);
     if (it == baseline_.endpoints.end()) {
-        return true;  // Nuovo endpoint sempre in learning
+        return true;  // New endpoint always in learning
     }
     return !it->second.learning_complete;
 }
@@ -592,14 +592,14 @@ void ProtocolBaselineManager::resetBaseline() {
 }
 
 uint32_t ProtocolBaselineManager::hashOperationSequence(const psram_vector<psram_string>& ops) const {
-    // Semplice hash FNV-1a
+    // Simple FNV-1a hash
     uint32_t hash = 2166136261u;
     for (const auto& op : ops) {
         for (size_t i = 0; i < op.size(); ++i) {
             hash ^= (uint8_t)op[i];
             hash *= 16777619u;
         }
-        hash ^= ',';  // Separatore
+        hash ^= ',';  // Separator
         hash *= 16777619u;
     }
     return hash;
@@ -643,8 +643,8 @@ bool ProtocolBaselineManager::getLearningStats(const psram_string& endpoint_ip,
     const EndpointBaseline& ep = it->second;
     out_avg_pps = ep.avg_pps;
 
-    // Calcola std dev dai campioni (se disponibili)
-    // Per semplicità usiamo una stima: stddev ~= avg * 0.3 (coefficiente di variazione tipico)
+    // Calculate std dev from samples (if available)
+    // For simplicity we use an estimate: stddev ~= avg * 0.3 (typical coefficient of variation)
     out_stddev_pps = ep.avg_pps * 0.3f;
 
     out_error_rate = ep.normal_error_rate;
@@ -656,7 +656,7 @@ bool ProtocolBaselineManager::getLearningStats(const psram_string& endpoint_ip,
 bool ProtocolBaselineManager::autoTuneThresholds(const psram_string& endpoint_ip) {
     bool any_tuned = false;
 
-    // Se specificato endpoint, calibra solo quello
+    // If an endpoint is specified, calibrate only that one
     if (!endpoint_ip.empty()) {
         auto it = baseline_.endpoints.find(endpoint_ip);
         if (it == baseline_.endpoints.end() || !it->second.learning_complete) {
@@ -666,25 +666,25 @@ bool ProtocolBaselineManager::autoTuneThresholds(const psram_string& endpoint_ip
 
         const EndpointBaseline& ep = it->second;
 
-        // Taratura automatica basata su 3-sigma rule
-        // PPS threshold: 3 deviazioni standard sopra la media
-        float estimated_stddev = ep.avg_pps * 0.3f;  // ~30% CV tipico per traffico ICS
+        // Automatic tuning based on 3-sigma rule
+        // PPS threshold: 3 standard deviations above the mean
+        float estimated_stddev = ep.avg_pps * 0.3f;  // ~30% typical CV for ICS traffic
         float suggested_pps_factor = 3.0f;  // 3 sigma
 
         if (estimated_stddev > 0.01f && ep.avg_pps > 0.1f) {
             suggested_pps_factor = 1.0f + (3.0f * estimated_stddev / ep.avg_pps);
         }
 
-        // Error rate threshold: normale + 5% margine
+        // Error rate threshold: normal + 5% margin
         float suggested_error_threshold = ep.normal_error_rate + 0.05f;
         if (suggested_error_threshold < 0.1f) {
-            suggested_error_threshold = 0.1f;  // Minimo 10%
+            suggested_error_threshold = 0.1f;  // Minimum 10%
         }
 
-        // Peer change threshold: 30% default (conservativo)
+        // Peer change threshold: 30% default (conservative)
         float suggested_peer_threshold = 0.3f;
 
-        // Applica soglie calcolate
+        // Apply calculated thresholds
         baseline_.pps_threshold_factor = suggested_pps_factor;
         baseline_.error_rate_threshold = suggested_error_threshold;
         baseline_.peer_change_threshold = suggested_peer_threshold;
@@ -695,13 +695,13 @@ bool ProtocolBaselineManager::autoTuneThresholds(const psram_string& endpoint_ip
         any_tuned = true;
 
     } else {
-        // Calibra su tutti gli endpoint con learning completo
+        // Calibrate on all endpoints with completed learning
         if (baseline_.endpoints.empty()) {
             LOG_WARNING(TAG, "Cannot auto-tune: no endpoints learned");
             return false;
         }
 
-        // Raccogli statistiche aggregate
+        // Collect aggregate statistics
         float total_avg_pps = 0.0f;
         float total_error_rate = 0.0f;
         uint32_t complete_count = 0;
@@ -722,7 +722,7 @@ bool ProtocolBaselineManager::autoTuneThresholds(const psram_string& endpoint_ip
         float mean_avg_pps = total_avg_pps / (float)complete_count;
         float mean_error_rate = total_error_rate / (float)complete_count;
 
-        // Calcola deviazione standard aggregata
+        // Calculate aggregate standard deviation
         float sum_sq_diff = 0.0f;
         for (const auto& pair : baseline_.endpoints) {
             if (pair.second.learning_complete) {
@@ -732,15 +732,15 @@ bool ProtocolBaselineManager::autoTuneThresholds(const psram_string& endpoint_ip
         }
         float stddev_pps = std::sqrt(sum_sq_diff / (float)complete_count);
 
-        // Taratura basata su statistiche aggregate (3-sigma rule)
+        // Tuning based on aggregate statistics (3-sigma rule)
         float suggested_pps_factor = 3.0f;
         if (stddev_pps > 0.01f && mean_avg_pps > 0.1f) {
             suggested_pps_factor = 1.0f + (3.0f * stddev_pps / mean_avg_pps);
         }
 
-        // Limiti ragionevoli
-        if (suggested_pps_factor < 1.5f) suggested_pps_factor = 1.5f;  // Min 50% sopra media
-        if (suggested_pps_factor > 5.0f) suggested_pps_factor = 5.0f;  // Max 5x media
+        // Reasonable limits
+        if (suggested_pps_factor < 1.5f) suggested_pps_factor = 1.5f;  // Min 50% above average
+        if (suggested_pps_factor > 5.0f) suggested_pps_factor = 5.0f;  // Max 5x average
 
         float suggested_error_threshold = mean_error_rate + 0.05f;
         if (suggested_error_threshold < 0.1f) suggested_error_threshold = 0.1f;
@@ -748,7 +748,7 @@ bool ProtocolBaselineManager::autoTuneThresholds(const psram_string& endpoint_ip
 
         float suggested_peer_threshold = 0.3f;  // 30% default
 
-        // Applica soglie
+        // Apply thresholds
         baseline_.pps_threshold_factor = suggested_pps_factor;
         baseline_.error_rate_threshold = suggested_error_threshold;
         baseline_.peer_change_threshold = suggested_peer_threshold;

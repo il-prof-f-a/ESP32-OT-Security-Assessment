@@ -93,8 +93,8 @@ struct IDSAnomalyConfig {
     float request_response_high_ratio = 1.6f;
     float request_response_low_ratio = 0.45f;
     float malformed_packets_normalizer = 5.0f;
-    uint32_t reactive_fuzzing_cooldown_ms = 15U * 60U * 1000U;   // 15 minuti
-    uint32_t reactive_fuzzing_retention_ms = 60U * 60U * 1000U;  // 60 minuti
+    uint32_t reactive_fuzzing_cooldown_ms = 15U * 60U * 1000U;   // 15 minutes
+    uint32_t reactive_fuzzing_retention_ms = 60U * 60U * 1000U;  // 60 minutes
 };
 
 // Legacy WritersConfig - keep for backward compatibility
@@ -281,7 +281,7 @@ public:
     bool getBoolAtPath(const char* path, bool* out) const;
     bool getStringAtPath(const char* path, char* out, size_t out_sz) const;
 
-    // Feature flags opzionali letti dal JSON (features.<name> : bool)
+    // Optional feature flags read from JSON (features.<name> : bool)
     bool isFeatureEnabled(const char* name, bool default_value = false) const;
 
     // Config setters
@@ -333,8 +333,8 @@ private:
         const size_t sz = raw_.length();
         LOG_INFOF("Config", "Configuration size: %u bytes", (unsigned)sz);
 
-        // (Consiglio) Evita di mettere JSON molto grandi in NVS: è una KV store, non un FS.
-        // Se supera ~3–4 KB valuta di tenerlo su filesystem e in NVS salvare solo CRC/versione.
+        // (Advice) Avoid putting very large JSON in NVS: it is a KV store, not a filesystem.
+        // If it exceeds ~3-4 KB, consider keeping it on the filesystem and saving only CRC/version in NVS.
         if (sz > 4096) {
             LOG_WARNINGF("Config",
                 "Config JSON is large (%u bytes). NVS is not ideal for big blobs; "

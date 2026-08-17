@@ -287,13 +287,13 @@ private:
     bool buildDcpIdentifyAll(psram_vector<uint8_t>& out_frame);
     static bool parseDcpResponse(const uint8_t* eth, size_t len, psram_string& out_json_one);
 
-    // --- Enhanced DCP Discovery Methods (Fase 4) ---
+    // --- Enhanced DCP Discovery Methods (Phase 4) ---
     bool sendDcpIdentifyAll(uint32_t timeout_ms, std::vector<PROFINETDeviceInfo>& devices);
     bool parseDcpIdentifyResponse(const uint8_t* dcp_data, size_t len, PROFINETDeviceInfo& dev_info);
     bool buildDeviceInfoJSON(const PROFINETDeviceInfo& dev_info, psram_string& out_json);
     void handleLldpFrame(const NetworkPacket& pkt);
 
-    // --- Vulnerability Check Methods (Fase 5) ---
+    // --- Vulnerability Check Methods (Phase 5) ---
     bool checkDefaultDeviceName(const PROFINETDeviceInfo& dev_info, psram_string& finding);
     bool checkSecurityClass(const PROFINETDeviceInfo& dev_info, psram_string& finding);
     bool checkUnencryptedComm(const PROFINETDeviceInfo& dev_info, psram_string& finding);

@@ -2,7 +2,7 @@
 <html>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Configurazione Protocolli</title>
+<title>Protocol Configuration</title>
 <style>
 body{font-family:system-ui;margin:1rem;background:#f6f6f6}
 .card{background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);padding:1rem;margin-bottom:1rem}
@@ -45,7 +45,7 @@ input{width:100%;padding:.4rem;border:1px solid #ccc;border-radius:4px}
 </style>
 
 <div class="card">
-  <h1>🔌 Configurazione Protocolli</h1>
+  <h1>🔌 Protocol Configuration</h1>
   <a href="/" class="btn nav-btn">← Dashboard</a>
 </div>
 
@@ -56,14 +56,14 @@ input{width:100%;padding:.4rem;border:1px solid #ccc;border-radius:4px}
   <div class="card">
     <h2>Modbus TCP</h2>
     <div class="form-group">
-      <label><input type="checkbox" id="mb_enabled" style="width:auto;margin-right:.5rem">Plugin Abilitato</label>
+      <label><input type="checkbox" id="mb_enabled" style="width:auto;margin-right:.5rem">Plugin Enabled</label>
     </div>
     <div class="form-group"><label>Unit ID</label><input id="mb_unit" placeholder="1"></div>
     <div class="form-group"><label>Connect Timeout (ms)</label><input id="mb_ctimeout" placeholder="1500"></div>
     <div class="form-group"><label>I/O Timeout (ms)</label><input id="mb_iotimeout" placeholder="1500"></div>
     <div class="form-group"><label>Allowed Writers</label><input id="mb_writers" placeholder="192.168.1.100,192.168.1.101"></div>
-    <button class="btn" onclick="load('modbus')">Carica</button>
-    <button class="btn" onclick="save('modbus')">Salva</button>
+    <button class="btn" onclick="load('modbus')">Load</button>
+    <button class="btn" onclick="save('modbus')">Save</button>
   </div>
 </div>
 
@@ -71,68 +71,68 @@ input{width:100%;padding:.4rem;border:1px solid #ccc;border-radius:4px}
   <div class="card">
     <h2>S7 Communication</h2>
     <div class="form-group">
-      <label><input type="checkbox" id="s7_enabled" style="width:auto;margin-right:.5rem">Plugin Abilitato</label>
+      <label><input type="checkbox" id="s7_enabled" style="width:auto;margin-right:.5rem">Plugin Enabled</label>
     </div>
 
-    <h3 style="margin-top:1rem">Configurazione Connessione</h3>
+    <h3 style="margin-top:1rem">Connection Configuration</h3>
     <div class="form-group"><label>Port</label><input id="s7_port" placeholder="102" type="number"></div>
     <div class="form-group"><label>Connection Timeout (ms)</label><input id="s7_timeout" placeholder="2000" type="number"></div>
     <div class="form-group"><label>PDU Size (bytes)</label><input id="s7_pdu" placeholder="240" type="number"></div>
     <div class="form-group"><label>Rack Number</label><input id="s7_rack" placeholder="0" type="number"></div>
     <div class="form-group"><label>Slot Number</label><input id="s7_slot" placeholder="1" type="number"></div>
 
-    <h3 style="margin-top:1rem">Configurazione Sicurezza</h3>
+    <h3 style="margin-top:1rem">Security Configuration</h3>
     <div class="form-group">
       <label><input type="checkbox" id="s7_check_auth" style="width:auto;margin-right:.5rem">Check Authentication</label>
-      <small>Verifica se il PLC richiede autenticazione</small>
+      <small>Checks whether the PLC requires authentication</small>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="s7_check_protection" style="width:auto;margin-right:.5rem">Check Protection Level</label>
-      <small>Verifica il livello di protezione del PLC (0=None, 1=Write-protected, 2=Read/Write, 3=Full)</small>
+      <small>Checks the PLC protection level (0=None, 1=Write-protected, 2=Read/Write, 3=Full)</small>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="s7_test_stop" style="width:auto;margin-right:.5rem">Test Anonymous Stop</label>
-      <small>Testa se è possibile arrestare il PLC senza autenticazione</small>
+      <small>Tests whether the PLC can be stopped without authentication</small>
     </div>
 
     <h3 style="margin-top:1rem">IDS Configuration</h3>
     <div class="form-group">
       <label><input type="checkbox" id="s7_detect_tls" style="width:auto;margin-right:.5rem">Detect Non-TLS Communications</label>
-      <small>Rileva comunicazioni S7 non criptate</small>
+      <small>Detects unencrypted S7 communications</small>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="s7_detect_stop" style="width:auto;margin-right:.5rem">Detect STOP CPU Commands</label>
-      <small>Rileva comandi di arresto del PLC</small>
+      <small>Detects PLC stop commands</small>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="s7_detect_recon" style="width:auto;margin-right:.5rem">Detect Reconnaissance</label>
-      <small>Rileva attività di scansione e raccolta informazioni (SZL reads eccessivi)</small>
+      <small>Detects scanning and information gathering activity (excessive SZL reads)</small>
     </div>
     <div class="form-group"><label>Max Writes per 60s</label><input id="s7_max_writes" placeholder="50" type="number"></div>
     <div class="form-group"><label>Max Reads per 30s</label><input id="s7_max_reads" placeholder="100" type="number"></div>
 
-    <button class="btn" onclick="load('s7')">Carica</button>
-    <button class="btn" onclick="save('s7')">Salva</button>
+    <button class="btn" onclick="load('s7')">Load</button>
+    <button class="btn" onclick="save('s7')">Save</button>
   </div>
   <div class="card" id="s7-stats-card" style="display:none;margin-top:1rem;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
-      <h3>Telemetria IDS</h3>
-      <button class="btn" type="button" onclick="refreshS7Stats()">Aggiorna</button>
+      <h3>IDS Telemetry</h3>
+      <button class="btn" type="button" onclick="refreshS7Stats()">Refresh</button>
     </div>
     <div class="proto-grid">
-      <div class="proto-metric"><div class="label">Handshake avviati</div><div class="value" id="s7-handshake-started">0</div></div>
-      <div class="proto-metric"><div class="label">Handshake confermati</div><div class="value" id="s7-handshake-confirmed">0</div></div>
-      <div class="proto-metric"><div class="label">Handshake falliti</div><div class="value" id="s7-handshake-failed">0</div></div>
+      <div class="proto-metric"><div class="label">Handshakes started</div><div class="value" id="s7-handshake-started">0</div></div>
+      <div class="proto-metric"><div class="label">Handshakes confirmed</div><div class="value" id="s7-handshake-confirmed">0</div></div>
+      <div class="proto-metric"><div class="label">Handshakes failed</div><div class="value" id="s7-handshake-failed">0</div></div>
       <div class="proto-metric"><div class="label">Success rate</div><div class="value" id="s7-handshake-success-pct">0.0%</div></div>
-      <div class="proto-metric"><div class="label">Setup COMM completati</div><div class="value" id="s7-setup-comm">0</div></div>
-      <div class="proto-metric"><div class="label">Sessioni TLS</div><div class="value" id="s7-tls-sessions">0</div></div>
-      <div class="proto-metric"><div class="label">STOP CPU rilevati</div><div class="value" id="s7-stop-detected">0</div></div>
-      <div class="proto-metric"><div class="label">STOP CPU bloccati</div><div class="value" id="s7-stop-blocked">0</div><div class="hint" id="s7-stop-block-pct">0.0%</div></div>
-      <div class="proto-metric"><div class="label">Restart rilevati</div><div class="value" id="s7-restart-detected">0</div></div>
+      <div class="proto-metric"><div class="label">COMM setups completed</div><div class="value" id="s7-setup-comm">0</div></div>
+      <div class="proto-metric"><div class="label">TLS sessions</div><div class="value" id="s7-tls-sessions">0</div></div>
+      <div class="proto-metric"><div class="label">STOP CPU detected</div><div class="value" id="s7-stop-detected">0</div></div>
+      <div class="proto-metric"><div class="label">STOP CPU blocked</div><div class="value" id="s7-stop-blocked">0</div><div class="hint" id="s7-stop-block-pct">0.0%</div></div>
+      <div class="proto-metric"><div class="label">Restarts detected</div><div class="value" id="s7-restart-detected">0</div></div>
       <div class="proto-metric"><div class="label">Alert reconnaissance</div><div class="value" id="s7-recon-alerts">0</div></div>
       <div class="proto-metric"><div class="label">Alert write</div><div class="value" id="s7-write-alerts">0</div></div>
-      <div class="proto-metric"><div class="label">Tentativi brute force</div><div class="value" id="s7-bruteforce-alerts">0</div></div>
-      <div class="proto-metric"><div class="label">Flooding rilevati</div><div class="value" id="s7-flooding-alerts">0</div></div>
+      <div class="proto-metric"><div class="label">Brute force attempts</div><div class="value" id="s7-bruteforce-alerts">0</div></div>
+      <div class="proto-metric"><div class="label">Flooding detected</div><div class="value" id="s7-flooding-alerts">0</div></div>
     </div>
   </div>
 </div>
@@ -141,64 +141,64 @@ input{width:100%;padding:.4rem;border:1px solid #ccc;border-radius:4px}
   <div class="card">
     <h2>PROFINET</h2>
     <div class="form-group">
-      <label><input type="checkbox" id="pn_enabled" style="width:auto;margin-right:.5rem">Plugin Abilitato</label>
+      <label><input type="checkbox" id="pn_enabled" style="width:auto;margin-right:.5rem">Plugin Enabled</label>
     </div>
 
-    <h3 style="margin-top:1rem">Configurazione DCP Discovery</h3>
+    <h3 style="margin-top:1rem">DCP Discovery Configuration</h3>
     <div class="form-group"><label>DCP Multicast MAC</label><input id="pn_multicast" placeholder="01:0E:CF:00:00:00"></div>
     <div class="form-group"><label>Discovery Timeout (ms)</label><input id="pn_timeout" placeholder="3000" type="number"></div>
     <div class="form-group">
       <label><input type="checkbox" id="pn_topology" style="width:auto;margin-right:.5rem">Enable Topology Discovery</label>
-      <small>Scopri automaticamente la topologia di rete PROFINET</small>
+      <small>Automatically discover the PROFINET network topology</small>
     </div>
 
-    <h3 style="margin-top:1rem">Configurazione Sicurezza</h3>
+    <h3 style="margin-top:1rem">Security Configuration</h3>
     <div class="form-group">
       <label><input type="checkbox" id="pn_check_names" style="width:auto;margin-right:.5rem">Check Default Names</label>
-      <small>Verifica se i dispositivi usano nomi predefiniti/generici</small>
+      <small>Checks whether devices use default/generic names</small>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="pn_check_security" style="width:auto;margin-right:.5rem">Check Security Class</label>
-      <small>Verifica il livello di sicurezza PROFINET (0=None, 1=Integrity, 2=Integrity+Confidentiality)</small>
+      <small>Checks the PROFINET security level (0=None, 1=Integrity, 2=Integrity+Confidentiality)</small>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="pn_check_unencrypted" style="width:auto;margin-right:.5rem">Check Unencrypted Communication</label>
-      <small>Rileva comunicazioni DCP/RT non criptate</small>
+      <small>Detects unencrypted DCP/RT communications</small>
     </div>
     <div class="form-group"><label>Default Name Patterns (comma-separated)</label><input id="pn_patterns" placeholder="station_,new_device,simatic,plc_"></div>
 
     <h3 style="margin-top:1rem">IDS Configuration</h3>
     <div class="form-group">
       <label><input type="checkbox" id="pn_detect_spoofing" style="width:auto;margin-right:.5rem">Detect DCP Spoofing</label>
-      <small>Rileva risposte DCP Identify sospette (flooding)</small>
+      <small>Detects suspicious DCP Identify responses (flooding)</small>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="pn_detect_config" style="width:auto;margin-right:.5rem">Detect Configuration Changes</label>
-      <small>Rileva operazioni DCP Set multiple (riconfigurazioni sospette)</small>
+      <small>Detects multiple DCP Set operations (suspicious reconfigurations)</small>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="pn_detect_topology" style="width:auto;margin-right:.5rem">Detect Topology Changes</label>
-      <small>Rileva modifiche non autorizzate alla topologia di rete</small>
+      <small>Detects unauthorized changes to the network topology</small>
     </div>
     <div class="form-group"><label>Max Devices per Second</label><input id="pn_max_devices" placeholder="10" type="number"></div>
 
-    <button class="btn" onclick="load('profinet')">Carica</button>
-    <button class="btn" onclick="save('profinet')">Salva</button>
+    <button class="btn" onclick="load('profinet')">Load</button>
+    <button class="btn" onclick="save('profinet')">Save</button>
   </div>
   <div class="card" id="profinet-stats-card" style="display:none;margin-top:1rem;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
-      <h3>Monitoraggio Real-Time</h3>
-      <button class="btn" type="button" onclick="refreshProfinetStats()">Aggiorna</button>
+      <h3>Real-Time Monitoring</h3>
+      <button class="btn" type="button" onclick="refreshProfinetStats()">Refresh</button>
     </div>
     <div class="proto-grid">
-      <div class="proto-metric"><div class="label">Canali totali</div><div class="value" id="pn-total-channels">0</div></div>
-      <div class="proto-metric"><div class="label">Canali write</div><div class="value" id="pn-write-channels">0</div></div>
-      <div class="proto-metric"><div class="label">Canali read</div><div class="value" id="pn-read-channels">0</div></div>
+      <div class="proto-metric"><div class="label">Total channels</div><div class="value" id="pn-total-channels">0</div></div>
+      <div class="proto-metric"><div class="label">Write channels</div><div class="value" id="pn-write-channels">0</div></div>
+      <div class="proto-metric"><div class="label">Read channels</div><div class="value" id="pn-read-channels">0</div></div>
       <div class="proto-metric"><div class="label">Alert spoofing</div><div class="value" id="pn-spoofing-alerts">0</div></div>
       <div class="proto-metric"><div class="label">Alert config</div><div class="value" id="pn-config-alerts">0</div></div>
     </div>
     <p style="font-size:.85rem;color:#64748b;margin-top:.6rem">
-      Le metriche vengono aggiornate solo se il plugin PROFINET è abilitato.
+      Metrics are updated only when the PROFINET plugin is enabled.
     </p>
   </div>
 </div>
@@ -207,57 +207,57 @@ input{width:100%;padding:.4rem;border:1px solid #ccc;border-radius:4px}
   <div class="card">
     <h2>EtherNet/IP (CIP)</h2>
     <div class="form-group">
-      <label><input type="checkbox" id="enip_enabled" style="width:auto;margin-right:.5rem">Plugin Abilitato</label>
+      <label><input type="checkbox" id="enip_enabled" style="width:auto;margin-right:.5rem">Plugin Enabled</label>
     </div>
 
-    <h3 style="margin-top:1rem">Configurazione Connessione</h3>
+    <h3 style="margin-top:1rem">Connection Configuration</h3>
     <div class="form-group"><label>TCP Port (Explicit Messaging)</label><input id="enip_tcp" placeholder="44818" type="number"></div>
     <div class="form-group"><label>UDP Port (Implicit I/O)</label><input id="enip_udp" placeholder="2222" type="number"></div>
     <div class="form-group"><label>Connection Timeout (ms)</label><input id="enip_timeout" placeholder="3000" type="number"></div>
     <div class="form-group"><label>Discovery Timeout (ms)</label><input id="enip_discovery_timeout" placeholder="1500" type="number"></div>
 
-    <h3 style="margin-top:1rem">Configurazione Sicurezza</h3>
+    <h3 style="margin-top:1rem">Security Configuration</h3>
     <div class="form-group">
       <label><input type="checkbox" id="enip_check_cip_security" style="width:auto;margin-right:.5rem">Check CIP Security</label>
-      <small>Verifica se il dispositivo supporta CIP Security (autenticazione/crittografia)</small>
+      <small>Checks whether the device supports CIP Security (authentication/encryption)</small>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="enip_check_plaintext" style="width:auto;margin-right:.5rem">Check Plaintext Messaging</label>
-      <small>Rileva explicit messaging in chiaro (GetAttributeSingle senza crittografia)</small>
+      <small>Detects plaintext explicit messaging (GetAttributeSingle without encryption)</small>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="enip_test_anonymous_write" style="width:auto;margin-right:.5rem">Test Anonymous Write</label>
-      <small>Testa se è possibile scrivere attributi senza autenticazione</small>
+      <small>Tests whether attributes can be written without authentication</small>
     </div>
 
     <h3 style="margin-top:1rem">IDS Configuration</h3>
     <div class="form-group">
       <label><input type="checkbox" id="enip_detect_session_flood" style="width:auto;margin-right:.5rem">Detect Session Flooding</label>
-      <small>Rileva tentativi eccessivi di RegisterSession (>10 in 60s)</small>
+      <small>Detects excessive RegisterSession attempts (>10 in 60s)</small>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="enip_detect_rrdata_storm" style="width:auto;margin-right:.5rem">Detect SendRRData Storm</label>
-      <small>Rileva richieste SendRRData eccessive (>50 in 30s) - possibile DoS</small>
+      <small>Detects excessive SendRRData requests (>50 in 30s) - possible DoS</small>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="enip_detect_write_storm" style="width:auto;margin-right:.5rem">Detect Write Storm</label>
-      <small>Rileva operazioni di scrittura CIP eccessive (SetAttributeSingle/Reset)</small>
+      <small>Detects excessive CIP write operations (SetAttributeSingle/Reset)</small>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="enip_detect_recon" style="width:auto;margin-right:.5rem">Detect Reconnaissance</label>
-      <small>Rileva attività di ricognizione (ListIdentity/ListServices eccessivi)</small>
+      <small>Detects reconnaissance activity (excessive ListIdentity/ListServices)</small>
     </div>
     <div class="form-group">
       <label><input type="checkbox" id="enip_detect_errors" style="width:auto;margin-right:.5rem">Detect Error Patterns</label>
-      <small>Rileva pattern di errori sospetti (>15 status!=0 in 30s)</small>
+      <small>Detects suspicious error patterns (>15 status!=0 in 30s)</small>
     </div>
     <div class="form-group"><label>Max Session Attempts per 60s</label><input id="enip_max_sessions" placeholder="10" type="number"></div>
     <div class="form-group"><label>Max SendRRData per 30s</label><input id="enip_max_rrdata" placeholder="50" type="number"></div>
     <div class="form-group"><label>Max Write Operations per 120s</label><input id="enip_max_writes" placeholder="5" type="number"></div>
     <div class="form-group"><label>Max Discovery Requests per 60s</label><input id="enip_max_discovery" placeholder="20" type="number"></div>
 
-    <button class="btn" onclick="load('ethernetip')">Carica</button>
-    <button class="btn" onclick="save('ethernetip')">Salva</button>
+    <button class="btn" onclick="load('ethernetip')">Load</button>
+    <button class="btn" onclick="save('ethernetip')">Save</button>
   </div>
 </div>
 
@@ -265,25 +265,25 @@ input{width:100%;padding:.4rem;border:1px solid #ccc;border-radius:4px}
   <div class="card">
     <h2>OPC UA</h2>
     <div class="form-group">
-      <label><input type="checkbox" id="opcua_enabled" style="width:auto;margin-right:.5rem">Plugin Abilitato</label>
+      <label><input type="checkbox" id="opcua_enabled" style="width:auto;margin-right:.5rem">Plugin Enabled</label>
     </div>
     <div class="form-group"><label>Port</label><input id="opcua_port" placeholder="4840"></div>
     <div class="form-group"><label>Timeout (ms)</label><input id="opcua_timeout" placeholder="5000"></div>
-    <button class="btn" onclick="load('opcua')">Carica</button>
-    <button class="btn" onclick="save('opcua')">Salva</button>
+    <button class="btn" onclick="load('opcua')">Load</button>
+    <button class="btn" onclick="save('opcua')">Save</button>
   </div>
 </div>
 
 <div class="card" style="margin-top:2rem;border:2px solid #007;background:#f0f8ff">
-  <h2>💾 Salva Configurazione</h2>
-  <p>Salva l'intera configurazione corrente su NVS (memoria non volatile) per renderla persistente al riavvio.</p>
+  <h2>💾 Save Configuration</h2>
+  <p>Saves the entire current configuration to NVS (non-volatile memory) to make it persistent across reboots.</p>
   <div class="row">
-    <button class="btn" onclick="saveToNVS()" style="background:#28a745;font-weight:bold">💾 Salva su NVS</button>
-    <button class="btn" onclick="loadCurrentConfig()" style="margin-left:.5rem">🔄 Mostra Config Attuale</button>
+    <button class="btn" onclick="saveToNVS()" style="background:#28a745;font-weight:bold">💾 Save to NVS</button>
+    <button class="btn" onclick="loadCurrentConfig()" style="margin-left:.5rem">🔄 Show Current Config</button>
   </div>
   <div id="nvs-status" style="margin-top:1rem"></div>
   <details style="margin-top:1rem">
-    <summary style="cursor:pointer;font-weight:600;color:#007">📋 Mostra configurazione JSON corrente</summary>
+    <summary style="cursor:pointer;font-weight:600;color:#007">📋 Show current JSON configuration</summary>
     <pre id="current-config" style="background:#f8f9fa;padding:1rem;border:1px solid #ddd;border-radius:4px;margin-top:.5rem;font-size:.8rem;max-height:300px;overflow-y:auto"></pre>
   </details>
 </div>
@@ -337,7 +337,7 @@ function status(msg, err){
   setTimeout(() => s.innerHTML = '', 3000);
 }
 
-// Fix: showTab non usa più "event", accetta l'elemento (opzionale) o fa fallback via data-key
+// Fix: showTab no longer uses "event", it accepts the element (optional) or falls back via data-key
 function showTab(p, el){
   // contenuti
   document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
@@ -486,8 +486,8 @@ async function load(p){
       break;
     }
     applyProtocolEnableState(p);
-    status('Configurazione caricata');
-  }catch(e){ status('Errore: '+e.message,true); }
+    status('Configuration loaded');
+  }catch(e){ status('Error: '+e.message,true); }
 }
 
 async function save(p){
@@ -573,8 +573,8 @@ async function save(p){
       body:JSON.stringify(c)
     });
     if(!r.ok) throw new Error('HTTP '+r.status);
-    status('Configurazione salvata');
-  }catch(e){ status('Errore: '+e.message,true); }
+    status('Configuration saved');
+  }catch(e){ status('Error: '+e.message,true); }
 }
 
 // ---- Tabs + auto-load
@@ -592,7 +592,7 @@ async function save(p){
     const tabs = $('#protoTabs');
     tabs.innerHTML = '';
     const filtered = list;
-    if(!filtered.length){ tabs.innerHTML = '<em>Nessun protocollo disponibile</em>'; return; }
+    if(!filtered.length){ tabs.innerHTML = '<em>No protocols available</em>'; return; }
     filtered.forEach((p,i)=>{
       const btn = document.createElement('button');
       btn.textContent = p.name;
@@ -602,7 +602,7 @@ async function save(p){
       tabs.appendChild(btn);
     });
     if(filtered.length > 0) {
-      // Attiva il primo pannello (fallback: showTab troverà il bottone via data-key)
+      // Activate the first panel (fallback: showTab will find the button via data-key)
       showTab(filtered[0].key);
     }
   }
@@ -627,10 +627,10 @@ async function save(p){
 async function saveToNVS() {
   try {
     const statusDiv = document.getElementById('nvs-status');
-    statusDiv.innerHTML = '<div style="color:#007;font-weight:bold">⏳ Salvando configurazione su NVS...</div>';
+    statusDiv.innerHTML = '<div style="color:#007;font-weight:bold">⏳ Saving configuration to NVS...</div>';
 
     const response = await fetch('/api/config');
-    if (!response.ok) throw new Error('Errore nel leggere configurazione: ' + response.status);
+    if (!response.ok) throw new Error('Error reading configuration: ' + response.status);
     const currentConfig = await response.json();
 
     const saveResponse = await fetch('/api/config', {
@@ -638,18 +638,18 @@ async function saveToNVS() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(currentConfig)
     });
-    if (!saveResponse.ok) throw new Error('Errore nel salvare configurazione: ' + saveResponse.status);
+    if (!saveResponse.ok) throw new Error('Error saving configuration: ' + saveResponse.status);
 
     const result = await saveResponse.text();
     if (result === 'OK') {
-      statusDiv.innerHTML = '<div style="color:#28a745;font-weight:bold;padding:.5rem;background:#d4edda;border-radius:4px">✅ Configurazione salvata con successo su NVS!</div>';
+      statusDiv.innerHTML = '<div style="color:#28a745;font-weight:bold;padding:.5rem;background:#d4edda;border-radius:4px">✅ Configuration saved successfully to NVS!</div>';
     } else {
-      throw new Error('Risposta inaspettata: ' + result);
+      throw new Error('Unexpected response: ' + result);
     }
     setTimeout(() => { statusDiv.innerHTML = ''; }, 5000);
   } catch(e) {
     const statusDiv = document.getElementById('nvs-status');
-    statusDiv.innerHTML = '<div style="color:#dc3545;font-weight:bold;padding:.5rem;background:#f8d7da;border-radius:4px">❌ Errore: ' + e.message + '</div>';
+    statusDiv.innerHTML = '<div style="color:#dc3545;font-weight:bold;padding:.5rem;background:#f8d7da;border-radius:4px">❌ Error: ' + e.message + '</div>';
     console.error('SaveToNVS error:', e);
   }
 }
@@ -657,7 +657,7 @@ async function saveToNVS() {
 async function loadCurrentConfig() {
   try {
     const response = await fetch('/api/config');
-    if (!response.ok) throw new Error('Errore nel caricare configurazione: ' + response.status);
+    if (!response.ok) throw new Error('Error loading configuration: ' + response.status);
 
     const config = await response.json();
     const configDiv = document.getElementById('current-config');
@@ -665,7 +665,7 @@ async function loadCurrentConfig() {
     configDiv.parentElement.open = true;
   } catch(e) {
     const statusDiv = document.getElementById('nvs-status');
-    statusDiv.innerHTML = '<div style="color:#dc3545;font-weight:bold;padding:.5rem;background:#f8d7da;border-radius:4px">❌ Errore nel caricare configurazione: ' + e.message + '</div>';
+    statusDiv.innerHTML = '<div style="color:#dc3545;font-weight:bold;padding:.5rem;background:#f8d7da;border-radius:4px">❌ Error loading configuration: ' + e.message + '</div>';
     console.error('LoadCurrentConfig error:', e);
   }
 }

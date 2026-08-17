@@ -31,8 +31,8 @@ SerialReporter::~SerialReporter() {
 bool SerialReporter::initialize() {
     LOG_INFO(TAG, "Initializing SerialReporter (synchronous mode)");
 
-    // Modalità sincrona - non serve coda né task
-    // Inizializzazione completata semplicemente
+    // Synchronous mode - no queue or task needed
+    // Initialization simply completed
 
     LOG_INFO(TAG, "SerialReporter initialized successfully (synchronous)");
     return true;
@@ -41,14 +41,14 @@ bool SerialReporter::initialize() {
 void SerialReporter::shutdown() {
     LOG_INFO(TAG, "Shutting down SerialReporter");
 
-    // Modalità sincrona - non c'è niente da fermare
+    // Synchronous mode - there is nothing to stop
     shutdown_requested_ = true;
 
     LOG_INFO(TAG, "SerialReporter shutdown complete (synchronous)");
 }
 
 bool SerialReporter::writeToSerial(const std::string& formatted_data) {
-    // Scrittura sincrona diretta con thread-safety
+    // Direct synchronous write with thread-safety
     std::lock_guard<std::mutex> lock(stats_mutex_);
 
     stats_.messages_processed++;
@@ -62,7 +62,7 @@ bool SerialReporter::writeToSerial(const std::string& formatted_data) {
         return true;  // Not an error, just rate limited
     }
 
-    // Scrittura sincrona diretta al seriale
+    // Direct synchronous write to serial
     Logger::write_raw(formatted_data.c_str(), formatted_data.size());
     Logger::write_raw("\n", 1);
 
@@ -98,13 +98,13 @@ SerialReporter::Stats SerialReporter::getStats() const {
     std::lock_guard<std::mutex> lock(stats_mutex_);
     Stats current_stats = stats_;
 
-    // Modalità sincrona - queue_size sempre 0
+    // Synchronous mode - queue_size always 0
     current_stats.queue_size = 0;
 
     return current_stats;
 }
 
-// outputTaskThunk e outputTask rimossi - non servono più in modalità sincrona
+// outputTaskThunk and outputTask removed - no longer needed in synchronous mode
 
 
 bool SerialReporter::checkRateLimit() {

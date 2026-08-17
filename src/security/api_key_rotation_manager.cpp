@@ -13,7 +13,7 @@ extern "C" {
 
 static const char* TAG_ROT = "ApiKeyRotation";
 
-// Singleton globale per gestione centralizzata
+// Global singleton for centralized management
 ApiKeyRotationManager* g_api_key_rotation_manager = nullptr;
 
 ApiKeyRotationManager::ApiKeyRotationManager()
@@ -47,36 +47,36 @@ bool ApiKeyRotationManager::initialize(SecurityManager* sec_mgr, CronScheduler* 
     sec_mgr_ = sec_mgr;
     cron_sched_ = cron_sched;
 
-    // Crea mutex
+    // Create mutex
     mutex_ = xSemaphoreCreateMutex();
     if (!mutex_) {
         LOG_ERROR(TAG_ROT, "Failed to create mutex");
         return false;
     }
 
-    // Carica policy da NVS
+    // Load policy from NVS
     loadPolicyFromNVS();
 
-    // Carica scheduled rotations da NVS
+    // Load scheduled rotations from NVS
     loadRotationsFromNVS();
 
-    // Se policy abilitata, registra task nel CronScheduler (check ogni giorno alle 02:00)
+    // If the policy is enabled, register a task in CronScheduler (check every day at 02:00)
     if (policy_.enabled) {
         ScheduledScan rotation_check;
         rotation_check.name = PSRAMUtils::createPSRAMString("API Key Rotation Check");
-        rotation_check.type = ScheduledScanType::VULNERABILITY_SCAN; // Riutilizziamo l'enum
+        rotation_check.type = ScheduledScanType::VULNERABILITY_SCAN; // We reuse the enum
         rotation_check.target = PSRAMUtils::createPSRAMString("internal://api_key_rotation");
         rotation_check.enabled = true;
         rotation_check.hour = 2;   // 02:00 AM
         rotation_check.minute = 0;
-        rotation_check.day_of_month = -1; // Ogni giorno
+        rotation_check.day_of_month = -1; // Every day
         rotation_check.month = -1;
         rotation_check.day_of_week = -1;
 
-        // Nota: Il CronScheduler non ha callback diretto, quindi useremo un approccio diverso
-        // Invece di registrare nel CronScheduler, creiamo un task FreeRTOS dedicato
-        // Oppure facciamo polling durante il loop principale
-        // Per semplicità, implementiamo un timer periodico qui
+        // Note: CronScheduler has no direct callback, so we will use a different approach
+        // Instead of registering in CronScheduler, we create a dedicated FreeRTOS task
+        // Or we poll during the main loop
+        // For simplicity, we implement a periodic timer here
         LOG_INFO(TAG_ROT, "API Key Rotation Manager uses internal timer (daily check at 02:00)");
     }
 
@@ -144,7 +144,7 @@ bool ApiKeyRotationManager::scheduleRotation(const char* key_id, const char* lab
         return false;
     }
 
-    // Verifica se già schedulata
+    // Check if already scheduled
     for (const auto& entry : scheduled_rotations_) {
         if (strcmp(entry.key_id.c_str(), key_id) == 0) {
             xSemaphoreGive(mutex_);
@@ -153,12 +153,12 @@ bool ApiKeyRotationManager::scheduleRotation(const char* key_id, const char* lab
         }
     }
 
-    // Crea entry
+    // Create entry
     ApiKeyRotationEntry entry;
     entry.key_id = PSRAMUtils::createPSRAMString(key_id);
     entry.key_label = PSRAMUtils::createPSRAMString(label);
 
-    // Calcola timestamp rotazione (dalla data corrente + interval)
+    // Calculate the rotation timestamp (from the current date + interval)
     uint64_t now_ms = esp_timer_get_time() / 1000;
     entry.rotation_due_ms = now_ms + (policy_.rotation_interval_days * 24ULL * 60 * 60 * 1000);
 
@@ -226,7 +226,7 @@ bool ApiKeyRotationManager::triggerImmediateRotation(const char* key_id, const c
 
     LOG_INFOF(TAG_ROT, "Triggering immediate rotation for key: %s", key_id);
 
-    // Crea nuova key
+    // Create new key
     psram_string label_ps = PSRAMUtils::createPSRAMString(new_label);
     const char* new_token = sec_mgr_->createApiKey(label_ps).c_str();
     if (!new_token || strlen(new_token) == 0) {
@@ -237,13 +237,13 @@ bool ApiKeyRotationManager::triggerImmediateRotation(const char* key_id, const c
     LOG_INFOF(TAG_ROT, "New API key created for immediate rotation: %s", new_label);
     LOG_INFOF(TAG_ROT, "New token: %s (SAVE THIS - shown only once!)", new_token);
 
-    // Revoca vecchia key dopo overlap period (se auto_revoke abilitato)
+    // Revoke the old key after the overlap period (if auto_revoke is enabled)
     if (policy_.auto_revoke_old_keys) {
         LOG_INFOF(TAG_ROT, "Old key %s will be revoked in %lu days (auto-revoke enabled)",
                   key_id, (unsigned long)policy_.overlap_period_days);
 
-        // TODO: Schedula revoca futura con timer dedicato
-        // Per ora la revoca è gestita manualmente o via scheduled rotation
+        // TODO: Schedule the future revocation with a dedicated timer
+        // For now the revocation is handled manually or via scheduled rotation
     } else {
         LOG_INFO(TAG_ROT, "Auto-revoke disabled - old key remains active (manual revocation required)");
     }
@@ -257,7 +257,7 @@ void ApiKeyRotationManager::checkRotations() {
     }
 
     if (!policy_.enabled) {
-        return; // Policy disabilitata
+        return; // Policy disabled
     }
 
     if (xSemaphoreTake(mutex_, pdMS_TO_TICKS(1000)) != pdTRUE) {
@@ -271,14 +271,14 @@ void ApiKeyRotationManager::checkRotations() {
 
     xSemaphoreGive(mutex_);
 
-    // Salva stato aggiornato
+    // Save the updated state
     saveRotationsToNVS();
 }
 
 void ApiKeyRotationManager::processRotationEntry(ApiKeyRotationEntry& entry) {
     uint64_t now_ms = esp_timer_get_time() / 1000;
 
-    // Step 1: Invia warning se mancano N giorni alla rotazione
+    // Step 1: Send a warning if N days remain until the rotation
     if (!entry.warning_sent) {
         uint64_t warning_threshold_ms = entry.rotation_due_ms - (policy_.warning_days_before_rotation * 24ULL * 60 * 60 * 1000);
         if (now_ms >= warning_threshold_ms) {
@@ -288,7 +288,7 @@ void ApiKeyRotationManager::processRotationEntry(ApiKeyRotationEntry& entry) {
         }
     }
 
-    // Step 2: Crea nuova key quando arriva il momento
+    // Step 2: Create a new key when the time comes
     if (!entry.new_key_created && now_ms >= entry.rotation_due_ms) {
         createNewKey(entry);
         entry.new_key_created = true;
@@ -296,7 +296,7 @@ void ApiKeyRotationManager::processRotationEntry(ApiKeyRotationEntry& entry) {
         entry.old_key_revoke_ms = now_ms + (policy_.overlap_period_days * 24ULL * 60 * 60 * 1000);
     }
 
-    // Step 3: Revoca vecchia key dopo overlap period (se auto_revoke abilitato)
+    // Step 3: Revoke the old key after the overlap period (if auto_revoke is enabled)
     if (policy_.auto_revoke_old_keys && entry.new_key_created && !entry.old_key_revoked) {
         if (now_ms >= entry.old_key_revoke_ms) {
             revokeOldKey(entry);
@@ -310,7 +310,7 @@ void ApiKeyRotationManager::sendWarningNotification(const ApiKeyRotationEntry& e
         return;
     }
 
-    // Prepara messaggio warning
+    // Prepare the warning message
     char msg[512];
     snprintf(msg, sizeof(msg),
              "API Key Rotation Warning: Key '%s' (ID: %s) will be rotated in %lu days. "
@@ -319,7 +319,7 @@ void ApiKeyRotationManager::sendWarningNotification(const ApiKeyRotationEntry& e
 
     LOG_WARNING(TAG_ROT, msg);
 
-    // TODO: Invia notifica via ReportingEngine (webhook/email) quando implementato
+    // TODO: Send notification via ReportingEngine (webhook/email) when implemented
 }
 
 void ApiKeyRotationManager::createNewKey(ApiKeyRotationEntry& entry) {
@@ -327,7 +327,7 @@ void ApiKeyRotationManager::createNewKey(ApiKeyRotationEntry& entry) {
         return;
     }
 
-    // Genera label per nuova key
+    // Generate the label for the new key
     char new_label[256];
     snprintf(new_label, sizeof(new_label), "%s (rotated)", entry.key_label.c_str());
 
@@ -339,16 +339,16 @@ void ApiKeyRotationManager::createNewKey(ApiKeyRotationEntry& entry) {
         return;
     }
 
-    // Salva ID nuova key (per tracking)
-    // Nota: createApiKey ritorna il token plain, non l'ID. Dobbiamo estrarre l'ID dalla lista keys
-    // Per semplicità, usiamo il token come identificatore temporaneo
+    // Save the new key ID (for tracking)
+    // Note: createApiKey returns the plain token, not the ID. We must extract the ID from the keys list
+    // For simplicity, we use the token as a temporary identifier
     entry.new_key_id = PSRAMUtils::createPSRAMString(new_token);
 
     LOG_INFOF(TAG_ROT, "New API key created for rotation of '%s': %s",
               entry.key_label.c_str(), new_token);
     LOG_WARNING(TAG_ROT, "IMPORTANT: Save this token - it will not be shown again!");
 
-    // Invia notifica con nuovo token
+    // Send the notification with the new token
     if (policy_.send_notifications) {
         char msg[1024];
         snprintf(msg, sizeof(msg),
@@ -357,7 +357,7 @@ void ApiKeyRotationManager::createNewKey(ApiKeyRotationEntry& entry) {
                  entry.key_label.c_str(), entry.key_id.c_str(), new_token,
                  (unsigned long)policy_.overlap_period_days);
 
-        // TODO: Invia notifica via ReportingEngine quando implementato
+        // TODO: Send notification via ReportingEngine when implemented
     }
 }
 
@@ -372,14 +372,14 @@ void ApiKeyRotationManager::revokeOldKey(ApiKeyRotationEntry& entry) {
     if (revoked) {
         LOG_INFOF(TAG_ROT, "Old API key revoked after overlap period: %s", entry.key_id.c_str());
 
-        // Invia notifica revoca
+        // Send the revocation notification
         if (policy_.send_notifications) {
             char msg[512];
             snprintf(msg, sizeof(msg),
                      "API Key Revoked: Old key '%s' (ID: %s) has been automatically revoked after overlap period.",
                      entry.key_label.c_str(), entry.key_id.c_str());
 
-            // TODO: Invia notifica via ReportingEngine quando implementato
+            // TODO: Send notification via ReportingEngine when implemented
         }
     } else {
         LOG_ERRORF(TAG_ROT, "Failed to revoke old API key: %s", entry.key_id.c_str());
@@ -435,7 +435,7 @@ bool ApiKeyRotationManager::loadPolicyFromNVS() {
     uint8_t enabled_val = 0;
     uint32_t u32_val = 0;
 
-    // Carica campi
+    // Load fields
     if (nvs_get_u8(handle, "rot_enabled", &enabled_val) == ESP_OK) {
         policy_.enabled = (enabled_val != 0);
     }
@@ -460,7 +460,7 @@ bool ApiKeyRotationManager::loadPolicyFromNVS() {
         policy_.send_notifications = (enabled_val != 0);
     }
 
-    // Carica stringhe (webhook, email)
+    // Load strings (webhook, email)
     size_t len = 0;
     if (nvs_get_str(handle, "rot_webhook", NULL, &len) == ESP_OK && len > 0) {
         char* buf = (char*)heap_caps_malloc(len, MALLOC_CAP_SPIRAM);
@@ -493,7 +493,7 @@ bool ApiKeyRotationManager::savePolicyToNVS() {
         return false;
     }
 
-    // Salva campi
+    // Save fields
     nvs_set_u8(handle, "rot_enabled", policy_.enabled ? 1 : 0);
     nvs_set_u32(handle, "rot_interval", policy_.rotation_interval_days);
     nvs_set_u32(handle, "rot_overlap", policy_.overlap_period_days);
@@ -501,7 +501,7 @@ bool ApiKeyRotationManager::savePolicyToNVS() {
     nvs_set_u32(handle, "rot_warn_days", policy_.warning_days_before_rotation);
     nvs_set_u8(handle, "rot_notify", policy_.send_notifications ? 1 : 0);
 
-    // Salva stringhe
+    // Save strings
     if (!policy_.notification_webhook.empty()) {
         nvs_set_str(handle, "rot_webhook", policy_.notification_webhook.c_str());
     }
@@ -547,7 +547,7 @@ bool ApiKeyRotationManager::loadRotationsFromNVS() {
         char key[32];
         size_t len;
 
-        // Carica stringhe
+        // Load strings
         snprintf(key, sizeof(key), "%skid", prefix);
         if (nvs_get_str(handle, key, NULL, &len) == ESP_OK && len > 0) {
             char* buf = (char*)heap_caps_malloc(len, MALLOC_CAP_SPIRAM);
@@ -578,7 +578,7 @@ bool ApiKeyRotationManager::loadRotationsFromNVS() {
             }
         }
 
-        // Carica timestamp
+        // Load timestamps
         uint64_t u64_val;
         snprintf(key, sizeof(key), "%sdue", prefix);
         if (nvs_get_u64(handle, key, &u64_val) == ESP_OK) entry.rotation_due_ms = u64_val;
@@ -592,7 +592,7 @@ bool ApiKeyRotationManager::loadRotationsFromNVS() {
         snprintf(key, sizeof(key), "%srevoke", prefix);
         if (nvs_get_u64(handle, key, &u64_val) == ESP_OK) entry.old_key_revoke_ms = u64_val;
 
-        // Carica bool
+        // Load bools
         uint8_t u8_val;
         snprintf(key, sizeof(key), "%swarnsent", prefix);
         if (nvs_get_u8(handle, key, &u8_val) == ESP_OK) entry.warning_sent = (u8_val != 0);
@@ -630,7 +630,7 @@ bool ApiKeyRotationManager::saveRotationsToNVS() {
         snprintf(prefix, sizeof(prefix), "r%zu_", i);
         char key[32];
 
-        // Salva stringhe
+        // Save strings
         snprintf(key, sizeof(key), "%skid", prefix);
         nvs_set_str(handle, key, e.key_id.c_str());
 
@@ -640,7 +640,7 @@ bool ApiKeyRotationManager::saveRotationsToNVS() {
         snprintf(key, sizeof(key), "%snkid", prefix);
         nvs_set_str(handle, key, e.new_key_id.c_str());
 
-        // Salva timestamp
+        // Save timestamps
         snprintf(key, sizeof(key), "%sdue", prefix);
         nvs_set_u64(handle, key, e.rotation_due_ms);
 
@@ -653,7 +653,7 @@ bool ApiKeyRotationManager::saveRotationsToNVS() {
         snprintf(key, sizeof(key), "%srevoke", prefix);
         nvs_set_u64(handle, key, e.old_key_revoke_ms);
 
-        // Salva bool
+        // Save bools
         snprintf(key, sizeof(key), "%swarnsent", prefix);
         nvs_set_u8(handle, key, e.warning_sent ? 1 : 0);
 

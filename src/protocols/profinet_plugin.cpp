@@ -399,7 +399,7 @@ bool PROFINETPlugin::isTargetPacket(const NetworkPacket& packet) {
     return packet.ether_type == htons(0x8892);
 }
 
-// ==================== FASE 6: PROFINET IDS Rules Implementation ====================
+// ==================== PHASE 6: PROFINET IDS Rules Implementation ====================
 
 bool PROFINETPlugin::doPacketAnalysis(const NetworkPacket& pkt) {
     const uint8_t* b = pkt.data;
@@ -1120,7 +1120,7 @@ FuzzResult PROFINETPlugin::execute(const FuzzJob& job, const FuzzTestCase& tc,
     }
 }
 
-// ==================== FASE 7: PROFINET Advanced Fuzzing Seeds ====================
+// ==================== PHASE 7: PROFINET Advanced Fuzzing Seeds ====================
 
 bool PROFINETPlugin::generateAttackSeeds(const FuzzJob& job, const std::string& attack_type, std::vector<FuzzTestCase>& out) {
     (void)job; out.clear();

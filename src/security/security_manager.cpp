@@ -193,13 +193,13 @@ bool SecurityManager::initialize(const SecurityConfig& cfg) {
         LOG_INFO(TAG_SEC, "Flash encryption enabled and enforced");
     }
 
-    // Inizializza storage PSRAM per API keys
+    // Initialize PSRAM storage for API keys
     PSRAMAllocator<ApiKeyEntry> alloc;
     api_keys_ = psram_vector<ApiKeyEntry>(alloc);
     PSRAMAllocator<SecurityEventLog> event_alloc;
     security_events_ = psram_vector<SecurityEventLog>(event_alloc);
 
-    // Deriva master key da chip ID (unico per dispositivo)
+    // Derive master key from chip ID (unique per device)
     uint8_t chip_id[6];
     esp_efuse_mac_get_default(chip_id);
 
@@ -212,7 +212,7 @@ bool SecurityManager::initialize(const SecurityConfig& cfg) {
         heap_caps_free(master_key_buf);
     }
 
-    // Hardening: assicurarsi che la password admin sia conservata in forma hashed
+    // Hardening: ensure the admin password is stored in hashed form
     psram_string persisted_hash;
     if (loadAdminPasswordHash(persisted_hash) && is_sha256_hex(persisted_hash)) {
         admin_password_hash_ = persisted_hash;
@@ -279,7 +279,7 @@ bool SecurityManager::initialize(const SecurityConfig& cfg) {
         }
     }
 
-    // Carica API keys da NVS
+    // Load API keys from NVS
     loadApiKeysFromNVS();
     auditApiKeysForRotation();
 
@@ -320,7 +320,7 @@ std::string SecurityManager::getRunningAppSHA256() const {
 
 
 bool SecurityManager::setExpectedFirmwareHash(const std::string& hex) {
-    // Hardening: deve essere SHA-256 in esadecimale (64 char 0-9a-fA-F)
+    // Hardening: must be SHA-256 in hexadecimal (64 char 0-9a-fA-F)
     auto is_hex = [](char c){
         return std::isdigit((unsigned char)c) ||
                (c >= 'a' && c <= 'f') ||
@@ -331,7 +331,7 @@ bool SecurityManager::setExpectedFirmwareHash(const std::string& hex) {
         return false;
     }
 
-    // Normalizza in minuscolo per coerenza
+    // Normalize to lowercase for consistency
     std::string hex_norm; hex_norm.reserve(64);
     for (char c : hex) hex_norm.push_back((char)std::tolower((unsigned char)c));
 

@@ -64,12 +64,12 @@ public:
     IntrusionDetectionGeneral* ids() const { return ids_; }
     LogFileManager* logFileManager() const { return log_file_manager_; }
 
-    // Nuovi membri per la gestione della connessione WiFi
+    // New members for managing the WiFi connection
     std::string new_ssid_;
     std::string new_password_;
     esp_timer_handle_t wifi_connect_timer_ = nullptr;
 
-    // Dichiarazione del metodo per la logica di connessione
+    // Declaration of the method for the connection logic
     bool connectToWiFi();
 
     // IRAM defragmentation timer (triggered 2s after last dashboard API call)
@@ -78,10 +78,10 @@ public:
     void scheduleDefragmentation();
     void performDefragmentation();
 
-    // Nuovo metodo per avviare WebServer con task separato
+    // New method to start the WebServer with a separate task
     bool startWithTask(uint16_t port, esp_netif_t* netif);
 
-    // Dichiarazione del metodo callback del timer come statico
+    // Declaration of the timer callback method as static
     static void wifi_connect_timer_callback(void* arg);
 
     // HTTPS support
@@ -185,7 +185,7 @@ private:
     static esp_err_t h_logs_incremental_read(httpd_req_t* req);
     static esp_err_t h_logs_sse(httpd_req_t* req);
 
-    // Lista protocolli
+    // Protocol list
     static esp_err_t h_protocols_get_details(httpd_req_t* req);
     static esp_err_t h_protocols_get(httpd_req_t* req);
 

@@ -8,7 +8,7 @@
 #include <ctime>
 #include <cstring>
 #include <cstdarg>
-#include <inttypes.h>  // ← per PRIu32
+#include <inttypes.h>  // ← for PRIu32
 #include <sys/time.h>
 extern "C" {
     #include "esp_heap_caps.h"
@@ -20,7 +20,7 @@ extern "C" {
   #include "esp_heap_caps.h"
 }
 
-// Istanza globale allocata in PSRAM per ridurre DRAM usage
+// Global instance allocated in PSRAM to reduce DRAM usage
 Logger* g_logger = nullptr;
 
 // Simple timestamp utility for direct console logging
@@ -94,13 +94,13 @@ static void formatTimestampForConsole(char* buffer, size_t buffer_size, uint64_t
 }
 
 static Logger* createLoggerInPSRAM() {
-    // Alloca Logger in PSRAM per ridurre pressure su DRAM interno
+    // Allocate Logger in PSRAM to reduce pressure on internal DRAM
     Logger* logger = (Logger*)heap_caps_malloc(sizeof(Logger), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (logger) {
         new (logger) Logger(); // placement new
         return logger;
     } else {
-        // Fallback a DRAM se PSRAM non disponibile
+        // Fallback to DRAM if PSRAM is not available
         return new Logger();
     }
 }
@@ -117,7 +117,7 @@ bool Logger::init_async(size_t ring_bytes) {
     if (!s_mutex) s_mutex = xSemaphoreCreateMutex();
 
     if (!g_logger) g_logger = createLoggerInPSRAM();
-    if (g_logger->ring_) return true; // già inizializzato
+    if (g_logger->ring_) return true; // already initialized
 
     // Allocate ring buffer in PSRAM to save DRAM
     const size_t ring_size = ring_bytes ? ring_bytes : DEFAULT_RING_BYTES;
@@ -150,7 +150,7 @@ bool Logger::init_async(size_t ring_bytes) {
 
     g_logger->running_.store(true);
 
-    // Crea log_writer task usando configurazione centralizzata (con priorità inclusa)
+    // Create log_writer task using centralized configuration (with priority included)
     g_logger->writer_task_ = TaskConfig::createTask(
         &Logger::writerTaskThunk,
         "log_writer",
@@ -217,7 +217,7 @@ void Logger::writerTaskLoop() {
     }
 }
 
-// ======================= API “alto livello” compatibile =======================
+// ======================= Compatible "high-level" API =======================
 void Logger::log(const char* tag, LogLevel lvl, const std::string& msg) {
     // CRITICAL: Prevent infinite recursion loop between LoggingSystem and ReportingEngine
     static thread_local bool in_log_processing = false;
@@ -226,7 +226,7 @@ void Logger::log(const char* tag, LogLevel lvl, const std::string& msg) {
     }
     in_log_processing = true;
 
-    // Inoltra SOLO al ReportingEngine - il ReportingEngine gestisce la verbosity e decide dove scrivere
+    // Forward ONLY to the ReportingEngine - the ReportingEngine handles verbosity and decides where to write
     if (reporting_engine_) {
         static const char* N[] = {"DEBUG","INFO","WARNING","ERROR"};
         const char* level = N[(int) ((lvl>=LogLevel::DEBUG && lvl<=LogLevel::ERROR)? lvl : LogLevel::INFO)];
@@ -234,13 +234,13 @@ void Logger::log(const char* tag, LogLevel lvl, const std::string& msg) {
         reporting_engine_->reportLogMessage(tag ? std::string(tag) : std::string("LOG"),
                                             std::string(level), msg, t_ms);
     }
-    // Scrittura diretta a console rimossa - tutto gestito dal ReportingEngine
+    // Direct console writing removed - everything handled by the ReportingEngine
 
     in_log_processing = false;
 }
 
 
-// ======================= Formattate / JSON / Sync fallback =======================
+// ======================= Formatted / JSON / Sync fallback =======================
 bool Logger::init_sync() {
     if (!s_mutex) s_mutex = xSemaphoreCreateMutex();
     return s_mutex != nullptr;
@@ -359,7 +359,7 @@ void Logger::logf(const char* tag, const char* fmt, ...) {
 }
 
 void Logger::vlogf(const char* tag, const char* fmt, va_list ap) {
-    // Formatta il messaggio
+    // Format the message
     char line[768];
     int n = vsnprintf(line, sizeof(line), fmt, ap);
     if (n < 0) return;
@@ -368,7 +368,7 @@ void Logger::vlogf(const char* tag, const char* fmt, va_list ap) {
         n = sizeof(line)-1;
     }
 
-    // Rimuovi il newline finale se presente (il ReportingEngine lo gestisce)
+    // Remove the trailing newline if present (the ReportingEngine handles it)
     if (n > 0 && line[n-1] == '\n') {
         line[n-1] = '\0';
     }
@@ -380,22 +380,22 @@ void Logger::vlogf(const char* tag, const char* fmt, va_list ap) {
     }
     in_logf_processing = true;
 
-    // Inoltra SOLO al ReportingEngine - il ReportingEngine gestisce la verbosity e decide dove scrivere
+    // Forward ONLY to the ReportingEngine - the ReportingEngine handles verbosity and decides where to write
     if (g_logger && g_logger->reporting_engine_) {
-        // Cattura il timestamp esatto al momento dell'accodamento (non durante la scrittura)
+        // Capture the exact timestamp at the moment of enqueueing (not during writing)
         uint64_t t_ms = (uint64_t)(esp_timer_get_time() / 1000ULL);
 
         // OPTIMIZATION: Use PSRAM strings instead of std::string to avoid Internal RAM allocations
         // Each LOG_INFOF previously created 3 std::string temporaries (~300 bytes Internal RAM)
         g_logger->reporting_engine_->reportLogMessage(
             tag ? PSRAMUtils::createPSRAMString(tag) : PSRAMUtils::createPSRAMString("LOG"),
-            PSRAMUtils::createPSRAMString("INFO"), // LOG_INFOF assume sempre livello INFO
+            PSRAMUtils::createPSRAMString("INFO"), // LOG_INFOF always assumes INFO level
             PSRAMUtils::createPSRAMString(line),
             t_ms
         );
     } else {
     }
-    // Scrittura diretta a console rimossa - tutto gestito dal ReportingEngine
+    // Direct console writing removed - everything handled by the ReportingEngine
 
     in_logf_processing = false;
 }
@@ -416,16 +416,16 @@ int Logger::espLogVprintf(const char* fmt, va_list args) {
     int len = vsnprintf(buf, sizeof(buf), fmt, args);
     if (len <= 0) return 0;
 
-    // Togli newline finale se presente (logf lo aggiunge comunque)
+    // Remove trailing newline if present (logf adds it anyway)
     if (buf[len-1] == '\n') buf[len-1] = '\0';
 
-    // Parsing leggero: "E (ts) TAG: msg"
+    // Lightweight parsing: "E (ts) TAG: msg"
     const char* tag = "ESP";
 
     const char* after_paren = strstr(buf, ") ");
     const char* colon = after_paren ? strstr(after_paren+2, ": ") : nullptr;
     if (after_paren && colon && colon > after_paren+2) {
-        // Tag tra ") " e ": " - use PSRAM to save internal RAM
+        // Tag between ") " and ": " - use PSRAM to save internal RAM
         static char* tagbuf = nullptr;
         const size_t TAGBUF_SIZE = 64;
         size_t tlen = (size_t)(colon - (after_paren+2));
@@ -442,10 +442,10 @@ int Logger::espLogVprintf(const char* fmt, va_list args) {
         tag = tagbuf;
         use_fallback_tag:
 
-        // Path sicuro: evita std::string e allocazioni heap
+        // Safe path: avoid std::string and heap allocations
         Logger::logf(tag, "%s", colon + 2);
     } else {
-        // Path sicuro: evita std::string
+        // Safe path: avoid std::string
         Logger::logf(tag, "%s", buf);
     }
     return len;

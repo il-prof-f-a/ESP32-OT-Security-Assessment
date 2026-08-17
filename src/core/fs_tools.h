@@ -5,7 +5,7 @@ extern "C" {
 #endif
 
 void fs_print_littlefs_report(const char* base_path, const char* part_label);
-// whitelist: array di prefissi di percorso da preservare (può essere NULL/0 per cancellare tutto)
+// whitelist: array of path prefixes to preserve (can be NULL/0 to delete everything)
 void fs_purge_littlefs(const char* base_path, const char* const* whitelist, size_t wl_count);
 
 #ifdef __cplusplus

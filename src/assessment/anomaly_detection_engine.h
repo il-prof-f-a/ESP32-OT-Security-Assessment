@@ -6,7 +6,7 @@
 #include "protocol_baseline.h"
 
 /**
- * @brief Feature set per analisi anomalie su singolo pacchetto
+ * @brief Feature set for anomaly analysis on a single packet
  */
 struct PacketAnomalyFeatures {
     ProtocolType protocol = ProtocolType::UNKNOWN;
@@ -27,7 +27,7 @@ struct PacketAnomalyFeatures {
 };
 
 /**
- * @brief Feature set per analisi anomalie su flusso aggregato
+ * @brief Feature set for anomaly analysis on an aggregated flow
  */
 struct FlowAnomalyFeatures {
     ProtocolType protocol = ProtocolType::UNKNOWN;
@@ -63,14 +63,14 @@ public:
     void setThresholds(const AnomalyThresholdConfig& cfg);
 
     /**
-     * @brief Analizza un singolo pacchetto e genera anomalie
+     * @brief Analyzes a single packet and generates anomalies
      */
     void analyzePacket(const PacketAnomalyFeatures& features,
                        ProtocolBaselineManager& baseline,
                        psram_vector<AnomalyDetection>& out) const;
 
     /**
-     * @brief Analizza uno snapshot di flusso aggregato
+     * @brief Analyzes an aggregated flow snapshot
      */
     void analyzeFlow(const FlowAnomalyFeatures& features,
                      ProtocolBaselineManager& baseline,

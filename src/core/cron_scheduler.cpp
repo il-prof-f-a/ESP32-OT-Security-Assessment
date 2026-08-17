@@ -511,7 +511,7 @@ void CronScheduler::requestSaveSchedules() {
 
     const uint8_t command = CRON_SAVER_CMD_SAVE;
     if (xQueueSendToBack(saver_queue_, &command, 0) != pdTRUE) {
-        // Queue already holds a pending save; this is acceptable because il worker la processerà a breve.
+        // Queue already holds a pending save; this is acceptable because the worker will process it shortly.
         LOG_DEBUG(TAG_CRON, "Save request queue full, keeping existing pending request");
     }
 }

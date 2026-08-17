@@ -144,10 +144,10 @@ esp_err_t EthL2Adapter::input_trampoline(esp_eth_handle_t h, uint8_t* buffer, ui
     }
 
     if (self->netif_) {
-        ///LOG_INFO("PacketCapture", "REINOLTRO PACCHETTO ALLO STACK IP ATTIVATO!!!! Testare PING");
+        ///LOG_INFO("PacketCapture", "FORWARDING PACKET TO IP STACK ENABLED!!!! Test PING");
         return esp_netif_receive(self->netif_, buffer, length, nullptr);
     } else {
-        LOG_ERROR("PacketCapture", "REINOLTRO PACCHETTO ALLO STACK IP NON POSSIBILE");
+        LOG_ERROR("PacketCapture", "FORWARDING PACKET TO IP STACK NOT POSSIBLE");
         // If no netif provided, just indicate we've sniffed the packet
         return ESP_ERR_NOT_SUPPORTED;
     }

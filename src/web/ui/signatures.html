@@ -100,30 +100,30 @@ th{background:#f8f9fa; color:#333}
       <div class="toolbar">
         <div class="file-upload">
           <input type="file" id="fileInput" accept=".json" />
-          <button class="btn" onclick="uploadSignatures()">📤 Carica File</button>
+          <button class="btn" onclick="uploadSignatures()">📤 Upload File</button>
         </div>
-        <button class="btn success" onclick="downloadSignatures()">📥 Scarica JSON</button>
-        <button class="btn danger" onclick="clearSignatures()">🗑️ Cancella Tutto</button>
-        <button class="btn ghost" onclick="reloadSignatures()">🔄 Ricarica da NVS</button>
+        <button class="btn success" onclick="downloadSignatures()">📥 Download JSON</button>
+        <button class="btn danger" onclick="clearSignatures()">🗑️ Delete All</button>
+        <button class="btn ghost" onclick="reloadSignatures()">🔄 Reload from NVS</button>
       </div>
 
       <!-- Stats -->
       <div class="card">
-        <h2>📊 Statistiche Signature</h2>
-        <div id="stats" class="loader">Caricamento statistiche...</div>
+        <h2>📊 Signature Statistics</h2>
+        <div id="stats" class="loader">Loading statistics...</div>
       </div>
 
       <!-- Signature List -->
       <div class="card">
-        <h2>📋 Lista Signature CVE</h2>
+        <h2>📋 CVE Signature List</h2>
         <div class="toolbar">
-          <button class="btn" onclick="addNewSignature()">➕ Aggiungi Nuova</button>
-          <button class="btn ghost" onclick="toggleRawEditor()">🧾 Modifica JSON</button>
-          <button class="btn success" id="saveRawBtn" style="display:none" onclick="saveRawJSON()">💾 Salva JSON</button>
+          <button class="btn" onclick="addNewSignature()">➕ Add New</button>
+          <button class="btn ghost" onclick="toggleRawEditor()">🧾 Edit JSON</button>
+          <button class="btn success" id="saveRawBtn" style="display:none" onclick="saveRawJSON()">💾 Save JSON</button>
         </div>
         <textarea id="jsonEditor" class="json-editor" style="display:none"></textarea>
 
-        <div id="signatureList" class="loader">Caricamento signature...</div>
+        <div id="signatureList" class="loader">Loading signatures...</div>
       </div>
     </div>
   </div>
@@ -132,7 +132,7 @@ th{background:#f8f9fa; color:#333}
   <div id="editModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>✏️ Modifica Signature</h2>
+        <h2>✏️ Edit Signature</h2>
         <button class="modal-close" onclick="closeEditModal()">&times;</button>
       </div>
       <div class="form-group">
@@ -140,11 +140,11 @@ th{background:#f8f9fa; color:#333}
         <input type="text" id="editCVE" placeholder="CVE-2024-12345">
       </div>
       <div class="form-group">
-        <label>Name (opzionale):</label>
-        <input type="text" id="editName" placeholder="Nome vulnerabilità">
+        <label>Name (optional):</label>
+        <input type="text" id="editName" placeholder="Vulnerability name">
       </div>
       <div class="form-group">
-        <label>Protocollo:</label>
+        <label>Protocol:</label>
         <select id="editProtocol">
           <option value="Modbus TCP">Modbus TCP</option>
           <option value="PROFINET">PROFINET</option>
@@ -155,23 +155,23 @@ th{background:#f8f9fa; color:#333}
       </div>
       <div class="form-group">
         <label>Bytes (hex):</label>
-        <textarea id="editBytes" rows="3" placeholder="01 02 03 FF ... per prefix match"></textarea>
+        <textarea id="editBytes" rows="3" placeholder="01 02 03 FF ... for prefix match"></textarea>
       </div>
       <div class="form-group">
-        <label>Function Code (opzionale):</label>
-        <input type="text" id="editFunctionCode" placeholder="es. 0x05">
+        <label>Function Code (optional):</label>
+        <input type="text" id="editFunctionCode" placeholder="e.g. 0x05">
       </div>
       <div class="form-group">
-        <label>Descrizione (opzionale):</label>
+        <label>Description (optional):</label>
         <textarea id="editDescription" rows="2"></textarea>
       </div>
       <div class="form-group">
-        <label>References (opzionale, una per riga):</label>
+        <label>References (optional, one per line):</label>
         <textarea id="editReferences" rows="3" placeholder="https://cve.mitre.org/...&#10;https://nvd.nist.gov/..."></textarea>
       </div>
       <div class="toolbar">
-        <button class="btn success" onclick="saveSignatureEdit()">💾 Salva</button>
-        <button class="btn ghost" onclick="closeEditModal()">❌ Annulla</button>
+        <button class="btn success" onclick="saveSignatureEdit()">💾 Save</button>
+        <button class="btn ghost" onclick="closeEditModal()">❌ Cancel</button>
       </div>
     </div>
   </div>
@@ -268,7 +268,7 @@ async function loadStats(override) {
 
     statsDiv.innerHTML = html;
   } catch (error) {
-    showStatus('Errore nel caricamento statistiche: ' + error.message, 'err');
+    showStatus('Error loading statistics: ' + error.message, 'err');
   }
 }
 
@@ -289,7 +289,7 @@ async function saveRawJSON() {
   try {
     parsed = JSON.parse(ta.value);
   } catch (e) {
-    showStatus('JSON non valido: ' + e.message, 'err');
+    showStatus('Invalid JSON: ' + e.message, 'err');
     return;
   }
   try {
@@ -301,7 +301,7 @@ async function saveRawJSON() {
     const result = await response.json();
     if (response.ok) {
       signatures = parsed;
-      showStatus('✅ JSON salvato', 'ok');
+      showStatus('✅ JSON saved', 'ok');
       await reloadSignatures();
       await loadStats();
       renderSignatures();
@@ -309,7 +309,7 @@ async function saveRawJSON() {
       showStatus(`❌ ${result.message}`, 'err');
     }
   } catch (e) {
-    showStatus('Errore salvataggio JSON: ' + e.message, 'err');
+    showStatus('Error saving JSON: ' + e.message, 'err');
   }
 }
 
@@ -318,7 +318,7 @@ function renderExtraFields(sig) {
 
   // Display Name if present
   if (sig.Name) {
-    html += `<div><strong>Nome:</strong> ${esc(sig.Name)}</div>`;
+    html += `<div><strong>Name:</strong> ${esc(sig.Name)}</div>`;
   }
 
   // Display FunctionCode if present from Packet
@@ -371,9 +371,9 @@ async function loadSignatures(override) {
     })();
     renderSignatures();
   } catch (error) {
-    showStatus('Errore nel caricamento signature: ' + error.message, 'err');
+    showStatus('Error loading signatures: ' + error.message, 'err');
     document.getElementById('signatureList').innerHTML =
-      '<div class="status err">❌ Impossibile caricare le signature</div>';
+      '<div class="status err">❌ Unable to load signatures</div>';
   }
 }
 
@@ -391,7 +391,7 @@ function renderSignatures() {
   const listDiv = document.getElementById('signatureList');
 
   if (!signatures || Object.keys(signatures).length === 0) {
-    listDiv.innerHTML = '<div class="status warn">⚠️ Nessuna signature caricata</div>';
+    listDiv.innerHTML = '<div class="status warn">⚠️ No signatures loaded</div>';
     return;
   }
 
@@ -406,7 +406,7 @@ function renderSignatures() {
     vulns.forEach((sig, index) => {
       const globalIndex = `${protocol}_${index}`;
       const safeId = 'sig_' + globalIndex.replace(/[^\w\-:.]+/g, '-');
-      // preferisci Packet.Bytes; fai fallback a Bytes “piatto” per compatibilità
+      // prefer Packet.Bytes; fall back to flat Bytes for compatibility
       const bytes = (sig?.Packet?.Bytes ?? sig?.Bytes ?? 'N/A');
 
       parts.push(`
@@ -417,12 +417,12 @@ function renderSignatures() {
               <span class="signature-protocol">${esc(protocol)}</span>
             </div>
             <div class="table-actions">
-              <button class="btn small" onclick="editSignature('${esc(globalIndex)}')">✏️ Modifica</button>
+              <button class="btn small" onclick="editSignature('${esc(globalIndex)}')">✏️ Edit</button>
               <button class="btn small danger" onclick="deleteSignature('${esc(globalIndex)}')">🗑️</button>
             </div>
           </div>
           <div class="signature-details">
-            ${sig?.Description ? `<div><strong>Descrizione:</strong> ${esc(sig.Description)}</div>` : ''}
+            ${sig?.Description ? `<div><strong>Description:</strong> ${esc(sig.Description)}</div>` : ''}
             <div><strong>Bytes:</strong></div>
             <div class="signature-bytes">${esc(bytes)}</div>
             ${renderExtraFields(sig)}
@@ -439,14 +439,14 @@ function renderSignatures() {
 async function uploadSignatures() {
   const fileInput = document.getElementById('fileInput');
   const file = fileInput.files[0];
-  if (!file) { showStatus('Seleziona un file JSON', 'err'); return; }
+  if (!file) { showStatus('Select a JSON file', 'err'); return; }
 
   const text = await file.text();
   try {
     // Validiamo che sia JSON
     JSON.parse(text);
   } catch {
-    showStatus('Il file non è un JSON valido', 'err');
+    showStatus('The file is not valid JSON', 'err');
     return;
   }
 
@@ -458,7 +458,7 @@ async function uploadSignatures() {
     });
     const result = await response.json();
     if (response.ok) {
-      showStatus(`✅ ${result.message}. Signature aggiunte: ${result.signatures_added}`, 'ok');
+      showStatus(`✅ ${result.message}. Signatures added: ${result.signatures_added}`, 'ok');
       fileInput.value = '';
       await reloadSignatures();
       await loadStats();
@@ -466,7 +466,7 @@ async function uploadSignatures() {
       showStatus(`❌ ${result.message}`, 'err');
     }
   } catch (e) {
-    showStatus('Errore upload: ' + e.message, 'err');
+    showStatus('Upload error: ' + e.message, 'err');
   }
 }
 
@@ -487,29 +487,29 @@ async function downloadSignatures() {
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
 
-    showStatus('✅ File scaricato con successo', 'ok');
+    showStatus('✅ File downloaded successfully', 'ok');
   } catch (error) {
-    showStatus('Errore download: ' + error.message, 'err');
+    showStatus('Download error: ' + error.message, 'err');
   }
 }
 
 // Clear all signatures
 async function clearSignatures() {
-  if (!confirm('⚠️ Confermi di voler cancellare TUTTE le signature?')) return;
+  if (!confirm('⚠️ Are you sure you want to delete ALL signatures?')) return;
 
   try {
     const response = await fetch('/api/signatures/clear', { method: 'POST' });
     const result = await response.json();
 
     if (response.ok) {
-      showStatus('✅ Signature cancellate con successo', 'ok');
+      showStatus('✅ Signatures deleted successfully', 'ok');
       loadStats();
       loadSignatures();
     } else {
       showStatus(`❌ ${result.message}`, 'err');
     }
   } catch (error) {
-    showStatus('Errore cancellazione: ' + error.message, 'err');
+    showStatus('Deletion error: ' + error.message, 'err');
   }
 }
 
@@ -520,14 +520,14 @@ async function reloadSignatures() {
     const result = await response.json();
 
     if (response.ok) {
-      showStatus(`✅ ${result.message}. Signature caricate: ${result.signatures_loaded}`, 'ok');
+      showStatus(`✅ ${result.message}. Signatures loaded: ${result.signatures_loaded}`, 'ok');
       loadStats();
       loadSignatures();
     } else {
       showStatus(`❌ ${result.message}`, 'err');
     }
   } catch (error) {
-    showStatus('Errore reload: ' + error.message, 'err');
+    showStatus('Reload error: ' + error.message, 'err');
   }
 }
 
@@ -577,7 +577,7 @@ async function saveSignatureEdit() {
   const description = document.getElementById('editDescription').value.trim();
   const referencesText = document.getElementById('editReferences').value.trim();
 
-  if (!cve || !bytes) { showStatus('CVE e Bytes sono obbligatori', 'err'); return; }
+  if (!cve || !bytes) { showStatus('CVE and Bytes are required', 'err'); return; }
 
   // Parse references (one per line)
   const references = referencesText
@@ -614,7 +614,7 @@ async function saveSignatureEdit() {
 
     const oldArr = signatures[oldProto]?.Vulnerabilities || [];
     const existing = oldArr[idx];
-    if (!existing) { showStatus('Signature non trovata', 'err'); return; }
+    if (!existing) { showStatus('Signature not found', 'err'); return; }
 
     if (protocolSel === oldProto) {
       // update in-place
@@ -639,7 +639,7 @@ async function saveSignatureEdit() {
     });
     const result = await response.json();
     if (response.ok) {
-      showStatus('✅ Signature salvata con successo', 'ok');
+      showStatus('✅ Signature saved successfully', 'ok');
       closeEditModal();
       await reloadSignatures();
       await loadStats();
@@ -647,18 +647,18 @@ async function saveSignatureEdit() {
       showStatus(`❌ ${result.message}`, 'err');
     }
   } catch (e) {
-    showStatus('Errore salvataggio: ' + e.message, 'err');
+    showStatus('Save error: ' + e.message, 'err');
   }
 }
 
 
 // Delete signature
 async function deleteSignature(globalIndex) {
-  if (!confirm('Confermi di voler eliminare questa signature?')) return;
+  if (!confirm('Are you sure you want to delete this signature?')) return;
   const [protocol, idxStr] = String(globalIndex).split('_');
   const idx = parseInt(idxStr, 10);
   const arr = signatures[protocol]?.Vulnerabilities || [];
-  if (arr[idx] == null) { showStatus('Signature non trovata', 'err'); return; }
+  if (arr[idx] == null) { showStatus('Signature not found', 'err'); return; }
   arr.splice(idx, 1);
 
   try {
@@ -669,14 +669,14 @@ async function deleteSignature(globalIndex) {
     });
     const result = await response.json();
     if (response.ok) {
-      showStatus('✅ Signature eliminata', 'ok');
+      showStatus('✅ Signature deleted', 'ok');
       await reloadSignatures();
       await loadStats();
     } else {
       showStatus(`❌ ${result.message}`, 'err');
     }
   } catch (e) {
-    showStatus('Errore eliminazione: ' + e.message, 'err');
+    showStatus('Deletion error: ' + e.message, 'err');
   }
 }
 
@@ -696,7 +696,7 @@ function toggleEditMode() {
 
 // Save all changes
 async function saveAllChanges() {
-  showStatus('✅ Modifiche salvate', 'ok');
+  showStatus('✅ Changes saved', 'ok');
   editMode = false;
   document.getElementById('saveBtn').style.display = 'none';
 }

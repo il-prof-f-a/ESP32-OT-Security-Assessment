@@ -1268,7 +1268,7 @@ static inline size_t config_json_len_bytes(void) {
     return sizeof(esp32_ot_generated::kEmbeddedConfigJson) - 1;
 }
 
-// come C-string (null-terminated)
+// as C-string (null-terminated)
 static inline const char* config_json_cstr(void) {
     return esp32_ot_generated::kEmbeddedConfigJson;
 }

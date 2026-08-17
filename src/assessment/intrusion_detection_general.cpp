@@ -277,12 +277,12 @@ bool IntrusionDetectionGeneral::initialize(ConfigurationManager* cfg, ReportingE
         LOG_INFOF(TAG_IDS, "Baseline manager initialized for %s", getProtocolName(proto));
     }
 
-    // Carica baselines salvate (se esistono)
+    // Load saved baselines (if they exist)
     loadBaselines();
 
-    // Attiva baseline learning all'avvio: i baseline vengono costruiti
-    // durante il learning mode del NetworkPresence, cosi' quando si passa
-    // in protection mode l'anomaly detection ha dati su cui lavorare.
+    // Enable baseline learning at startup: the baselines are built
+    // during the NetworkPresence learning mode, so that when it switches
+    // to protection mode, anomaly detection has data to work with.
     baseline_learning_enabled_ = true;
 
     LOG_INFO(TAG_IDS, "IntrusionDetectionGeneral initialized (baseline learning ON)");
@@ -443,7 +443,7 @@ bool IntrusionDetectionGeneral::onPacket(const NetworkPacket& pkt) {
             source_is_trusted = getNetworkPresenceTracker().isTrustedSender(pkt.src_ip, mac);
         }
 
-        if (source_is_trusted) { //sempre abilitato, se non si vuole impostare tempo di ricognizione a zero
+        if (source_is_trusted) { //always enabled, unless you want to set the reconnaissance time to zero
             bypassAuthorization = true;  // Known/learned device, bypass whitelist
         }
 
@@ -519,7 +519,7 @@ void IntrusionDetectionGeneral::stopBaselineLearning() {
     LOG_INFOF("IDS_ENGINE", "Baseline learning stopped: TotalBaselines=%zu, TotalPacketsAnalyzed=%llu",
               baselines_.size(), getTotalPacketsAnalyzed());
 
-    // Salva automaticamente le baselines apprese
+    // Automatically save the learned baselines
     saveBaselines();
 
     if (reporting_engine_) {
@@ -538,13 +538,13 @@ void IntrusionDetectionGeneral::stopBaselineLearning() {
 void IntrusionDetectionGeneral::saveBaselines() {
     LOG_INFO(TAG_IDS, "Saving protocol baselines to filesystem...");
 
-    // Salva ogni baseline di protocollo
+    // Save each protocol baseline
     uint32_t saved_count = 0;
     for (auto& pair : protocol_baselines_) {
         ProtocolType proto = pair.first;
         ProtocolBaselineManager& mgr = pair.second;
 
-        // Costruisci nome file: /data/baseline_modbus.json, /data/baseline_s7.json, etc.
+        // Build the filename: /data/baseline_modbus.json, /data/baseline_s7.json, etc.
         char filepath[64];
         const char* proto_name = nullptr;
         switch (proto) {
@@ -568,7 +568,7 @@ void IntrusionDetectionGeneral::saveBaselines() {
 
     LOG_INFOF(TAG_IDS, "Saved %u/%zu protocol baselines", saved_count, protocol_baselines_.size());
 
-    // Report evento
+    // Report event
     if (reporting_engine_) {
         char event_data[256];
         snprintf(event_data, sizeof(event_data),
@@ -583,13 +583,13 @@ void IntrusionDetectionGeneral::saveBaselines() {
 void IntrusionDetectionGeneral::loadBaselines() {
     LOG_INFO(TAG_IDS, "Loading protocol baselines from filesystem...");
 
-    // Carica ogni baseline di protocollo
+    // Load each protocol baseline
     uint32_t loaded_count = 0;
     for (auto& pair : protocol_baselines_) {
         ProtocolType proto = pair.first;
         ProtocolBaselineManager& mgr = pair.second;
 
-        // Costruisci nome file
+        // Build the filename
         char filepath[64];
         const char* proto_name = nullptr;
         switch (proto) {
@@ -613,7 +613,7 @@ void IntrusionDetectionGeneral::loadBaselines() {
 
     LOG_INFOF(TAG_IDS, "Loaded %u/%zu protocol baselines", loaded_count, protocol_baselines_.size());
 
-    // Report evento
+    // Report event
     if (reporting_engine_) {
         char event_data[256];
         snprintf(event_data, sizeof(event_data),
@@ -849,13 +849,13 @@ bool IntrusionDetectionGeneral::onPacketScan(const NetworkPacket& packet) {
         }
     }
 
-    // Protocol baseline learning e' continuo e indipendente dal NetworkPresence.
-    // Ogni EndpointBaseline attiva l'anomaly detection autonomamente quando
-    // raggiunge min_learning_samples (100 campioni). Funziona per tutti i
-    // protocolli: Modbus, S7, OPC UA, EtherNet/IP, PROFINET.
+    // Protocol baseline learning is continuous and independent of NetworkPresence.
+    // Each EndpointBaseline activates anomaly detection autonomously when
+    // it reaches min_learning_samples (100 samples). It works for all
+    // protocols: Modbus, S7, OPC UA, EtherNet/IP, PROFINET.
     updateBaseline(packet);
 
-    // Salvataggio periodico baseline su filesystem (ogni 5 minuti)
+    // Periodic baseline save to filesystem (every 5 minutes)
     {
         constexpr uint64_t kBaselineSaveIntervalMs = 300000ULL;
         uint64_t now_ms = esp_timer_get_time() / 1000ULL;
@@ -1168,7 +1168,7 @@ void IntrusionDetectionGeneral::checkAnomaliesOnSinglePacket(const NetworkPacket
 }
 
 void IntrusionDetectionGeneral::updateBaseline(const NetworkPacket& packet) {
-    // Trova baseline manager per questo protocollo
+    // Find the baseline manager for this protocol
     auto it = protocol_baselines_.find(packet.proto);
     if (it == protocol_baselines_.end()) {
         return;
@@ -1197,7 +1197,7 @@ void IntrusionDetectionGeneral::updateBaseline(const NetworkPacket& packet) {
     if (completed_learning) {
         it->second.autoTuneThresholds(src_ip);
 
-        // Taratura globale se sono presenti pi�� endpoint con learning completato
+        // Global calibration if multiple endpoints with completed learning are present
         uint32_t completed = 0;
         const ProtocolBaseline& baseline = it->second.getBaseline();
         for (const auto& entry : baseline.endpoints) {
@@ -1316,11 +1316,11 @@ void IntrusionDetectionGeneral::emitAnomalyEvent(const NetworkPacket& packet,
         (anomaly.confidence >= 0.85f) ? "high" :
         (anomaly.confidence >= 0.6f) ? "medium" : "low";
 
-    // Buffer in PSRAM per evitare stack overflow su net_ana (8KB → 12KB non basta con la catena IDS)
+    // PSRAM buffer to avoid stack overflow on net_ana (8KB → 12KB is not enough with the IDS chain)
     PSRAMUtils::ScopedBuffer detailed_buf(768);
     PSRAMUtils::ScopedBuffer legacy_buf(256);
     if (!detailed_buf.valid() || !legacy_buf.valid()) {
-        LOG_ERROR(TAG_IDS, "emitAnomalyEvent: allocazione PSRAM fallita, evento perso");
+        LOG_ERROR(TAG_IDS, "emitAnomalyEvent: PSRAM allocation failed, event lost");
         return;
     }
     snprintf(detailed_buf.get(), detailed_buf.size(),

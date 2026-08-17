@@ -841,11 +841,11 @@ void EmailReporter::emailWorkerTask(void* parameters) {
             bool success = false;
 
             if (temp_reporter.init(event->config)) {
-                // Prepara corpo generico e allegato con nome descrittivo
+                // Prepare generic body and attachment with descriptive name
                 const char* payload_ptr = event->payload.c_str();
                 if (!payload_ptr) payload_ptr = "";
 
-                // Estrai canale dal JSON (se presente) usando parsing leggero senza allocazioni
+                // Extract channel from JSON (if present) using lightweight parsing without allocations
                 char channel_name[64]; channel_name[0] = '\0';
                 do {
                     const char* key = strstr(payload_ptr, "\"channel\"");
@@ -859,31 +859,31 @@ void EmailReporter::emailWorkerTask(void* parameters) {
                 } while (0);
                 if (channel_name[0] == '\0') strncpy(channel_name, "report", sizeof(channel_name)-1), channel_name[sizeof(channel_name)-1]='\0';
 
-                // Crea anteprima dal payload (prime ~240 byte non vuoti)
+                // Create preview from the payload (first ~240 non-empty bytes)
                 const char* p = payload_ptr; while (*p==' '||*p=='\t'||*p=='\r'||*p=='\n') ++p;
-                char preview[280]; size_t pi = 0; const size_t PREV_MAX = sizeof(preview) - 5; // spazio per " ...\0"
+                char preview[280]; size_t pi = 0; const size_t PREV_MAX = sizeof(preview) - 5; // space for " ...\0"
                 while (*p && pi < PREV_MAX) { preview[pi++] = *p++; }
                 bool truncated = (*p != '\0');
                 if (truncated) { preview[pi++]=' '; preview[pi++]='.'; preview[pi++]='.'; preview[pi++]='.'; }
                 preview[pi] = '\0';
 
-                // Timestamp per nome allegato
+                // Timestamp for attachment name
                 char att_name[48];
                 unsigned long ts_ms = (unsigned long)(esp_timer_get_time() / 1000ULL);
                 int an = snprintf(att_name, sizeof(att_name), "report_%lu.json", ts_ms);
                 if (an <= 0) strncpy(att_name, "report.json", sizeof(att_name)-1), att_name[sizeof(att_name)-1]='\0';
 
-                // Corpo generico dell'email
+                // Generic email body
                 char body_buf[640];
                 int bl = snprintf(body_buf, sizeof(body_buf),
-                    "Canale: %s\r\n"
-                    "Questo è un messaggio generato automaticamente dal reporter.\r\n"
-                    "Il contenuto completo è allegato in formato JSON (%s).\r\n\r\n"
-                    "Anteprima allegato:\r\n%.*s\r\n",
+                    "Channel: %s\r\n"
+                    "This is a message generated automatically by the reporter.\r\n"
+                    "The full content is attached in JSON format (%s).\r\n\r\n"
+                    "Attachment preview:\r\n%.*s\r\n",
                     channel_name, att_name, (int)pi, preview);
                 if (bl < 0) { body_buf[0]='\0'; }
 
-                // Invia come MIME multipart con allegato
+                // Send as MIME multipart with attachment
                 success = temp_reporter.smtp_send_mime_with_attachment(body_buf, payload_ptr, att_name);
 
                 if (success) {

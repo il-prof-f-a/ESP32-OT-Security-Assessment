@@ -84,27 +84,27 @@ public:
     // ==================== FLOW MANAGEMENT API ====================
 
     /**
-     * @brief Costruisce chiave flusso specifica del protocollo
+     * @brief Builds the protocol-specific flow key
      *
-     * Ogni protocollo implementa questa funzione per estrarre gli identificatori
-     * rilevanti dal pacchetto (es: Modbus unit_id, S7 rack/slot, OPC UA channel_id)
+     * Each protocol implements this function to extract the identifiers
+     * relevant to the packet (e.g., Modbus unit_id, S7 rack/slot, OPC UA channel_id)
      *
-     * @param packet Pacchetto di rete
-     * @param key [out] Chiave flusso da popolare
-     * @return true se chiave creata con successo, false altrimenti
+     * @param packet Network packet
+     * @param key [out] Flow key to populate
+     * @return true if the key was created successfully, false otherwise
      */
     virtual bool buildFlowKey(const NetworkPacket& packet, FlowKey& key) = 0;
 
     /**
-     * @brief Classifica tipo operazione dal pacchetto
+     * @brief Classify the operation type from the packet
      *
-     * Determina se il pacchetto contiene READ, WRITE, CONTROL, ERROR, etc.
+     * Determine whether the packet contains READ, WRITE, CONTROL, ERROR, etc.
      *
-     * @param packet Pacchetto di rete
-     * @param operation_type [out] Tipo operazione (es: "READ", "WRITE")
-     * @param operation_details [out] Dettagli (es: "FC=0x03 addr=100")
-     * @param is_error [out] true se risposta di errore
-     * @return true se classificazione riuscita, false se pacchetto non analizzabile
+     * @param packet Network packet
+     * @param operation_type [out] Operation type (e.g., "READ", "WRITE")
+     * @param operation_details [out] Details (e.g., "FC=0x03 addr=100")
+     * @param is_error [out] true if it is an error response
+     * @return true if classification succeeded, false if the packet cannot be analyzed
      */
     virtual bool classifyPacketOperation(const NetworkPacket& packet,
                                          psram_string& operation_type,
@@ -112,30 +112,30 @@ public:
                                          bool& is_error) = 0;
 
     /**
-     * @brief Aggiorna stato protocollo del flusso
+     * @brief Update the flow's protocol state
      *
-     * Chiamato per aggiornare la state machine del flusso basandosi sul pacchetto.
+     * Called to update the flow's state machine based on the packet.
      * (es: INIT -> CONNECTING -> ESTABLISHED -> DATA_EXCHANGE)
      *
-     * @param packet Pacchetto di rete
-     * @param flow Flusso da aggiornare
+     * @param packet Network packet
+     * @param flow Flow to update
      */
     virtual void updateProtocolState(const NetworkPacket& packet, FlowData& flow) = 0;
 
     /**
-     * @brief Assegna label al flusso basandosi su pattern rilevati
+     * @brief Assign a label to the flow based on detected patterns
      *
-     * Analizza le metriche e lo storico del flusso per assegnare label appropriate
+     * Analyze the flow's metrics and history to assign appropriate labels
      * (es: READER, WRITER, SCANNER, FLOODING, SUSPICIOUS, etc.)
      *
-     * @param flow Flusso da classificare
+     * @param flow Flow to classify
      */
     virtual void assignFlowLabel(FlowData& flow) = 0;
 
     /**
-     * @brief Ottieni riferimento alla flow table del plugin
+     * @brief Get a reference to the plugin's flow table
      *
-     * @return Riferimento alla FlowTable
+     * @return Reference to the FlowTable
      */
     FlowTable& getFlowTable() { return flow_table_; }
     const FlowTable& getFlowTable() const { return flow_table_; }
@@ -168,12 +168,12 @@ public:
     struct GeneralDiscoveryConfig {
         psram_string target;
         psram_string mode_label;
-        // Interfaccia di bind per le socket di discovery:
-        // - "" (default): ETH_DEF (comportamento precedente, Ethernet-only)
+        // Bind interface for discovery sockets:
+        // - "" (default): ETH_DEF (previous behavior, Ethernet-only)
         // - "ETH_DEF": Ethernet
         // - "WIFI_STA_DEF": WiFi STA
         // - "WIFI_AP_DEF": WiFi AP
-        // - "AUTO": prova ETH_DEF poi WIFI_STA_DEF
+        // - "AUTO": try ETH_DEF then WIFI_STA_DEF
         psram_string bind_ifkey;
         bool ping_scan = true;
         bool port_scan = false;
@@ -196,41 +196,41 @@ protected:
     // ==================== FLOW TRACKING HELPERS ====================
 
     /**
-     * @brief Traccia pacchetto nel sistema di flow management
+     * @brief Track the packet in the flow management system
      *
-     * Metodo comune implementato nel BasePlugin che:
-     * 1. Costruisce la FlowKey chiamando buildFlowKey()
-     * 2. Ottiene o crea il flusso nella FlowTable
-     * 3. Aggiorna le metriche del flusso
-     * 4. Classifica l'operazione chiamando classifyPacketOperation()
-     * 5. Aggiunge l'operazione allo storico
-     * 6. Aggiorna lo stato chiamando updateProtocolState()
-     * 7. Assegna label chiamando assignFlowLabel()
+     * Common method implemented in BasePlugin that:
+     * 1. Builds the FlowKey by calling buildFlowKey()
+     * 2. Gets or creates the flow in the FlowTable
+     * 3. Updates the flow's metrics
+     * 4. Classifies the operation by calling classifyPacketOperation()
+     * 5. Adds the operation to the history
+     * 6. Updates the state by calling updateProtocolState()
+     * 7. Assigns a label by calling assignFlowLabel()
      *
-     * I plugin devono chiamare questo metodo da doPacketAnalysis() per
-     * ogni pacchetto che vogliono tracciare.
+     * Plugins must call this method from doPacketAnalysis() for
+     * every packet they want to track.
      *
-     * @param packet Pacchetto di rete da tracciare
-     * @return true se tracking riuscito, false se errore
+     * @param packet Network packet to track
+     * @return true if tracking succeeded, false on error
      */
     bool trackPacketInFlow(const NetworkPacket& packet);
 
     /**
-     * @brief Cleanup periodico dei flussi scaduti
+     * @brief Periodic cleanup of expired flows
      *
-     * Chiamato periodicamente (es: ogni minuto) per rimuovere flussi
-     * inattivi dalla tabella. I plugin possono chiamarlo da un task dedicato
-     * o dal doPacketAnalysis() stesso.
+     * Called periodically (e.g., every minute) to remove
+     * inactive flows from the table. Plugins can call it from a dedicated task
+     * or from doPacketAnalysis() itself.
      */
     void cleanupExpiredFlows();
 
     /**
-     * @brief Accesso alla state machine centralizzata
+     * @brief Access to the centralized state machine
      *
-     * I plugin possono usare questo metodo per registrare callbacks
-     * protocol-specific per la gestione degli stati.
+     * Plugins can use this method to register
+     * protocol-specific callbacks for state management.
      *
-     * @return Riferimento alla SessionStateMachine
+     * @return Reference to the SessionStateMachine
      */
     SessionStateMachine& getSessionStateMachine() { return session_state_machine_; }
 
@@ -261,7 +261,7 @@ protected:
     std::atomic<uint64_t> events_generated_{0};
 
     /**
-     * Flow table per tracking sessioni/flussi (allocata in PSRAM)
+     * Flow table for tracking sessions/flows (allocated in PSRAM)
      */
     FlowTable flow_table_;
 

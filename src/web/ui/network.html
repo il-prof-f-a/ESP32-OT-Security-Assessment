@@ -120,22 +120,22 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
         
         <div class="card">
             <h2>WiFi Management</h2>
-            <p>Configura la rete WiFi per l'accesso alla console di gestione.</p>
+            <p>Configure the WiFi network for access to the management console.</p>
             <div class="form-group">
-                <label>Reti disponibili</label>
-                <button id="wifi-scan-btn" class="btn btn-secondary">Scansiona reti</button>
+                <label>Available networks</label>
+                <button id="wifi-scan-btn" class="btn btn-secondary">Scan networks</button>
                 <div id="wifi-scan-status" style="margin-top:8px;"></div>
                 <div id="wifi-network-list" style="margin-top:8px;"></div>
             </div>
             <div class="form-group">
                 <label for="wifi-ssid">SSID</label>
-                <input type="text" id="wifi-ssid" placeholder="Nome rete WiFi">
+                <input type="text" id="wifi-ssid" placeholder="WiFi network name">
             </div>
             <div class="form-group">
                 <label for="wifi-password">Password</label>
-                <input type="password" id="wifi-password" placeholder="Password WiFi">
+                <input type="password" id="wifi-password" placeholder="WiFi password">
             </div>
-            <button id="wifi-save-btn" class="btn btn-primary">Salva configurazione WiFi</button>
+            <button id="wifi-save-btn" class="btn btn-primary">Save WiFi configuration</button>
             <div id="wifi-connect-status" style="margin-top:10px;"></div>
         </div>
 
@@ -416,10 +416,10 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
             const listDiv = document.getElementById('wifi-network-list');
 
             clearWifiScanInterval();
-            statusDiv.innerHTML = '<div class="status-warning">Avvio scansione WiFi...</div>';
+            statusDiv.innerHTML = '<div class="status-warning">Starting WiFi scan...</div>';
             listDiv.innerHTML = '';
             scanBtn.disabled = true;
-            scanBtn.textContent = 'Scansione in corso...';
+            scanBtn.textContent = 'Scanning...';
 
             try {
                 const response = await fetch('/api/wifi/scan/start', {
@@ -428,18 +428,18 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
                 });
                 const data = await response.json();
                 if (data.started) {
-                    statusDiv.innerHTML = '<div class="status-warning">Scansione avviata... aggiornamento automatico ogni secondo</div>';
+                    statusDiv.innerHTML = '<div class="status-warning">Scan started... auto-updating every second</div>';
                 } else {
-                    statusDiv.innerHTML = '<div class="status-error">Impossibile avviare la scansione (già in corso?)</div>';
+                    statusDiv.innerHTML = '<div class="status-error">Unable to start scan (already in progress?)</div>';
                     scanBtn.disabled = false;
-                    scanBtn.textContent = 'Scansiona reti';
+                    scanBtn.textContent = 'Scan networks';
                     return;
                 }
             } catch (error) {
                 console.error(error);
-                statusDiv.innerHTML = `<div class="status-error">Errore nell'avvio della scansione</div>`;
+                statusDiv.innerHTML = `<div class="status-error">Error starting scan</div>`;
                 scanBtn.disabled = false;
-                scanBtn.textContent = 'Scansiona reti';
+                scanBtn.textContent = 'Scan networks';
                 return;
             }
 
@@ -456,30 +456,30 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
                 const data = await response.json();
 
                 if (!data.available) {
-                    statusDiv.innerHTML = '<div class="status-warning">Nessuna scansione attiva</div>';
+                    statusDiv.innerHTML = '<div class="status-warning">No active scan</div>';
                     clearWifiScanInterval();
                     scanBtn.disabled = false;
-                    scanBtn.textContent = 'Scansiona reti';
+                    scanBtn.textContent = 'Scan networks';
                     renderWifiNetworkList([]);
                     return;
                 }
 
                 if (data.scanning) {
-                    statusDiv.innerHTML = '<div class="status-warning">Scansione in corso... reti trovate: ' + data.cached + '</div>';
+                    statusDiv.innerHTML = '<div class="status-warning">Scan in progress... networks found: ' + data.cached + '</div>';
                 } else if (data.completed) {
-                    statusDiv.innerHTML = '<div class="status-success">Scansione completata. Reti trovate: ' + data.cached + '</div>';
+                    statusDiv.innerHTML = '<div class="status-success">Scan complete. Networks found: ' + data.cached + '</div>';
                     clearWifiScanInterval();
                     scanBtn.disabled = false;
-                    scanBtn.textContent = 'Scansiona reti';
+                    scanBtn.textContent = 'Scan networks';
                 }
 
                 renderWifiNetworkList(data.networks || []);
             } catch (error) {
                 console.error(error);
-                statusDiv.innerHTML = '<div class="status-error">Errore nel recupero delle reti WiFi</div>';
+                statusDiv.innerHTML = '<div class="status-error">Error retrieving WiFi networks</div>';
                 clearWifiScanInterval();
                 scanBtn.disabled = false;
-                scanBtn.textContent = 'Scansiona reti';
+                scanBtn.textContent = 'Scan networks';
             }
         }
 
@@ -488,7 +488,7 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
             container.innerHTML = '';
 
             if (!networks || networks.length === 0) {
-                container.innerHTML = '<div class="status-warning">Nessuna rete rilevata finora</div>';
+                container.innerHTML = '<div class="status-warning">No networks detected yet</div>';
                 return;
             }
 
@@ -501,14 +501,14 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
                 row.style.gap = '12px';
 
                 const info = document.createElement('div');
-                const ssidLabel = net.ssid && net.ssid.length ? net.ssid : '(SSID nascosto)';
-                const securityLabel = net.secure ? 'Protetta' : 'Open';
+                const ssidLabel = net.ssid && net.ssid.length ? net.ssid : '(hidden SSID)';
+                const securityLabel = net.secure ? 'Protected' : 'Open';
                 const authLabel = net.auth_mode || 'N/A';
-                info.innerHTML = `<strong>${ssidLabel}</strong> <span style="color:#555;">RSSI: ${net.rssi}</span> <span style="color:#555;">Canale: ${net.channel}</span> <span style="color:#777;">${securityLabel} (${authLabel})</span>`;
+                info.innerHTML = `<strong>${ssidLabel}</strong> <span style="color:#555;">RSSI: ${net.rssi}</span> <span style="color:#555;">Channel: ${net.channel}</span> <span style="color:#777;">${securityLabel} (${authLabel})</span>`;
 
                 const btn = document.createElement('button');
                 btn.className = 'btn btn-secondary';
-                btn.textContent = 'Usa';
+                btn.textContent = 'Use';
                 btn.addEventListener('click', () => selectWifiNetwork(net.ssid || ''));
 
                 row.appendChild(info);
@@ -531,18 +531,18 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
             const password = passwordField.value;
 
             if (!ssid) {
-                alert('Inserire il nome della rete WiFi (SSID).');
+                alert('Enter the WiFi network name (SSID).');
                 return;
             }
 
-            if (!confirm(`Connettere il dispositivo alla rete "${ssid}"?`)) {
+            if (!confirm(`Connect the device to the network "${ssid}"?`)) {
                 return;
             }
 
             saveBtn.disabled = true;
-            saveBtn.textContent = 'Connessione in corso...';
+            saveBtn.textContent = 'Connecting...';
             wifiConnectInProgress = true;
-            statusDiv.innerHTML = '<div class="status-warning">Connessione WiFi in corso...</div>';
+            statusDiv.innerHTML = '<div class="status-warning">WiFi connection in progress...</div>';
             clearWifiConnectInterval();
 
             try {
@@ -554,34 +554,34 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
 
                 if (!response.ok) {
                     const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.error || 'Errore salvataggio credenziali');
+                    throw new Error(errorData.error || 'Error saving credentials');
                 }
 
                 const data = await response.json();
 
-                // Se il salvataggio è andato a buon fine, il dispositivo si riavvierà
+                // If the save succeeded, the device will reboot
                 if (data.success && data.message === 'wifi_credentials_saved_rebooting') {
                     statusDiv.innerHTML = `
                         <div class="status-success">
-                            <strong>✓ Credenziali WiFi salvate!</strong><br>
-                            Il dispositivo si sta riavviando...<br><br>
-                            <strong>Istruzioni:</strong><br>
-                            1. Il dispositivo si connetterà alla rete "${ssid}"<br>
-                            2. Connettiti alla stessa rete WiFi<br>
-                            3. Trova l'indirizzo IP del dispositivo (controlla il router o usa uno scanner di rete)<br>
-                            4. Accedi al web server all'indirizzo: http://[IP_DISPOSITIVO]/<br><br>
-                            <em>Il riavvio richiederà circa 10-15 secondi.</em>
+                            <strong>✓ WiFi credentials saved!</strong><br>
+                            The device is restarting...<br><br>
+                            <strong>Instructions:</strong><br>
+                            1. The device will connect to the network "${ssid}"<br>
+                            2. Connect to the same WiFi network<br>
+                            3. Find the device's IP address (check the router or use a network scanner)<br>
+                            4. Access the web server at: http://[DEVICE_IP]/<br><br>
+                            <em>The restart will take about 10-15 seconds.</em>
                         </div>
                     `;
-                    saveBtn.textContent = 'Credenziali salvate - Riavvio in corso';
+                    saveBtn.textContent = 'Credentials saved - Restarting';
                     wifiConnectInProgress = false;
                     return;
                 }
             } catch (error) {
                 console.error(error);
-                statusDiv.innerHTML = `<div class="status-error">Errore nel salvataggio delle credenziali WiFi: ${error.message}</div>`;
+                statusDiv.innerHTML = `<div class="status-error">Error saving WiFi credentials: ${error.message}</div>`;
                 saveBtn.disabled = false;
-                saveBtn.textContent = 'Salva configurazione WiFi';
+                saveBtn.textContent = 'Save WiFi configuration';
                 wifiConnectInProgress = false;
                 return;
             }
@@ -601,21 +601,21 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
                         clearWifiConnectInterval();
                         wifiConnectInProgress = false;
                         saveBtn.disabled = false;
-                        saveBtn.textContent = 'Salva configurazione WiFi';
+                        saveBtn.textContent = 'Save WiFi configuration';
                     }
                 } else if (!data.in_progress && !data.ap_pending) {
                     clearWifiConnectInterval();
                     wifiConnectInProgress = false;
                     saveBtn.disabled = false;
-                    saveBtn.textContent = 'Salva configurazione WiFi';
+                    saveBtn.textContent = 'Save WiFi configuration';
                 }
             } catch (error) {
                 console.error(error);
-                statusDiv.innerHTML = '<div class="status-error">Errore durante il controllo dello stato WiFi</div>';
+                statusDiv.innerHTML = '<div class="status-error">Error while checking WiFi status</div>';
                 clearWifiConnectInterval();
                 wifiConnectInProgress = false;
                 saveBtn.disabled = false;
-                saveBtn.textContent = 'Salva configurazione WiFi';
+                saveBtn.textContent = 'Save WiFi configuration';
             }
         }
 
@@ -628,26 +628,26 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
 
             if (state.result_ready) {
                 if (state.success) {
-                    const ipText = state.ip ? state.ip : 'N/D';
+                    const ipText = state.ip ? state.ip : 'N/A';
                     if (state.ap_pending) {
-                        statusDiv.innerHTML = `<div class="status-warning">Connessione completata su ${ipText}. In attesa di disattivare l'AP...</div>`;
+                        statusDiv.innerHTML = `<div class="status-warning">Connection established on ${ipText}. Waiting to disable the AP...</div>`;
                     } else {
-                        statusDiv.innerHTML = `<div class="status-success">Connessione completata. Nuovo IP: ${ipText}</div>`;
+                        statusDiv.innerHTML = `<div class="status-success">Connection established. New IP: ${ipText}</div>`;
                         if (state.ip) {
                             const redirectBtn = document.createElement('button');
                             redirectBtn.className = 'btn btn-secondary';
                             redirectBtn.style.marginTop = '8px';
-                            redirectBtn.textContent = 'Apri nuova interfaccia';
+                            redirectBtn.textContent = 'Open new interface';
                             redirectBtn.addEventListener('click', () => redirectToWifiIP(state.ip));
                             statusDiv.appendChild(redirectBtn);
                         }
                     }
                 } else {
-                    const errMsg = state.error || 'Connessione fallita';
+                    const errMsg = state.error || 'Connection failed';
                     statusDiv.innerHTML = `<div class="status-error">${errMsg}</div>`;
                 }
             } else if (state.in_progress || state.ap_pending) {
-                statusDiv.innerHTML = '<div class="status-warning">Connessione WiFi in corso...</div>';
+                statusDiv.innerHTML = '<div class="status-warning">WiFi connection in progress...</div>';
             } else {
                 statusDiv.innerHTML = '';
             }
@@ -667,7 +667,7 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
                     target += 'sid=' + encodeURIComponent(sid);
                 }
             }
-            if (confirm("Aprire la pagina di gestione sul nuovo indirizzo?")) {
+            if (confirm("Open the management page at the new address?")) {
                 window.location.href = target;
             }
         }
@@ -682,13 +682,13 @@ pre{background:#f8f9fa; padding:.5rem; border-radius:4px; overflow:auto}
                 if (data.in_progress || data.ap_pending) {
                     wifiConnectInProgress = true;
                     saveBtn.disabled = true;
-                    saveBtn.textContent = 'Connessione in corso...';
+                    saveBtn.textContent = 'Connecting...';
                     clearWifiConnectInterval();
                     wifiConnectInterval = setInterval(pollWifiConnectResult, 1000);
                 } else {
                     wifiConnectInProgress = false;
                     saveBtn.disabled = false;
-                    saveBtn.textContent = 'Salva configurazione WiFi';
+                    saveBtn.textContent = 'Save WiFi configuration';
                 }
             } catch (error) {
                 console.warn('Impossibile inizializzare lo stato WiFi', error);

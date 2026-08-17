@@ -9,15 +9,15 @@
 extern "C" {
   #include "freertos/FreeRTOS.h"
   #include "freertos/task.h"
-  #include "freertos/ringbuf.h"   // ← ring buffer per logging asincrono
+  #include "freertos/ringbuf.h"   // ← ring buffer for async logging
   #include "freertos/semphr.h"
   #include "freertos/queue.h"
 }
 
 /**
- * Log entry "alto livello" (manteniamo la struct per compatibilità API),
- * ma il path consigliato è usare logf()/log_json_block() che formattano
- * una riga completa ed effettuano UNA sola write asincrona.
+ * Log entry "high-level" (we keep the struct for API compatibility),
+ * but the recommended path is to use logf()/log_json_block() which format
+ * a complete line and perform a SINGLE async write.
  */
 struct LogEntry {
     std::string tag;
@@ -30,97 +30,97 @@ struct LogEntry {
 class ReportingEngine;
 
 /**
- * Logger asincrono:
- * - init_async(ring_bytes) crea un writer task dedicato + ring buffer.
- * - logf()/write_raw() accodano messaggi completi (una riga = una write).
- * - log_json_block() stampa blocchi JSON atomici (BEGIN/END in una sola chiamata).
- * - init_sync() resta disponibile (fallback con mutex).
+ * Async logger:
+ * - init_async(ring_bytes) creates a dedicated writer task + ring buffer.
+ * - logf()/write_raw() enqueue complete messages (one line = one write).
+ * - log_json_block() prints atomic JSON blocks (BEGIN/END in a single call).
+ * - init_sync() remains available (fallback with mutex).
  *
  * NOTE:
- *   - Chiama init_async() una volta all’avvio, prima di loggare.
- *   - Le macro LOG_*F qui sotto usano logf() (nessun buffer fisso 256/1024).
+ *   - Call init_async() once at startup, before logging.
+ *   - The LOG_*F macros below use logf() (no fixed 256/1024 buffer).
  */
 class Logger {
 public:
     Logger();
     ~Logger();
 
-    // Config legacy (no-op qui: teniamo la firma per compatibilità)
+    // Legacy config (no-op here: we keep the signature for compatibility)
     void updateConfig(const DebugConfig& cfg) { (void)cfg; }
 
-    // API "alto livello" compatibile col tuo codice esistente
+    // "high-level" API compatible with your existing code
     void log(const char* tag, LogLevel lvl, const std::string& msg);
 
     // Lifecycle
-    void start();     // alias di init_async() se vuoi usarlo istanziando g_logger
-    void stop();      // ferma il writer task e chiude il ring
+    void start();     // alias of init_async() if you want to use it by instantiating g_logger
+    void stop();      // stops the writer task and closes the ring
 
-    // Collega il ReportingEngine se ti serve (non usato dal core del logger)
+    // Connect the ReportingEngine if you need it (not used by the logger core)
     void setReportingEngine(ReportingEngine* reporting_engine) { reporting_engine_ = reporting_engine; }
 
-    // Redirezione ESP_LOGx → Logger (opzionale)
+    // ESP_LOGx → Logger redirection (optional)
     static int  espLogVprintf(const char* fmt, va_list args);
     void        setupESPLogRedirect();
 
-    // Modalità ASINCRONA (consigliata)
-    static bool init_async(size_t ring_bytes = 16 * 1024); // crea ring + writer task
-    static void shutdown();                                // ferma il writer e libera il ring
+    // ASYNCHRONOUS mode (recommended)
+    static bool init_async(size_t ring_bytes = 16 * 1024); // creates ring + writer task
+    static void shutdown();                                // stops the writer and frees the ring
 
-    // Modalità SINCRONA (fallback, usa mutex intorno alla write)
+    // SYNCHRONOUS mode (fallback, uses mutex around the write)
     static bool init_sync();
 
-    // Logging formattato: UNA riga = UNA write (newline auto-se aggiunge se manca)
+    // Formatted logging: ONE line = ONE write (newline auto-added if missing)
     static void logf(const char* tag, const char* fmt, ...);
     static void vlogf(const char* tag, const char* fmt, va_list ap);
 
-    // Buffer già pronto (JSON o altro)
+    // Ready-made buffer (JSON or other)
     static void write_raw(const char* data, size_t len);
 
-    // Blocco JSON atomico (BEGIN/END + payload in un colpo solo)
+    // Atomic JSON block (BEGIN/END + payload in one shot)
     static void log_json_block(const char* tag, const char* json);
 
     static SemaphoreHandle_t s_mutex;
 
 private:
-    // Worker del writer asincrono
+    // Async writer worker
     static void  writerTaskThunk(void* arg);
            void  writerTaskLoop();
 
-    // Enqueue nel ring (usata dalle static tramite g_logger)
+    // Enqueue into the ring (used by the statics via g_logger)
     void enqueue(const char* buf, size_t len);
 
-    // Stato/risorse
+    // State/resources
     RingbufHandle_t ring_        = nullptr;
     TaskHandle_t    writer_task_ = nullptr;
     std::atomic<bool> running_{false};
     ReportingEngine* reporting_engine_ = nullptr;
 
-    // Dimensioni/parametri
+    // Dimensions/parameters
     static constexpr size_t DEFAULT_RING_BYTES = 16 * 1024;
-    static constexpr size_t WRITER_STACK_SIZE  = 4096;    // adatta se necessario
+    static constexpr size_t WRITER_STACK_SIZE  = 4096;    // adjust if necessary
     static constexpr UBaseType_t WRITER_PRIO   = tskIDLE_PRIORITY + 3;
-    static constexpr BaseType_t  WRITER_CORE   = 1;       // pin su core 1 (ESP32)
+    static constexpr BaseType_t  WRITER_CORE   = 1;       // pin on core 1 (ESP32)
 };
 
-// Puntatore globale (come nel tuo codice)
+// Global pointer (as in your code)
 extern Logger* g_logger;
 
-/* ===================== Convenienze / Macro ===================== */
+/* ===================== Conveniences / Macros ===================== */
 
 /**
- * Macro legacy a livello messaggio (accodano in asincrono).
- * Se g_logger è nullo, non fanno nulla.
+ * Legacy message-level macros (they enqueue asynchronously).
+ * If g_logger is null, they do nothing.
  */
-// Percorso sicuro (no allocazioni heap): usa buffer su stack + ring buffer
-// Evita std::string in condizioni di DRAM bassa che potrebbero generare eccezioni
+// Safe path (no heap allocations): uses stack buffer + ring buffer
+// Avoid std::string in low-DRAM conditions which could generate exceptions
 #define LOG_DEBUG(tag, msg)    do { Logger::logf((tag), "%s", (msg)); } while(0)
 #define LOG_INFO(tag, msg)     do { Logger::logf((tag), "%s", (msg)); } while(0)
 #define LOG_WARNING(tag, msg)  do { Logger::logf((tag), "%s", (msg)); } while(0)
 #define LOG_ERROR(tag, msg)    do { Logger::logf((tag), "%s", (msg)); } while(0)
 
 /**
- * Macro formattate — usano logf() (niente buffer fissi su stack).
- * Garantiscono “una riga = una write” e newline finale.
+ * Formatted macros — they use logf() (no fixed buffers on the stack).
+ * They guarantee "one line = one write" and a trailing newline.
  */
 #define LOG_DEBUGF(tag, fmt, ...)    do { Logger::logf((tag), (fmt), ##__VA_ARGS__); } while(0)
 #define LOG_INFOF(tag, fmt, ...)     do { Logger::logf((tag), (fmt), ##__VA_ARGS__); } while(0)
@@ -128,6 +128,6 @@ extern Logger* g_logger;
 #define LOG_ERRORF(tag, fmt, ...)    do { Logger::logf((tag), (fmt), ##__VA_ARGS__); } while(0)
 
 /**
- * Macro per blocchi JSON atomici (BEGIN/END + payload in una sola chiamata).
+ * Macro for atomic JSON blocks (BEGIN/END + payload in a single call).
  */
 #define LOG_JSON_BLOCK(tag, json_cstr)  do { Logger::log_json_block((tag), (json_cstr)); } while(0)

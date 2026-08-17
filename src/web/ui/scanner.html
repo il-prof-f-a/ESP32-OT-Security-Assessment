@@ -72,10 +72,10 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <h1>🔍 Scanner & Fuzzing</h1>
 <a href="/" class="btn nav-btn">← Dashboard</a>
 <div class="helpbox" style="margin-top:.8rem">
-  <strong>Nota</strong>
-  Questa pagina contiene 4 tab (Discovery, Vulnerability Scanner, Fuzzing, Scheduled Scans). Esistono anche scorciatoie URL:
-  <code>/vulnerability-scanner</code> e <code>/fuzzing</code> (stessa pagina, tab pre-selezionato).
-  Le API reali sono sotto <code>/api/scanner/*</code>, <code>/api/fuzz/*</code> e <code>/api/discovery/*</code>.
+  <strong>Note</strong>
+  This page contains 4 tabs (Discovery, Vulnerability Scanner, Fuzzing, Scheduled Scans). There are also URL shortcuts:
+  <code>/vulnerability-scanner</code> and <code>/fuzzing</code> (same page, pre-selected tab).
+  The real APIs are under <code>/api/scanner/*</code>, <code>/api/fuzz/*</code> and <code>/api/discovery/*</code>.
 </div>
 </div>
 <div class="card" id="features">
@@ -97,8 +97,8 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <div class="card">
 <h2>🔎 Protocol Discovery</h2>
 <div class="helpbox" id="disc_guide">
-  <strong>Guida rapida</strong>
-  Seleziona un protocollo, controlla il formato del target, poi avvia la discovery. Nota: PROFINET DCP e' L2 e non richiede una sottorete IP.
+  <strong>Quick guide</strong>
+  Select a protocol, check the target format, then start the discovery. Note: PROFINET DCP is L2 and does not require an IP subnet.
 </div>
 <div class="proto-btns">
   <button class="btn active disc-proto-btn" id="disc_btn_modbus" onclick="setDiscProto('modbus')">Modbus</button>
@@ -110,7 +110,7 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <div class="form-group">
 <label id="disc_target_label">Target</label>
 <input id="disc_target" placeholder="192.168.1.100:502">
-<small id="disc_target_help">Formato target dipende dal protocollo selezionato.</small>
+<small id="disc_target_help">Target format depends on the selected protocol.</small>
 </div>
 <div class="form-group">
 <label>Timeout (ms)</label>
@@ -138,7 +138,7 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <label>Interface</label>
 <select id="general_iface">
 <option value="eth">Ethernet (ETH)</option>
-<option value="auto">Auto (ETH, poi WiFi STA)</option>
+<option value="auto">Auto (ETH, then WiFi STA)</option>
 <option value="wifi_sta">WiFi STA</option>
 <option value="wifi_ap">WiFi AP</option>
 </select>
@@ -176,8 +176,8 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <!-- Scanner Tab -->
 <div class="tab-content" id="scanner">
 <div class="helpbox" id="scanner_disabled_note" style="display:none">
-  <strong>Modulo disabilitato</strong>
-  Abilita <code>Enable Scanner &amp; Fuzzing Module</code> sopra per usare Vulnerability Scanner e Fuzzing.
+  <strong>Module disabled</strong>
+  Enable <code>Enable Scanner &amp; Fuzzing Module</code> above to use Vulnerability Scanner and Fuzzing.
 </div>
  <div class="card">
 <h2>🛡️ Vulnerability Scanner</h2>
@@ -228,8 +228,8 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <!-- Fuzzing Tab -->
 <div class="tab-content" id="fuzzing">
 <div class="helpbox" id="fuzzing_disabled_note" style="display:none">
-  <strong>Modulo disabilitato</strong>
-  Abilita <code>Enable Scanner &amp; Fuzzing Module</code> sopra per usare il Fuzzing.
+  <strong>Module disabled</strong>
+  Enable <code>Enable Scanner &amp; Fuzzing Module</code> above to use Fuzzing.
 </div>
 <!-- S7 offensive actions are exposed as fuzzing profiles/jobs (see "Create New Job"). -->
 <!-- Fuzzing Jobs Management -->
@@ -275,7 +275,7 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <select id="fuzz_profile" multiple size="7">
 <option value="">Loading profiles...</option>
 </select>
-<small>Tip: seleziona uno o piu' profili (Ctrl/Shift su desktop). I profili con (TODO) non sono ancora implementati.</small>
+<small>Tip: select one or more profiles (Ctrl/Shift on desktop). Profiles with (TODO) are not yet implemented.</small>
 </div>
 <div class="form-group">
 <label><input id="fuzz_safe" type="checkbox" checked> Safe Mode</label>
@@ -331,8 +331,8 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <input id="s7_rack" placeholder="0" type="number" style="width:50%">
 <input id="s7_slot" placeholder="0" type="number" style="width:50%">
 </div>
-<small>S7-1200/1500 spesso: rack=0 slot=0. S7-300/400 spesso: rack=0 slot=2.</small>
-<small><strong>Nota:</strong> i profili offensivi (<code>unauthorized_write</code>, <code>plc_stop</code>) richiedono <em>Safe Mode</em> disabilitato.</small>
+<small>S7-1200/1500 often: rack=0 slot=0. S7-300/400 often: rack=0 slot=2.</small>
+<small><strong>Note:</strong> offensive profiles (<code>unauthorized_write</code>, <code>plc_stop</code>) require <em>Safe Mode</em> disabled.</small>
 </div>
 <div class="form-group">
 <label>Timeout (ms)</label>
@@ -349,7 +349,7 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
   <option value="Q">Q (Outputs)</option>
   <option value="M">M (Merker)</option>
 </select>
-<small>Scritture su Q/M sono disruptive. DB dipende dalla protezione del PLC.</small>
+<small>Writes to Q/M are disruptive. DB depends on the PLC protection.</small>
 </div>
 <div class="form-group" id="s7_db_number_group">
 <label>DB Number</label>
@@ -358,12 +358,12 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <div class="form-group">
 <label>Byte Offset</label>
 <input id="s7_byte_offset" placeholder="0" type="number">
-<small>Offset in byte (non in bit).</small>
+<small>Offset in bytes (not in bits).</small>
 </div>
 <div class="form-group">
 <label>Value (hex bytes)</label>
 <input id="s7_value_hex" placeholder="DE AD">
-<small>Esempio: <code>DE AD</code> (spazi opzionali). Verrà scritto come bytes.</small>
+<small>Example: <code>DE AD</code> (spaces optional). Will be written as bytes.</small>
 </div>
 </div>
 
@@ -376,7 +376,7 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
   <option value="cold_restart">Cold Restart</option>
   <option value="hot_restart">Hot Restart</option>
 </select>
-<small>Operazione altamente disruptive: usare solo in laboratorio.</small>
+<small>Highly disruptive operation: use only in the lab.</small>
 </div>
 </div>
 </div>
@@ -398,8 +398,8 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <!-- Scheduled Scans Tab -->
 <div class="tab-content" id="scheduled">
 <div class="helpbox" id="scheduled_disabled_note" style="display:none">
-  <strong>Cron disabilitato</strong>
-  Abilita <code>Enable Scheduled Scans (Cron)</code> sopra per gestire le scansioni pianificate.
+  <strong>Cron disabled</strong>
+  Enable <code>Enable Scheduled Scans (Cron)</code> above to manage scheduled scans.
 </div>
  <div class="card">
 <h2>⏰ Scheduled Scans</h2>
@@ -756,12 +756,12 @@ function buildScannerSummary(obj){
   var hasCore = protocol || target || findings || Object.keys(summary).length || Object.keys(risk).length;
   if(!hasCore) return '';
   var rows = [];
-  if(protocol) rows.push('<div><strong>Protocollo:</strong> '+escHtml(protocol)+'</div>');
+  if(protocol) rows.push('<div><strong>Protocol:</strong> '+escHtml(protocol)+'</div>');
   if(target) rows.push('<div><strong>Target:</strong> '+escHtml(target)+'</div>');
   rows.push('<div><strong>Findings:</strong> '+escHtml(findings)+'</div>');
-  rows.push('<div><strong>Severita:</strong> C='+escHtml(summary.critical||0)+' H='+escHtml(summary.high||0)+' M='+escHtml(summary.medium||0)+' L='+escHtml(summary.low||0)+' I='+escHtml(summary.info||0)+'</div>');
+  rows.push('<div><strong>Severity:</strong> C='+escHtml(summary.critical||0)+' H='+escHtml(summary.high||0)+' M='+escHtml(summary.medium||0)+' L='+escHtml(summary.low||0)+' I='+escHtml(summary.info||0)+'</div>');
   if(typeof testsExec === 'number' || typeof testsSkip === 'number'){
-    rows.push('<div><strong>Test:</strong> eseguiti='+escHtml((typeof testsExec==='number')?testsExec:'n/a')+' skipped='+escHtml((typeof testsSkip==='number')?testsSkip:'n/a')+'</div>');
+    rows.push('<div><strong>Test:</strong> executed='+escHtml((typeof testsExec==='number')?testsExec:'n/a')+' skipped='+escHtml((typeof testsSkip==='number')?testsSkip:'n/a')+'</div>');
   }
   if(risk.overall_risk) rows.push('<div><strong>Risk overall:</strong> '+escHtml(risk.overall_risk)+'</div>');
   if(risk.highest_cvss!=null) rows.push('<div><strong>CVSS max:</strong> '+escHtml(risk.highest_cvss)+'</div>');
@@ -780,15 +780,15 @@ function buildFuzzSummary(obj){
   if(!hasCore) return '';
   var rows = [];
   var tests = (stats.tests_total!=null) ? stats.tests_total : (stats.total_cases!=null ? stats.total_cases : null);
-  if(tests!=null) rows.push('<div><strong>Test eseguiti:</strong> '+escHtml(tests)+'</div>');
+  if(tests!=null) rows.push('<div><strong>Tests executed:</strong> '+escHtml(tests)+'</div>');
   if(risk.overall_risk) rows.push('<div><strong>Risk overall:</strong> '+escHtml(risk.overall_risk)+'</div>');
-  if(risk.highest_risk_attack_type) rows.push('<div><strong>Attacco rischio massimo:</strong> '+escHtml(risk.highest_risk_attack_type)+'</div>');
+  if(risk.highest_risk_attack_type) rows.push('<div><strong>Highest risk attack:</strong> '+escHtml(risk.highest_risk_attack_type)+'</div>');
   if(profMeta.category || profMeta.risk_domain){
-    rows.push('<div><strong>Profilo:</strong> '+escHtml((profMeta.category||'n/a')+' / '+(profMeta.risk_domain||'n/a'))+'</div>');
+    rows.push('<div><strong>Profile:</strong> '+escHtml((profMeta.category||'n/a')+' / '+(profMeta.risk_domain||'n/a'))+'</div>');
   }
   if(first && (first.case_id!=null || first.attack_type || first.attack_metadata)){
     var ftype = first.attack_type || ((first.attack_metadata||{}).attack_type) || 'n/a';
-    rows.push('<div><strong>Primo successo:</strong> case=' + escHtml((first.case_id!=null)?first.case_id:'n/a') + ' tipo=' + escHtml(ftype) + '</div>');
+    rows.push('<div><strong>First success:</strong> case=' + escHtml((first.case_id!=null)?first.case_id:'n/a') + ' type=' + escHtml(ftype) + '</div>');
   }
   var keys = Object.keys(attackMeta || {});
   if(keys.length){
@@ -845,17 +845,17 @@ function buildJsonFilename(prefix){
 function downloadDiscoveryResultsJson(){
   var report = getSectionJsonValue('disc_result');
   if(!report){
-    status('Nessun risultato discovery da scaricare', true);
+    status('No discovery result to download', true);
     return;
   }
   downloadJsonClient(buildJsonFilename('discovery_results'), report);
-  status('Download discovery avviato');
+  status('Discovery download started');
 }
 
 function downloadScanResultJson(){
   var report = getSectionJsonValue('scan_result_box');
   if(!report){
-    status('Nessun risultato scanner da scaricare', true);
+    status('No scanner result to download', true);
     return;
   }
   var summary = '';
@@ -863,13 +863,13 @@ function downloadScanResultJson(){
   if(s && s.style.display !== 'none') summary = String(s.textContent || '').trim();
   var payload = summary ? { summary_text: summary, result: report } : report;
   downloadJsonClient(buildJsonFilename('vulnerability_scan_result'), payload);
-  status('Download scanner avviato');
+  status('Scanner download started');
 }
 
 function downloadFuzzResultJson(){
   var report = getSectionJsonValue('fuzz_result');
   if(!report){
-    status('Nessun risultato fuzzing da scaricare', true);
+    status('No fuzzing result to download', true);
     return;
   }
   var summary = '';
@@ -877,7 +877,7 @@ function downloadFuzzResultJson(){
   if(s && s.style.display !== 'none') summary = String(s.textContent || '').trim();
   var payload = summary ? { summary_text: summary, result: report } : report;
   downloadJsonClient(buildJsonFilename('fuzz_operation_results'), payload);
-  status('Download fuzzing avviato');
+  status('Fuzzing download started');
 }
 
 // Global variables for discovery polling
@@ -890,33 +890,33 @@ let generalDiscoveryDefaults = { ports: [] };
 let discProto = 'modbus';
 const DISC_HINTS = {
   modbus: {
-    label: 'Target (IP:PORT o subnet)',
-    placeholder: '192.168.1.100:502 oppure 192.168.1.0/24',
-    help: 'Modbus/TCP e\' tipicamente su porta 502. Puoi passare un host (IP:PORT) o una subnet (CIDR) se supportata dal firmware.',
+    label: 'Target (IP:PORT or subnet)',
+    placeholder: '192.168.1.100:502 or 192.168.1.0/24',
+    help: 'Modbus/TCP is typically on port 502. You can pass a host (IP:PORT) or a subnet (CIDR) if supported by the firmware.',
     def: '192.168.1.100:502'
   },
   s7: {
-    label: 'Target (IP:PORT o subnet)',
-    placeholder: '192.168.1.100:102 oppure 192.168.1.0/24',
-    help: 'S7comm e\' tipicamente su porta 102. Su molte build richiede Ethernet pronta (ETH).',
+    label: 'Target (IP:PORT or subnet)',
+    placeholder: '192.168.1.100:102 or 192.168.1.0/24',
+    help: 'S7comm is typically on port 102. On many builds it requires Ethernet ready (ETH).',
     def: '192.168.1.100:102'
   },
   profinet: {
-    label: 'Target (L2 / interfaccia)',
-    placeholder: 'eth (consigliato) oppure l2',
-    help: 'PROFINET DCP e\' discovery a livello 2 (broadcast). Non inserire una subnet IP: usa "eth" (o lascia vuoto).',
+    label: 'Target (L2 / interface)',
+    placeholder: 'eth (recommended) or l2',
+    help: 'PROFINET DCP is layer-2 discovery (broadcast). Do not enter an IP subnet: use "eth" (or leave empty).',
     def: 'eth'
   },
   ethernetip: {
-    label: 'Target (IP:PORT o subnet)',
-    placeholder: '192.168.1.100:44818 oppure 192.168.1.0/24',
-    help: 'EtherNet/IP e\' tipicamente su porta 44818. Puoi usare host (IP:PORT) o subnet (CIDR) se supportata.',
+    label: 'Target (IP:PORT or subnet)',
+    placeholder: '192.168.1.100:44818 or 192.168.1.0/24',
+    help: 'EtherNet/IP is typically on port 44818. You can use a host (IP:PORT) or subnet (CIDR) if supported.',
     def: '192.168.1.100:44818'
   },
   opcua: {
-    label: 'Target (IP:PORT o subnet)',
-    placeholder: '192.168.1.100:4840 oppure 192.168.1.0/24',
-    help: 'OPC UA Hello usa tipicamente porta 4840. Puoi usare host (IP:PORT) o subnet (CIDR) se supportata.',
+    label: 'Target (IP:PORT or subnet)',
+    placeholder: '192.168.1.100:4840 or 192.168.1.0/24',
+    help: 'OPC UA Hello typically uses port 4840. You can use a host (IP:PORT) or subnet (CIDR) if supported.',
     def: '192.168.1.100:4840'
   }
 };
@@ -959,7 +959,7 @@ function startDiscovery(){
 // (removed) runS7ProtocolDiscovery(): S7 protocol discovery is returned as part of /api/discovery/start -> /api/discovery/list results.
 
 async function discovery(type){
-  status('Avvio discovery ' + type + '...', false);
+  status('Starting discovery ' + type + '...', false);
  try{
  var rawTarget=(document.getElementById('disc_target').value||'').trim();
  var hint = DISC_HINTS[type] || DISC_HINTS.modbus;
@@ -967,7 +967,7 @@ async function discovery(type){
  if(type === 'profinet'){
    // PROFINET DCP is L2: ignore IP/CIDR targets to avoid user confusion.
    if(isLikelyIpOrCidrTarget(target)){
-     status("PROFINET DCP e' L2: target IP ignorato, uso 'eth'", false);
+     status("PROFINET DCP is L2: IP target ignored, using 'eth'", false);
      target = 'eth';
    }
  }
@@ -1068,7 +1068,7 @@ async function loadGeneralDiscoveryDefaults(override){
 }
 
 async function startGeneralDiscovery(){
-  status('Avvio general discovery...', false);
+  status('Starting general discovery...', false);
   try{
     var mode=document.getElementById('general_mode').value;
     var target=(document.getElementById('general_target').value||'').trim();
@@ -1078,7 +1078,7 @@ async function startGeneralDiscovery(){
     var maxHosts=parseInt(document.getElementById('general_max_hosts').value,10);
     var portsText=document.getElementById('general_ports').value;
     if(!target){
-      status('Specificare un target per la general discovery',true);
+      status('Specify a target for general discovery',true);
       return;
     }
     var payload={ mode:mode, target:target };
@@ -1095,7 +1095,7 @@ async function startGeneralDiscovery(){
         ports=parsePortList(portsSource);
       }
       if(!ports||!ports.length){
-        status('Inserire almeno una porta valida',true);
+        status('Enter at least one valid port',true);
         return;
       }
       payload.ports=ports;
@@ -1108,7 +1108,7 @@ async function startGeneralDiscovery(){
     if(!resp.ok) throw new Error('HTTP '+resp.status);
     var result=await resp.json();
     if(result.success){
-      status('General discovery avviata - ID: '+result.discovery_id);
+      status('General discovery started - ID: '+result.discovery_id);
       activeDiscoveries.set(result.discovery_id,{
         protocol:'General Discovery',
         target:target,
@@ -1119,10 +1119,10 @@ async function startGeneralDiscovery(){
         startDiscoveryPolling();
       }
     }else{
-      status('General discovery fallita: '+(result.message||'errore'),true);
+      status('General discovery failed: '+(result.message||'error'),true);
     }
   }catch(e){
-    status('Errore general discovery: '+e.message,true);
+    status('General discovery error: '+e.message,true);
   }
 }
 

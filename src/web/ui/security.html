@@ -107,7 +107,7 @@
                 <div class="form-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="opcua-enforce-toggle">
-                        <span><strong>Force secure OPC UA endpoints</strong><br><small style="color:#718096;">Blocca connessioni a endpoint senza crittografia o certificati validi</small></span>
+                        <span><strong>Force secure OPC UA endpoints</strong><br><small style="color:#718096;">Block connections to endpoints without encryption or valid certificates</small></span>
                     </label>
                 </div>
                 <div class="info-box warning" id="temp-admin-warning" style="display:none;">
@@ -196,7 +196,7 @@
                 <div class="form-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="alert-email-enabled">
-                        <span><strong>Email alerts</strong><br><small style="color:#718096;">Invia notifiche email sugli eventi di sicurezza critici</small></span>
+                        <span><strong>Email alerts</strong><br><small style="color:#718096;">Send email notifications about critical security events</small></span>
                     </label>
                     <label for="alert-email-subject">Email subject</label>
                     <input type="text" id="alert-email-subject" placeholder="Security Alert">
@@ -209,7 +209,7 @@
                 <div class="form-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="alert-webhook-enabled">
-                        <span><strong>Webhook alerts</strong><br><small style="color:#718096;">Inoltra gli eventi a sistemi SIEM o SOAR tramite webhook</small></span>
+                        <span><strong>Webhook alerts</strong><br><small style="color:#718096;">Forward events to SIEM or SOAR systems via webhook</small></span>
                     </label>
                     <label for="alert-webhook-url">Webhook URL</label>
                     <input type="url" id="alert-webhook-url" placeholder="https://example.com/webhook">
@@ -220,7 +220,7 @@
                 <div class="form-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="alert-gpio-enabled">
-                        <span><strong>GPIO alerts</strong><br><small style="color:#718096;">Attiva buzzer e indicatori hardware sugli allarmi</small></span>
+                        <span><strong>GPIO alerts</strong><br><small style="color:#718096;">Activate buzzer and hardware indicators on alarms</small></span>
                     </label>
                     <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
                         <div>
@@ -484,12 +484,12 @@
                         actions.className = 'alert-actions';
                         if (!alert.acknowledged) {
                             const ackBtn = document.createElement('button');
-                            ackBtn.textContent = 'Segna come gestito';
+                            ackBtn.textContent = 'Mark as handled';
                             ackBtn.onclick = () => acknowledgeEvent(alert.id, true);
                             actions.appendChild(ackBtn);
                         } else {
                             const undoBtn = document.createElement('button');
-                            undoBtn.textContent = 'Ripristina';
+                            undoBtn.textContent = 'Restore';
                             undoBtn.classList.add('secondary');
                             undoBtn.onclick = () => acknowledgeEvent(alert.id, false);
                             actions.appendChild(undoBtn);
@@ -539,13 +539,13 @@
                     throw new Error(message);
                 }
                 await loadConfig();
-                document.getElementById('success-text').textContent = ack ? 'Evento marcato come gestito' : 'Evento riportato in stato aperto';
+                document.getElementById('success-text').textContent = ack ? 'Event marked as handled' : 'Event reverted to open state';
                 document.getElementById('success-message').style.display = 'block';
                 setTimeout(() => {
                     document.getElementById('success-message').style.display = 'none';
                 }, 3000);
             } catch (error) {
-                alert('Impossibile aggiornare lo stato dell\'evento: ' + error.message);
+                alert('Unable to update event status: ' + error.message);
             }
         }
 

@@ -17,7 +17,7 @@ extern "C" {
   #include <sys/time.h>
   #include <arpa/inet.h>
   #include "esp_task_wdt.h"
-  // #include "esp_panic.h"    // Non esiste in ESP-IDF 5.5.0
+  // #include "esp_panic.h"    // Does not exist in ESP-IDF 5.5.0
   #include "esp_core_dump.h"
 }
 
@@ -68,8 +68,8 @@ extern "C" {
 
 // Route all cJSON allocations to PSRAM (8-bit) with DRAM fallback
 #include "core/task_audit.h"
-#include "core/task_alloc_helpers.h" // contiene create_task_core1_psram(...) e STACK_WORDS_FROM_BYTES
-#include "web/web_server_task.h"    // per WebTaskArgs e web_server_task
+#include "core/task_alloc_helpers.h" // contains create_task_core1_psram(...) and STACK_WORDS_FROM_BYTES
+#include "web/web_server_task.h"    // for WebTaskArgs and web_server_task
 #include "core/audit_manager.h"
 #include "assessment/signature_detector.h"
 static const char* TAG = "MAIN";
@@ -107,13 +107,13 @@ static bool is_abnormal_reset(esp_reset_reason_t reason) {
 }
 
 [[maybe_unused]] static const char* WL[] = {
-    // Preserva tutto tranne i log - cancella solo file di log per pulizia
-    "/data/config",                 // <- preserva TUTTA la dir config
-    "/data/certs",                  // <- preserva certificati
-    "/data/uploads",                // <- preserva uploads
-    "/data/backups",                // <- preserva backups
-    "/data/persistent",              // <- preserva dati persistenti
-    "/data/reportq"                  // <- preserva dati reportq
+    // Preserve everything except the logs - delete only log files for cleanup
+    "/data/config",                 // <- preserve the ENTIRE config dir
+    "/data/certs",                  // <- preserve certificates
+    "/data/uploads",                // <- preserve uploads
+    "/data/backups",                // <- preserve backups
+    "/data/persistent",              // <- preserve persistent data
+    "/data/reportq"                  // <- preserve reportq data
 };
 
 
@@ -204,7 +204,7 @@ extern "C" void app_main(void) {
         LOG_INFOF(TAG, " Normal system boot: %s", reason_str);
     }
 
-    // Check PSRAM availability (seguendo istruzioni LILYGO ufficiali)
+    // Check PSRAM availability (following official LILYGO instructions)
     #ifdef CONFIG_SPIRAM
     uint32_t psram_size = esp_psram_get_size();
     if (psram_size > 0) {
@@ -400,8 +400,8 @@ extern "C" void app_main(void) {
 
     fs_print_littlefs_report("/data", "storage");
 
-    // Log cleanup: rimuove tutti i file tranne quelli nella whitelist (config, certs, uploads, etc.)
-    // Questo cancella principalmente i log per liberare spazio su filesystem
+    // Log cleanup: removes all files except those in the whitelist (config, certs, uploads, etc.)
+    // This mainly deletes logs to free up filesystem space
     fs_purge_littlefs("/data/logs/", WL, sizeof(WL)/sizeof(WL[0]));
     //fs_purge_littlefs("/data/", WL, sizeof(WL)/sizeof(WL[0]));
 
@@ -423,7 +423,7 @@ extern "C" void app_main(void) {
                   esp_err_to_name(size_result), app_log_size);
     }
 
-    // (opzionale) ristampa lo stato dopo la pulizia
+    // (optional) reprint the status after cleanup
     //fs_print_littlefs_report("/data", "storage");
 
     // Config
@@ -457,7 +457,7 @@ extern "C" void app_main(void) {
             .trigger_panic = wdt_cfg.panic_on_timeout
         };
 
-        // Usare reconfigure invece di init
+        // Use reconfigure instead of init
         esp_err_t wdt_result = esp_task_wdt_reconfigure(&esp_wdt_config);
         //esp_err_t wdt_result = esp_task_wdt_init(&esp_wdt_config);
         if (wdt_result == ESP_OK) {
@@ -625,7 +625,7 @@ extern "C" void app_main(void) {
     if (!eth.initializeFromConfig()) {
         LOG_ERROR(TAG, "Ethernet initialization failed - check cable connection and T-POE Pro hardware");
     } else {
-        // Attendere che l'interfaccia ETH ottenga un IP
+        // Wait for the ETH interface to obtain an IP
         LOG_INFO(TAG, "Waiting for IP/DNS before enabling network reporters...");
         uint64_t start_ms = (uint64_t)(esp_timer_get_time() / 1000ULL);
         const uint64_t max_wait_ms = 15000; // 15s
@@ -642,7 +642,7 @@ extern "C" void app_main(void) {
     LOG_INFO(TAG, "Initializing WiFi from configuration...");
     bool wifi_sta_success = wifi.initializeFromConfig();
 
-	// Attiva email reporter su WiFi STA se gi� connesso, altrimenti al GOT_IP
+	// Enable email reporter on WiFi STA if already connected, otherwise on GOT_IP
 	if (wifi_sta_success && wifi.isSTAConnected()) {
 		ReportingConfig::registerEmailFromConfig(&cfg, &rep);
 	} else {
@@ -759,14 +759,14 @@ extern "C" void app_main(void) {
 
     // Register packet callback - plugins now handle both protocol processing and IDS
     net.registerPacketCallback([&](const NetworkPacket& pkt){
-        // DEBUG: Log diretto su seriale per monitoraggio pacchetti di rete
-        /*printf("[PACKET_DEBUG] 📦 Pacchetto catturato: %s:%d -> %s:%d (proto=%d, len=%d)\n",
+        // DEBUG: Direct log to serial for network packet monitoring
+        /*printf("[PACKET_DEBUG] 📦 Packet captured: %s:%d -> %s:%d (proto=%d, len=%d)\n",
                pkt.src_ip.c_str(), pkt.src_port, pkt.dst_ip.c_str(), pkt.dst_port,
                (int)pkt.proto, (int)pkt.length);
 
-        // Log dettagli del payload per i primi 32 bytes
+        // Log payload details for the first 32 bytes
         if (pkt.data && pkt.length > 0) {
-            printf("[PACKET_DEBUG] 🔍 Payload (primi 32 bytes): ");
+            printf("[PACKET_DEBUG] 🔍 Payload (first 32 bytes): ");
             int bytes_to_show = (pkt.length > 32) ? 32 : pkt.length;
             for (int i = 0; i < bytes_to_show; i++) {
                 printf("%02X ", (unsigned char)pkt.data[i]);
@@ -774,12 +774,12 @@ extern "C" void app_main(void) {
             printf("\n");
         }*/
 
-        // IDS generale sempre attivo (telemetria, baseline, anomalie)
+        // General IDS always active (telemetry, baseline, anomalies)
         bool bypassAuthorization = false;
         if (cfg.getIDSConfig().enabled) {
             bypassAuthorization = ids.onPacket(pkt);
-            //LOG_INFO(TAG, "Analisi pacchetto ids");
-            //printf("[PACKET_DEBUG] 🛡️ IDS analisi completata - bypass=%s\n", bypassAuthorization ? "true" : "false");
+            //LOG_INFO(TAG, "ids packet analysis");
+            //printf("[PACKET_DEBUG] 🛡️ IDS analysis completed - bypass=%s\n", bypassAuthorization ? "true" : "false");
             }
 
         // Signature-based threat detection on packet payload (always try - detector handles gracefully)
@@ -789,13 +789,13 @@ extern "C" void app_main(void) {
             SignatureDetection::DetectionResult detection = detector.analyzePacketWithReport(pkt, threat_report_json);
 
             if (detection.detected) {
-                //printf("[PACKET_DEBUG] 🚨 MINACCIA RILEVATA! CVE=%s, protocollo=%d, offset=%lu\n",
+                //printf("[PACKET_DEBUG] 🚨 THREAT DETECTED! CVE=%s, protocol=%d, offset=%lu\n",
                 //       detection.cve_id, (int)detection.protocol, (unsigned long)detection.offset);
 
                 static const psram_string kThreatDetectedType = PSRAMUtils::createPSRAMString("threat_detected");
                 // Send detailed JSON threat report to reporting engine
                 if (!threat_report_json.empty()) {
-                    //printf("[PACKET_DEBUG] 📧 Invio report minaccia al sistema di reporting (JSON: %u bytes)\n", (unsigned)threat_report_json.length());
+                    //printf("[PACKET_DEBUG] 📧 Sending threat report to the reporting system (JSON: %u bytes)\n", (unsigned)threat_report_json.length());
                     LOG_INFOF(TAG, "Sending threat detection event to reporting engine (JSON size: %u bytes)", (unsigned)threat_report_json.length());
                     rep.reportEvent(kThreatDetectedType, threat_report_json);
                     LOG_INFOF(TAG, "Detailed threat report sent to reporting channels - email dispatch initiated");
@@ -827,18 +827,18 @@ extern "C" void app_main(void) {
             }
         }
 
-        // Inoltra ai plugin con flag di bypass
+        // Forward to plugins with bypass flag
         if (auto* bp = pm.findByProtocol(pkt.proto)) {
-            //printf("[PACKET_DEBUG] 🔌 Plugin attivato per protocollo %d - bypass=%s\n",
+            //printf("[PACKET_DEBUG] 🔌 Plugin activated for protocol %d - bypass=%s\n",
             //       (int)pkt.proto, bypassAuthorization ? "true" : "false");
             bp->onPacket(pkt, bypassAuthorization);
-            //printf("[PACKET_DEBUG] ✅ Plugin elaborazione completata\n");
+            //printf("[PACKET_DEBUG] ✅ Plugin processing completed\n");
         } else {
-            //printf("[PACKET_DEBUG] ⚠️ Nessun plugin disponibile per protocollo %d\n", (int)pkt.proto);
+            //printf("[PACKET_DEBUG] ⚠️ No plugin available for protocol %d\n", (int)pkt.proto);
         }
 
-        // Riepilogo finale del pacchetto processato
-        //printf("[PACKET_DEBUG] 📋 Riepilogo: %s:%d->%s:%d (proto=%d, len=%d, bypass=%s) - COMPLETATO\n\n",
+        // Final summary of the processed packet
+        //printf("[PACKET_DEBUG] 📋 Summary: %s:%d->%s:%d (proto=%d, len=%d, bypass=%s) - COMPLETED\n\n",
         //       pkt.src_ip.c_str(), pkt.src_port, pkt.dst_ip.c_str(), pkt.dst_port,
         //       (int)pkt.proto, (int)pkt.length, bypassAuthorization ? "true" : "false");
 

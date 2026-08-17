@@ -6,13 +6,13 @@
 #include <cstdint>
 
 /**
- * @brief Evento anomalo per correlazione
+ * @brief Anomalous event for correlation
  */
 struct CorrelationEvent {
     uint64_t timestamp_ms = 0;
     psram_string source_ip;
     psram_string dest_ip;
-    psram_string attack_type;      // es: "port_scan", "brute_force", "flooding"
+    psram_string attack_type;      // e.g.: "port_scan", "brute_force", "flooding"
     ProtocolType protocol = ProtocolType::UNKNOWN;
     float severity = 0.0f;
 
@@ -23,10 +23,10 @@ struct CorrelationEvent {
 };
 
 /**
- * @brief Pattern di attacco correlato rilevato
+ * @brief Detected correlated attack pattern
  */
 struct CorrelatedAttack {
-    psram_string attack_pattern;   // es: "distributed_scan", "coordinated_flood"
+    psram_string attack_pattern;   // e.g.: "distributed_scan", "coordinated_flood"
     psram_vector<psram_string> involved_sources;
     psram_vector<psram_string> involved_targets;
     uint32_t event_count = 0;
@@ -41,25 +41,25 @@ struct CorrelatedAttack {
 };
 
 /**
- * @brief Configurazione correlation engine
+ * @brief Correlation engine configuration
  */
 struct CorrelationConfig {
     bool enabled = true;
-    uint32_t time_window_ms = 60000;          // Finestra temporale correlazione (default: 60s)
-    uint32_t min_events_for_correlation = 3;   // Eventi minimi per correlazione
-    uint32_t max_events_tracked = 1000;        // Massimo eventi in memoria
-    float severity_threshold = 0.5f;           // Soglia severità per considerare evento
-    uint32_t event_retention_ms = 300000;      // Ritenzione eventi (default: 5 min)
+    uint32_t time_window_ms = 60000;          // Correlation time window (default: 60s)
+    uint32_t min_events_for_correlation = 3;   // Minimum events for correlation
+    uint32_t max_events_tracked = 1000;        // Maximum events in memory
+    float severity_threshold = 0.5f;           // Severity threshold for considering an event
+    uint32_t event_retention_ms = 300000;      // Event retention (default: 5 min)
 };
 
 /**
- * @brief Correlation Engine per rilevamento attacchi distribuiti
+ * @brief Correlation Engine for detecting distributed attacks
  *
- * Correla eventi anomali da sessioni/flussi diversi per rilevare:
- * - Port scanning distribuito
- * - Brute-force attacks coordinati
- * - Flooding attacks da più sorgenti
- * - Reconnaissance distribuito
+ * Correlates anomalous events from different sessions/flows to detect:
+ * - Distributed port scanning
+ * - Coordinated brute-force attacks
+ * - Flooding attacks from multiple sources
+ * - Distributed reconnaissance
  */
 class CorrelationEngine {
 public:
@@ -70,29 +70,29 @@ public:
     const CorrelationConfig& getConfig() const { return config_; }
 
     /**
-     * @brief Registra nuovo evento anomalo per correlazione
+     * @brief Records a new anomalous event for correlation
      */
     void recordEvent(const CorrelationEvent& event);
 
     /**
-     * @brief Esegue analisi correlazione e rileva pattern
-     * @param out_attacks Attacchi correlati rilevati
-     * @return Numero di attacchi correlati trovati
+     * @brief Performs correlation analysis and detects patterns
+     * @param out_attacks Detected correlated attacks
+     * @return Number of correlated attacks found
      */
     uint32_t analyzeCorrelations(psram_vector<CorrelatedAttack>& out_attacks);
 
     /**
-     * @brief Pulisce eventi vecchi oltre retention period
+     * @brief Cleans up old events beyond the retention period
      */
     void cleanupOldEvents();
 
     /**
-     * @brief Reset completo stato correlazione
+     * @brief Full reset of the correlation state
      */
     void reset();
 
     /**
-     * @brief Ottieni statistiche correlation engine
+     * @brief Get correlation engine statistics
      */
     uint32_t getTrackedEventCount() const { return events_.size(); }
     uint32_t getTotalEventsProcessed() const { return total_events_processed_; }

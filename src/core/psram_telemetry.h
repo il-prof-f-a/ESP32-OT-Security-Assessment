@@ -1,12 +1,12 @@
 /**
  * @file psram_telemetry.h
- * @brief Sistema avanzato di telemetria e monitoring PSRAM/DRAM
+ * @brief Advanced PSRAM/DRAM telemetry and monitoring system
  *
- * Fornisce metriche dettagliate sull'utilizzo della memoria PSRAM e Internal RAM:
- * - Monitoring real-time con update periodico
- * - Watchdog automatico per low-memory conditions
- * - Statistiche aggregate (min/max/avg)
- * - API per Web UI dashboard
+ * Provides detailed metrics on PSRAM and Internal RAM memory usage:
+ * - Real-time monitoring with periodic updates
+ * - Automatic watchdog for low-memory conditions
+ * - Aggregate statistics (min/max/avg)
+ * - API for the Web UI dashboard
  *
  * @date 2025-10-29
  * @version 1.0
@@ -26,7 +26,7 @@ extern "C" {
 }
 
 /**
- * @brief Metriche istantanee memoria PSRAM/DRAM
+ * @brief Instantaneous PSRAM/DRAM memory metrics
  */
 struct PSRAMMetrics {
     // PSRAM
@@ -44,11 +44,11 @@ struct PSRAMMetrics {
     size_t dram_largest_block;
     uint8_t dram_fragmentation_percent;
 
-    // Contatori allocazione (approssimati)
+    // Allocation counters (approximate)
     uint32_t alloc_count_estimate;
     uint32_t dealloc_count_estimate;
 
-    // Flags stato
+    // State flags
     bool critical_dram;  // < 10KB free
     bool warning_dram;   // < 30KB free
     bool psram_available;
@@ -65,7 +65,7 @@ struct PSRAMMetrics {
 };
 
 /**
- * @brief Statistiche aggregate memoria (min/max/avg)
+ * @brief Aggregate memory statistics (min/max/avg)
  */
 struct PSRAMStats {
     // DRAM stats
@@ -81,7 +81,7 @@ struct PSRAMStats {
     size_t psram_free_max;
     size_t psram_free_avg;
 
-    // Contatori eventi
+    // Event counters
     uint32_t updates_count;
     uint32_t critical_events;
     uint32_t warning_events;
@@ -93,24 +93,24 @@ struct PSRAMStats {
 };
 
 /**
- * @brief Classe singleton per telemetria PSRAM avanzata
+ * @brief Singleton class for advanced PSRAM telemetry
  *
- * Fornisce monitoring periodico della memoria con statistiche aggregate,
- * watchdog automatico, e API per esportazione metriche.
+ * Provides periodic memory monitoring with aggregate statistics,
+ * automatic watchdog, and API for exporting metrics.
  *
  * Utilizzo:
  * ```cpp
- * // Inizializzazione (una sola volta)
- * PSRAMTelemetry::getInstance().initialize(60000); // Update ogni 60s
+ * // Initialization (once only)
+ * PSRAMTelemetry::getInstance().initialize(60000); // Update every 60s
  *
  * // Enable watchdog
  * PSRAMTelemetry::getInstance().enableWatchdog(15000); // Alert se DRAM < 15KB
  *
- * // Get metriche correnti
+ * // Get current metrics
  * PSRAMMetrics metrics = PSRAMTelemetry::getInstance().getMetrics();
  * ESP_LOGI("APP", "DRAM free: %u KB", metrics.dram_free / 1024);
  *
- * // Get statistiche aggregate
+ * // Get aggregate statistics
  * PSRAMStats stats = PSRAMTelemetry::getInstance().getStats();
  * ESP_LOGI("APP", "DRAM free min: %u bytes", stats.dram_free_min);
  * ```
@@ -118,7 +118,7 @@ struct PSRAMStats {
 class PSRAMTelemetry {
 public:
     /**
-     * @brief Ottieni istanza singleton
+     * @brief Get the singleton instance
      */
     static PSRAMTelemetry& getInstance() {
         static PSRAMTelemetry instance;
@@ -132,56 +132,56 @@ public:
     PSRAMTelemetry& operator=(PSRAMTelemetry&&) = delete;
 
     /**
-     * @brief Inizializza telemetria con update periodico
+     * @brief Initialize telemetry with periodic updates
      *
-     * @param update_interval_ms Intervallo update metriche (default: 60000 = 60s)
-     * @return true se inizializzazione riuscita
+     * @param update_interval_ms Metrics update interval (default: 60000 = 60s)
+     * @return true if initialization succeeded
      */
     bool initialize(uint32_t update_interval_ms = 60000);
 
     /**
-     * @brief Shutdown telemetria
+     * @brief Shutdown telemetry
      */
     void shutdown();
 
     /**
-     * @brief Update manuale metriche (senza attendere intervallo)
+     * @brief Manual metrics update (without waiting for the interval)
      */
     void updateNow();
 
     /**
-     * @brief Ottieni metriche correnti
+     * @brief Get current metrics
      *
-     * @return Snapshot metriche istantanee
+     * @return Snapshot of instantaneous metrics
      */
     PSRAMMetrics getMetrics() const;
 
     /**
-     * @brief Ottieni statistiche aggregate
+     * @brief Get aggregate statistics
      *
-     * @return Statistiche min/max/avg da inizializzazione
+     * @return Min/max/avg statistics since initialization
      */
     PSRAMStats getStats() const;
 
     /**
-     * @brief Reset statistiche aggregate
+     * @brief Reset aggregate statistics
      */
     void resetStats();
 
     /**
-     * @brief Log metriche correnti
+     * @brief Log current metrics
      *
-     * @param context Stringa contesto per identificare log
+     * @param context Context string to identify the log
      */
     void logMetrics(const char* context = "PSRAMTelemetry") const;
 
     /**
-     * @brief Enable watchdog automatico
+     * @brief Enable automatic watchdog
      *
-     * Quando abilitato, logga WARNING/ERROR automaticamente
-     * se DRAM free scende sotto threshold.
+     * When enabled, logs WARNING/ERROR automatically
+     * if DRAM free drops below the threshold.
      *
-     * @param threshold_bytes Soglia DRAM in bytes (default: 15000)
+     * @param threshold_bytes DRAM threshold in bytes (default: 15000)
      */
     void enableWatchdog(size_t threshold_bytes = 15000);
 
@@ -191,12 +191,12 @@ public:
     void disableWatchdog();
 
     /**
-     * @brief Verifica se watchdog è abilitato
+     * @brief Check whether the watchdog is enabled
      */
     bool isWatchdogEnabled() const { return watchdog_enabled_; }
 
     /**
-     * @brief Ottieni threshold watchdog corrente
+     * @brief Get the current watchdog threshold
      */
     size_t getWatchdogThreshold() const { return watchdog_threshold_; }
 
@@ -204,16 +204,16 @@ private:
     PSRAMTelemetry();
     ~PSRAMTelemetry();
 
-    // Task worker per update periodico
+    // Worker task for periodic updates
     static void telemetryTask(void* pvParameters);
 
-    // Update interno metriche
+    // Internal metrics update
     void updateMetrics();
 
     // Check watchdog
     void checkWatchdog();
 
-    // Membri
+    // Members
     PSRAMMetrics current_metrics_;
     PSRAMStats stats_;
 

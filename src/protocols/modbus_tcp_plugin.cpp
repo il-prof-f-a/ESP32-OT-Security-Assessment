@@ -63,7 +63,7 @@ static std::string bytesToHex(const std::vector<uint8_t>& data) {
     heap_caps_free(hex_buf);
     return result;
 }
-// Configura il socket TCP per chiudersi in modo aggressivo e liberare subito i PCB
+// Configure the TCP socket to close aggressively and free the PCBs immediately
 static void configureTcpSocket(int sock) {
     if (sock < 0) {
         return;
@@ -82,7 +82,7 @@ static void configureTcpSocket(int sock) {
 #endif
 }
 
-// Gestore scoped per estendere temporaneamente il watchdog durante scansioni lunghe
+// Scoped handler to temporarily extend the watchdog during long scans
 class ScopedDiscoveryWdtExtension {
 public:
     ScopedDiscoveryWdtExtension(ConfigurationManager* cfg, uint32_t min_timeout_ms)
@@ -108,9 +108,9 @@ public:
         tmp.timeout_ms = desired;
         if (esp_task_wdt_reconfigure(&tmp) == ESP_OK) {
             valid_ = true;
-            LOG_INFOF("ModbusTCP", "Task WDT esteso a %ums per discovery", (unsigned)desired);
+            LOG_INFOF("ModbusTCP", "Task WDT extended to %ums for discovery", (unsigned)desired);
         } else {
-            LOG_WARNING("ModbusTCP", "Impossibile estendere il Task WDT per la discovery");
+            LOG_WARNING("ModbusTCP", "Unable to extend the Task WDT for discovery");
         }
     }
 
@@ -119,9 +119,9 @@ public:
             return;
         }
         if (esp_task_wdt_reconfigure(&saved_config_) == ESP_OK) {
-            LOG_INFOF("ModbusTCP", "Task WDT ripristinato a %ums", (unsigned)saved_config_.timeout_ms);
+            LOG_INFOF("ModbusTCP", "Task WDT restored to %ums", (unsigned)saved_config_.timeout_ms);
         } else {
-            LOG_WARNING("ModbusTCP", "Ripristino Task WDT fallito dopo la discovery");
+            LOG_WARNING("ModbusTCP", "Task WDT restore failed after discovery");
         }
     }
 private:
@@ -786,9 +786,9 @@ struct DeviceIdKV { uint8_t id; psram_string value; };
 static bool parseDeviceIdResponse(const psram_vector<uint8_t>& resp,
                                   uint8_t& conformity, uint8_t& more_follows,
                                   uint8_t& next_object_id, psram_vector<DeviceIdKV>& kvs) {
-    // MBAP (7) + Unit(1) + PDU(..). PDU atteso: 0x2B 0x0E dev_id_code conformity more next count objs...
+    // MBAP (7) + Unit(1) + PDU(..). Expected PDU: 0x2B 0x0E dev_id_code conformity more next count objs...
     if (resp.size() < 14) return false;
-    size_t pdu = 7; // inizia da Function
+    size_t pdu = 7; // starts from Function
     if (resp[pdu] != 0x2B || resp[pdu+1] != 0x0E) return false;
     conformity    = resp[pdu+3];
     more_follows  = resp[pdu+4];
@@ -822,7 +822,7 @@ static const char* devIdName(uint8_t id) {
     }
 }
 
-// (Opzionale) Report Slave ID 0x11, torna stringa grezza (se supportato)
+// (Optional) Report Slave ID 0x11, returns a raw string (if supported)
 static bool tryReportSlaveId(int sock, uint16_t tid, uint8_t unit, int timeout_ms, int retries, psram_string& out) {
     std::vector<uint8_t> pdu = {0x11};
     auto request = makeMBAP(tid, unit, (uint16_t)pdu.size());
@@ -865,8 +865,8 @@ bool ModbusTCPPlugin::doNetworkDiscoveryPSRAM(const psram_string& target_network
 
 std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_network, uint32_t timeout_ms) {
 
-    const uint32_t kMinDiscoveryWdtMs = 240000U; // 4 minuti
-    const uint32_t kMaxDiscoveryWdtMs = 600000U; // 10 minuti
+    const uint32_t kMinDiscoveryWdtMs = 240000U; // 4 minutes
+    const uint32_t kMaxDiscoveryWdtMs = 600000U; // 10 minutes
     uint32_t wdt_min_timeout_ms = kMinDiscoveryWdtMs;
     if (timeout_ms > 0U) {
         uint32_t candidate = timeout_ms;
@@ -927,7 +927,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
     }
 
 
-    // 1) Espansione IP (mantengo la tua gestione semplice per /24 o singolo IP)
+    // 1) IP expansion (keeping your simple handling for /24 or a single IP)
     psram_vector<psram_string> ips_to_scan;
     if (target_network.find('/') != std::string::npos) {
         auto slash_pos = target_network.find('/');
@@ -954,10 +954,10 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
     DiscoveryManager::getInstance().initTotalsTLS((uint32_t)ips_to_scan.size());
 
     // Connection pool configuration to prevent socket exhaustion
-    const int MAX_CONCURRENT_CONNECTIONS = 4; // Riduci il carico su lwIP e i semafori interni
-    const int BATCH_SIZE = 4; // Batches piu' piccoli per ridurre l'uso DRAM
-    const int BATCH_DELAY_MS = 200; // Ritmo piu' blando per permettere cleanup
-    const size_t MIN_FREE_INTERNAL_FOR_SOCKET = 30000; // Soglia di sicurezza DRAM prima di aprire un nuovo socket
+    const int MAX_CONCURRENT_CONNECTIONS = 4; // Reduce the load on lwIP and internal semaphores
+    const int BATCH_SIZE = 4; // Smaller batches to reduce DRAM usage
+    const int BATCH_DELAY_MS = 200; // Slower pace to allow cleanup
+    const size_t MIN_FREE_INTERNAL_FOR_SOCKET = 30000; // DRAM safety threshold before opening a new socket
 
     const int request_retries = std::max(1, cfg_.discovery_request_retries);
     const int connect_retries = std::max(1, cfg_.discovery_connect_retries);
@@ -1050,10 +1050,10 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
 
             if (free_internal < MIN_FREE_INTERNAL_FOR_SOCKET) {
                 ++low_mem_retries;
-                LOG_WARNINGF(TAG_MB, "DRAM limitata (%u bytes) prima di connettere %s (tentativo %d)",
+                LOG_WARNINGF(TAG_MB, "Limited DRAM (%u bytes) before connecting to %s (attempt %d)",
                             (unsigned)free_internal, ip.c_str(), low_mem_retries);
                 if (low_mem_retries >= 5) {
-                    LOG_WARNINGF(TAG_MB, "Salto host %s per memoria insufficiente dopo %d tentativi", ip.c_str(), low_mem_retries);
+                    LOG_WARNINGF(TAG_MB, "Skipping host %s due to insufficient memory after %d attempts", ip.c_str(), low_mem_retries);
                     ++i;
                     low_mem_retries = 0;
                     vTaskDelay(pdMS_TO_TICKS(150));
@@ -1180,8 +1180,8 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
             }
             hosts_connected++;
 
-        // 3) Deterministico: Read Device Identification (Basic?Regular?Extended) su unit tipiche
-        //    - se gateway, alcuni ignorano unit=0xFF; si prova 0xFF e 0x01
+        // 3) Deterministic: Read Device Identification (Basic/Regular/Extended) on typical units
+        //    - if gateway, some ignore unit=0xFF; try 0xFF and 0x01
         psram_vector<uint8_t> units_to_try(units_default.begin(), units_default.end());
         psram_vector<int> discovered_units;
         psram_string vendor, product, revision, product_name, model_name, vendor_url, slave_id_raw;
@@ -1206,7 +1206,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
                             host_elapsed_ms, ip.c_str(), devices_found);
                 continue; // Skip to next unit
             }
-            // Basic (0x01), poi Regular (0x02) e Extended (0x03) con eventuale �More Follows�
+            // Basic (0x01), then Regular (0x02) and Extended (0x03) with possible More Follows
             for (uint8_t level : { (uint8_t)0x01, (uint8_t)0x02, (uint8_t)0x03 }) {
                 uint8_t next_obj = 0x00;
                 uint8_t more = 0x00;
@@ -1247,7 +1247,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
                     LOG_INFOF(TAG_MB, "?? MODBUS DEVICE ALIVE: %s unit %u - MEI Read Device ID successful (level=%u, objects=%zu)!",
                              ip.c_str(), (unsigned)unit, (unsigned)level, kvs.size());
 
-                    // Segnalo che c'� almeno UNA unit utilizzabile
+                    // Signals that there is at least ONE usable unit
                     if (std::find(discovered_units.begin(), discovered_units.end(), (int)unit) == discovered_units.end())
                         discovered_units.push_back((int)unit);
 
@@ -1341,10 +1341,10 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
         }
         LOG_WARNINGF(TAG_MB, "?? HEAVY_LOG: Completed standard Read tests for %s - discovered_units now has %zu units", ip.c_str(), discovered_units.size());
 
-        // 4) (Opzionale) Enumerazione UnitID 1..247 per gateway (breve, con timeouts corti)
+        // 4) (Optional) UnitID 1..247 enumeration for gateways (brief, with short timeouts)
         psram_vector<int> gateway_units;
         {
-            const int max_scan_units = 32; // fermati presto: safe-scan
+            const int max_scan_units = 32; // stop early: safe-scan
             for (int u = 1; u <= max_scan_units; ++u) {
                 auto req = makeReadDeviceIdReq(tid++, (uint8_t)u, 0x01/*Basic*/, 0x00);
                 psram_vector<uint8_t> resp;
@@ -1367,7 +1367,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
             }
         }
 
-        // Fallback ulteriore per device senza MEI 0x2B/0x0E: probe Read Coils su unit 1..10
+        // Additional fallback for devices without MEI 0x2B/0x0E: Read Coils probe on units 1..10
         if (discovered_units.empty() && gateway_units.empty()) {
             for (int uid = 1; uid <= probe_unit_limit; ++uid) {
                 auto probe = makeReadCoilsReq(tid++, (uint8_t)uid, 0, 2);  // Read 2 coils for better coverage
@@ -1565,7 +1565,7 @@ bool ModbusTCPPlugin::doPacketAnalysis(const NetworkPacket& pkt) {
     size_t p_len = 0;
     if (!locateModbusAdu(pkt, p, p_len) || p_len < 8) return false;
 
-    // ===== FLOW MANAGEMENT: Traccia pacchetto nel sistema di flow tracking =====
+    // ===== FLOW MANAGEMENT: Track the packet in the flow tracking system =====
     trackPacketInFlow(pkt);
 
     bool alert_generated = false;
@@ -2061,8 +2061,8 @@ public:
         seeds.push_back(createWriteSingleRegister(0, 0xFFFF));    // Register 0 = MAX
         seeds.push_back(createWriteSingleRegister(100, 0x8000));  // Register 100 = dangerous value
 
-        // Write Multiple Registers (FC 0x10) - Cambio set-point multipli
-        std::vector<uint16_t> critical_values = {0xFFFF, 0x0000, 0x8000, 0x7FFF}; // Valori critici
+        // Write Multiple Registers (FC 0x10) - Multiple set-point change
+        std::vector<uint16_t> critical_values = {0xFFFF, 0x0000, 0x8000, 0x7FFF}; // Critical values
         seeds.push_back(createWriteMultipleRegisters(0, critical_values));
 
         return !seeds.empty();
@@ -2161,10 +2161,10 @@ public:
 
         uint8_t unit_id = 1;
 
-        // Sub-function 0x0004: Force Listen Only Mode (DoS principale)
+        // Sub-function 0x0004: Force Listen Only Mode (main DoS)
         seeds.push_back(createDiagnostics(unit_id, 0x0004, 0x0000));
 
-        // Sub-function 0x0001: Return Query Data (test diagnostici)
+        // Sub-function 0x0001: Return Query Data (diagnostic tests)
         seeds.push_back(createDiagnostics(unit_id, 0x0001, 0x1234));
 
         // Sub-function 0x0002: Restart Communications Option
@@ -2453,7 +2453,7 @@ bool ModbusTCPPlugin::buildFlowKey(const NetworkPacket& packet, FlowKey& key) {
     const uint8_t* data = nullptr;
     size_t data_len = 0;
     if (!locateModbusAdu(packet, data, data_len) || data_len < 9) {
-        return false;  // Pacchetto troppo corto
+        return false;  // Packet too short
     }
 
     // MBAP Header structure:
@@ -2463,10 +2463,10 @@ bool ModbusTCPPlugin::buildFlowKey(const NetworkPacket& packet, FlowKey& key) {
     // 6:     Unit ID
     // 7+:    PDU (function code + data)
 
-    // Estrai Unit ID (byte 6 dell'MBAP)
+    // Extract Unit ID (byte 6 of MBAP)
     uint8_t unit_id = data[6];
 
-    // Costruisci chiave: src_ip:src_port:dst_ip:dst_port:unit_id
+    // Build the key: src_ip:src_port:dst_ip:dst_port:unit_id
     PSRAMAllocator<char> alloc;
     key.src_ip = psram_string(packet.src_ip, alloc);
     key.dst_ip = psram_string(packet.dst_ip, alloc);
@@ -2491,12 +2491,12 @@ bool ModbusTCPPlugin::classifyPacketOperation(const NetworkPacket& packet,
         return false;
     }
 
-    uint8_t function_code = data[7];  // Function code nel PDU (byte 7)
+    uint8_t function_code = data[7];  // Function code in the PDU (byte 7)
 
     PSRAMAllocator<char> alloc;
     is_error = false;
 
-    // Verifica se è una response di errore (exception)
+    // Check whether it is an error response (exception)
     if (function_code >= 0x80) {
         is_error = true;
         uint8_t exception_code = (data_len >= 10) ? data[8] : 0;
@@ -2511,7 +2511,7 @@ bool ModbusTCPPlugin::classifyPacketOperation(const NetworkPacket& packet,
         return true;
     }
 
-    // Classifica in base al function code
+    // Classify based on the function code
     char details[128];
 
     // Function codes Modbus standard
@@ -2521,7 +2521,7 @@ bool ModbusTCPPlugin::classifyPacketOperation(const NetworkPacket& packet,
 
         uint16_t start_addr = 0;
         uint16_t quantity = 0;
-        if (data_len >= 13) {  // Request completa
+        if (data_len >= 13) {  // Complete request
             start_addr = (data[8] << 8) | data[9];
             quantity = (data[10] << 8) | data[11];
         }
@@ -2574,7 +2574,7 @@ bool ModbusTCPPlugin::classifyPacketOperation(const NetworkPacket& packet,
         snprintf(details, sizeof(details), "FC=0x2B ReadDeviceID");
 
     } else {
-        // Function code sconosciuto o custom
+        // Unknown or custom function code
         operation_type = psram_string("OTHER", alloc);
         snprintf(details, sizeof(details), "FC=0x%02X Unknown", function_code);
     }
@@ -2584,37 +2584,37 @@ bool ModbusTCPPlugin::classifyPacketOperation(const NetworkPacket& packet,
 }
 
 void ModbusTCPPlugin::updateProtocolState(const NetworkPacket& packet, FlowData& flow) {
-    // Modbus TCP è stateless, quindi la state machine è semplice
-    // INIT -> DATA_EXCHANGE (primo pacchetto) -> mantiene DATA_EXCHANGE
+    // Modbus TCP is stateless, so the state machine is simple
+    // INIT -> DATA_EXCHANGE (first packet) -> stays in DATA_EXCHANGE
 
     if (flow.state == FlowState::INIT) {
-        // Primo pacchetto: passa direttamente a DATA_EXCHANGE
-        // (Modbus TCP non ha handshake, inizia subito a scambiare dati)
+        // First packet: go directly to DATA_EXCHANGE
+        // (Modbus TCP has no handshake, it starts exchanging data immediately)
         flow.state = FlowState::DATA_EXCHANGE;
     }
 
-    // Resta in DATA_EXCHANGE finché il flusso è attivo
-    // Se troppi errori, potrebbe passare a ERROR (gestito da assignFlowLabel)
+    // Stay in DATA_EXCHANGE as long as the flow is active
+    // If too many errors, it could transition to ERROR (handled by assignFlowLabel)
 }
 
 void ModbusTCPPlugin::assignFlowLabel(FlowData& flow) {
-    // Assegna label primaria e secondaria basandosi sulle metriche
+    // Assign the primary and secondary labels based on the metrics
 
-    // 1. Verifica flooding
+    // 1. Check flooding
     if (flow.metrics.intensity == FlowIntensity::FLOODING) {
         flow.metrics.primary_label = FlowLabel::FLOODING;
         flow.metrics.secondary_label = FlowLabel::ATTACK_CONFIRMED;
         return;
     }
 
-    // 2. Verifica troppi errori
+    // 2. Check too many errors
     if (flow.metrics.hasTooManyErrors(0.3f)) {  // > 30% error rate
         flow.metrics.primary_label = FlowLabel::SUSPICIOUS;
         flow.metrics.secondary_label = FlowLabel::PROTOCOL_VIOLATION;
         return;
     }
 
-    // 3. Verifica scanning pattern
+    // 3. Check scanning pattern
     if (flow.metrics.intensity >= FlowIntensity::VERY_HIGH &&
         flow.metrics.isReader() &&
         flow.getOperationCount() > 50) {
@@ -2623,26 +2623,26 @@ void ModbusTCPPlugin::assignFlowLabel(FlowData& flow) {
         return;
     }
 
-    // 4. Verifica broadcast write
-    // Controlla se protocol_specific contiene unit_id=0 (broadcast)
+    // 4. Check broadcast write
+    // Check whether protocol_specific contains unit_id=0 (broadcast)
     if (flow.key.protocol_specific == "0" && flow.metrics.isWriter()) {
         flow.metrics.primary_label = FlowLabel::CRITICAL_WRITE;
         flow.metrics.secondary_label = FlowLabel::BROADCASTER;
         return;
     }
 
-    // 5. Classifica normale basato su read/write ratio
+    // 5. Normal classification based on read/write ratio
     if (flow.metrics.isWriter()) {
-        // Ha write operations
+        // Has write operations
         if (flow.metrics.write_operations > flow.metrics.read_operations * 2) {
-            // Prevalentemente write
+            // Mostly write
             flow.metrics.primary_label = FlowLabel::WRITER;
         } else {
             // Mix read/write
             flow.metrics.primary_label = FlowLabel::MIXED_RW;
         }
     } else if (flow.metrics.isReader()) {
-        // Solo read
+        // Read only
         flow.metrics.primary_label = FlowLabel::READER;
 
         // Check polling pattern
@@ -2651,7 +2651,7 @@ void ModbusTCPPlugin::assignFlowLabel(FlowData& flow) {
             flow.metrics.secondary_label = FlowLabel::POLLING;
         }
     } else {
-        // Nessuna operazione classificata (potrebbe essere tutto diagnostic)
+        // No classified operation (it might all be diagnostic)
         flow.metrics.primary_label = FlowLabel::DIAGNOSTIC;
     }
 
@@ -2660,7 +2660,7 @@ void ModbusTCPPlugin::assignFlowLabel(FlowData& flow) {
         flow.metrics.secondary_label = FlowLabel::HEAVY_USER;
     }
 
-    // Default se non ancora assegnato
+    // Default if not yet assigned
     if (flow.metrics.primary_label == FlowLabel::NORMAL_OPERATION &&
         flow.metrics.packet_count > 0) {
         flow.metrics.primary_label = FlowLabel::NORMAL_OPERATION;

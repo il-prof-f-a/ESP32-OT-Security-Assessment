@@ -429,7 +429,7 @@ bool FilesystemTaskDelegate::processFileStatsMessage(const DelegationMessage& ms
     }
     resp.file_exists = false;
     resp.file_size   = 0;
-    // Non è un errore “grave”: semplicemente file non presente.
+    // Not a “serious” error: the file is simply not present.
     resp.esp_error   = ESP_ERR_NOT_FOUND;
     return false;
 }
@@ -437,7 +437,7 @@ bool FilesystemTaskDelegate::processFileStatsMessage(const DelegationMessage& ms
 // --- STREAM_FILE ---
 bool FilesystemTaskDelegate::processStreamFileMessage(const DelegationMessage& msg,
                                                       DelegationResponse& resp) {
-    // Apri file nel task delegate (stack DRAM)
+    // Open file in the delegate task (DRAM stack)
     FILE* f = fopen(msg.file_path, "rb");
     if (!f) {
         snprintf(resp.error_message, sizeof(resp.error_message),
@@ -446,11 +446,11 @@ bool FilesystemTaskDelegate::processStreamFileMessage(const DelegationMessage& m
         return false;
     }
 
-    // ACK di avvio stream
+    // Stream start ACK
     resp.esp_error = ESP_OK;
-    // (la risposta verrà inviata dal loop principale, come per le altre op)
+    // (the response will be sent by the main loop, as for the other ops)
 
-    // Loop di streaming: produce-chunk → queue del caller
+    // Streaming loop: produce-chunk → caller queue
     FilesystemTaskDelegate::StreamChunk chunk{};
     const size_t CH = (msg.stream_chunk_size == 0 || msg.stream_chunk_size > STREAM_CHUNK_MAX)
                       ? STREAM_CHUNK_MAX : msg.stream_chunk_size;
@@ -462,13 +462,13 @@ bool FilesystemTaskDelegate::processStreamFileMessage(const DelegationMessage& m
             chunk.status = 0;
             chunk.eof = false;
             if (xQueueSend(msg.stream_queue, &chunk, portMAX_DELAY) != pdTRUE) {
-                // Il consumer non riceve più: interrompiamo
+                // The consumer no longer receives: we stop
                 fclose(f);
                 return false;
             }
         }
         if (n < CH) {
-            // EOF o errore
+            // EOF or error
             if (feof(f)) {
                 chunk.len = 0;
                 chunk.status = 0;
@@ -478,7 +478,7 @@ bool FilesystemTaskDelegate::processStreamFileMessage(const DelegationMessage& m
                 chunk.status = -1; // read error
                 chunk.eof = true;
             }
-            // Proviamo a segnalare la fine al consumer
+            // We try to signal the end to the consumer
             (void)xQueueSend(msg.stream_queue, &chunk, pdMS_TO_TICKS(500));
             fclose(f);
             break;

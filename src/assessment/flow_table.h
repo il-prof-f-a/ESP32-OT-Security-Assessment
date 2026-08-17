@@ -1,16 +1,16 @@
 /**
  * @file flow_table.h
- * @brief Tabella hash di flussi di rete in PSRAM
+ * @brief Hash table of network flows in PSRAM
  *
- * Gestisce una hashtable thread-safe di flussi (FlowData) allocata in PSRAM.
- * Fornisce:
- * - Get/Create flussi by key
- * - Cleanup automatico flussi scaduti
- * - Iterazione thread-safe
- * - Statistiche utilizzo
+ * Manages a thread-safe hashtable of flows (FlowData) allocated in PSRAM.
+ * Provides:
+ * - Get/Create flows by key
+ * - Automatic cleanup of expired flows
+ * - Thread-safe iteration
+ * - Usage statistics
  *
- * ALLOCAZIONE: PSRAM (hashtable + tutti i flussi)
- * THREAD-SAFETY: Mutex-protected per accesso concorrente
+ * ALLOCATION: PSRAM (hashtable + all flows)
+ * THREAD-SAFETY: Mutex-protected for concurrent access
  *
  * @date 2025-10-21
  * @version 1.0
@@ -29,20 +29,20 @@
 static const char* FLOW_TABLE_TAG = "FlowTable";
 
 /**
- * @brief Tabella hash di flussi allocata in PSRAM
+ * @brief Hash table of flows allocated in PSRAM
  *
- * Gestisce una collezione di flussi di rete con:
- * - Chiave: psram_string (FlowKey.toString())
- * - Valore: FlowData (struttura completa flusso)
- * - Allocator: PSRAMAllocator (tutta la hashtable in PSRAM)
- * - Thread-safety: std::mutex per protezione accesso concorrente
+ * Manages a collection of network flows with:
+ * - Key: psram_string (FlowKey.toString())
+ * - Value: FlowData (complete flow structure)
+ * - Allocator: PSRAMAllocator (whole hashtable in PSRAM)
+ * - Thread-safety: std::mutex for concurrent access protection
  *
- * Configurazione:
- * - max_flows: Numero massimo flussi simultanei (default: 1000)
- * - flow_timeout_ms: Timeout inattività prima rimozione (default: 5 min)
- * - cleanup_interval_ms: Intervallo cleanup automatico (default: 1 min)
+ * Configuration:
+ * - max_flows: Maximum number of simultaneous flows (default: 1000)
+ * - flow_timeout_ms: Inactivity timeout before removal (default: 5 min)
+ * - cleanup_interval_ms: Automatic cleanup interval (default: 1 min)
  *
- * Utilizzo:
+ * Usage:
  * ```cpp
  * FlowTable table(1000, 300000, 60000);
  *
@@ -54,10 +54,10 @@ static const char* FLOW_TABLE_TAG = "FlowTable";
  *     // ...
  * }
  *
- * // Cleanup periodico (da task dedicato)
+ * // Periodic cleanup (from a dedicated task)
  * table.periodicCleanup();
  *
- * // Iterazione (es: per export/report)
+ * // Iteration (e.g.: for export/report)
  * table.forEach([](const FlowData& flow) {
  *     ESP_LOGI("", "Flow: %s", flow.key.toString().c_str());
  * });
@@ -66,9 +66,9 @@ static const char* FLOW_TABLE_TAG = "FlowTable";
 class FlowTable {
 private:
     /**
-     * Tipo hashtable con allocatore PSRAM
+     * Hashtable type with PSRAM allocator
      *
-     * std::unordered_map con:
+     * std::unordered_map with:
      * - Key: psram_string
      * - Value: FlowData
      * - Allocator: PSRAMAllocator per pair<const psram_string, FlowData>
@@ -82,67 +82,67 @@ private:
     >;
 
     /**
-     * Hashtable dei flussi (PSRAM)
+     * Hashtable of flows (PSRAM)
      */
     FlowMap flows_;
 
     /**
-     * Mutex per protezione accesso concorrente
+     * Mutex for concurrent access protection
      */
     mutable std::mutex mutex_;
 
-    // ==================== CONFIGURAZIONE ====================
+    // ==================== CONFIGURATION ====================
 
     /**
-     * Numero massimo di flussi simultanei
-     * Quando raggiunto, cleanup forzato per liberare spazio
+     * Maximum number of simultaneous flows
+     * When reached, forced cleanup to free space
      */
     uint32_t max_flows_;
 
     /**
-     * Intervallo cleanup automatico (millisecondi)
-     * Default: 60000 (1 minuto)
+     * Automatic cleanup interval (milliseconds)
+     * Default: 60000 (1 minute)
      */
     uint32_t cleanup_interval_ms_;
 
     /**
-     * Timeout flusso per inattività (millisecondi)
-     * Flussi inattivi > timeout vengono rimossi
-     * Default: 300000 (5 minuti)
+     * Flow timeout for inactivity (milliseconds)
+     * Inactive flows > timeout are removed
+     * Default: 300000 (5 minutes)
      */
     uint32_t flow_timeout_ms_;
 
     /**
-     * Timestamp ultimo cleanup (millisecondi da boot)
+     * Last cleanup timestamp (milliseconds since boot)
      */
     uint64_t last_cleanup_ms_;
 
-    // ==================== STATISTICHE ====================
+    // ==================== STATISTICS ====================
 
     /**
-     * Numero totale flussi creati (dall'avvio)
+     * Total number of created flows (since startup)
      */
     uint32_t total_flows_created_;
 
     /**
-     * Numero totale flussi scaduti/rimossi (dall'avvio)
+     * Total number of expired/removed flows (since startup)
      */
     uint32_t total_flows_expired_;
 
     /**
-     * Numero cleanup forzati per raggiungimento max_flows
+     * Number of forced cleanups for reaching max_flows
      */
     uint32_t forced_cleanups_;
 
 public:
-    // ==================== COSTRUTTORE ====================
+    // ==================== CONSTRUCTOR ====================
 
     /**
-     * @brief Costruttore FlowTable
+     * @brief FlowTable constructor
      *
-     * @param max_flows Numero massimo flussi (default: 1000)
-     * @param flow_timeout_ms Timeout inattività ms (default: 300000 = 5 min)
-     * @param cleanup_interval_ms Intervallo cleanup ms (default: 60000 = 1 min)
+     * @param max_flows Maximum number of flows (default: 1000)
+     * @param flow_timeout_ms Inactivity timeout ms (default: 300000 = 5 min)
+     * @param cleanup_interval_ms Cleanup interval ms (default: 60000 = 1 min)
      */
     FlowTable(uint32_t max_flows = 1000,
               uint32_t flow_timeout_ms = 300000,
@@ -161,39 +161,39 @@ public:
     }
 
     /**
-     * @brief Distruttore
+     * @brief Destructor
      *
-     * Cleanup di tutti i flussi (chiamate cleanup_func per protocol_specific_data)
+     * Cleanup of all flows (calls cleanup_func for protocol_specific_data)
      */
     ~FlowTable() {
         std::lock_guard<std::mutex> lock(mutex_);
-        flows_.clear();  // Chiama distruttori FlowData che fanno cleanup
+        flows_.clear();  // Calls FlowData destructors that perform cleanup
         ESP_LOGI(FLOW_TABLE_TAG, "FlowTable destroyed: total_created=%u, total_expired=%u",
                  total_flows_created_, total_flows_expired_);
     }
 
-    // Disabilita copia e move (singleton-like)
+    // Disable copy and move (singleton-like)
     FlowTable(const FlowTable&) = delete;
     FlowTable& operator=(const FlowTable&) = delete;
     FlowTable(FlowTable&&) = delete;
     FlowTable& operator=(FlowTable&&) = delete;
 
-    // ==================== ACCESSO FLUSSI ====================
+    // ==================== FLOW ACCESS ====================
 
     /**
-     * @brief Ottieni o crea flusso (thread-safe)
+     * @brief Get or create flow (thread-safe)
      *
-     * Se il flusso esiste, aggiorna last_packet_ms.
-     * Se non esiste, lo crea e inizializza.
-     * Se raggiunto max_flows, forza cleanup prima di creare.
+     * If the flow exists, updates last_packet_ms.
+     * If it does not exist, creates and initializes it.
+     * If max_flows is reached, forces cleanup before creating.
      *
-     * @param key Chiave del flusso
-     * @return Puntatore al flusso, nullptr se errore
+     * @param key Flow key
+     * @return Pointer to the flow, nullptr on error
      */
     FlowData* getOrCreateFlow(const FlowKey& key) {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        // Verifica chiave valida
+        // Check valid key
         if (!key.isValid()) {
             ESP_LOGW(FLOW_TABLE_TAG, "getOrCreateFlow: invalid key");
             return nullptr;
@@ -201,22 +201,22 @@ public:
 
         psram_string key_str = key.toString();
 
-        // Cerca flusso esistente
+        // Look for existing flow
         auto it = flows_.find(key_str);
         if (it != flows_.end()) {
-            // Aggiorna last_packet_ms
+            // Update last_packet_ms
             it->second.metrics.last_packet_ms = esp_timer_get_time() / 1000;
             return &it->second;
         }
 
-        // Verifica limite
+        // Check limit
         if (flows_.size() >= max_flows_) {
             ESP_LOGW(FLOW_TABLE_TAG, "Max flows reached (%u), forcing cleanup", max_flows_);
             cleanupExpiredFlows_NoLock(true);  // Force cleanup
             forced_cleanups_++;
         }
 
-        // Crea nuovo flusso
+        // Create new flow
         PSRAMAllocator<char> alloc;
         FlowData new_flow(alloc);
         new_flow.key = key;
@@ -226,7 +226,7 @@ public:
         new_flow.metrics.last_packet_ms = now_ms;
         new_flow.state = FlowState::INIT;
 
-        // Inserisci in mappa (move)
+        // Insert into map (move)
         auto insert_result = flows_.emplace(std::move(key_str), std::move(new_flow));
         total_flows_created_++;
 
@@ -242,21 +242,21 @@ public:
     }
 
     /**
-     * @brief Cleanup periodico dei flussi scaduti
+     * @brief Periodic cleanup of expired flows
      *
-     * Chiamare periodicamente da task dedicato o da main loop.
-     * Rimuove flussi:
-     * - Inattivi > flow_timeout_ms
-     * - In stato terminale (CLOSED, ERROR, TIMEOUT)
+     * Call periodically from a dedicated task or from the main loop.
+     * Removes flows:
+     * - Inactive > flow_timeout_ms
+     * - In terminal state (CLOSED, ERROR, TIMEOUT)
      *
      * Thread-safe.
      */
     void periodicCleanup() {
         uint64_t now_ms = esp_timer_get_time() / 1000;
 
-        // Verifica intervallo cleanup
+        // Check cleanup interval
         if ((now_ms - last_cleanup_ms_) < cleanup_interval_ms_) {
-            return;  // Troppo presto
+            return;  // Too soon
         }
 
         std::lock_guard<std::mutex> lock(mutex_);
@@ -265,15 +265,15 @@ public:
     }
 
     /**
-     * @brief Iterazione thread-safe sui flussi
+     * @brief Thread-safe iteration over flows
      *
-     * Chiama callback per ogni flusso nella tabella.
-     * Il lock è mantenuto durante tutta l'iterazione.
+     * Calls the callback for each flow in the table.
+     * The lock is held during the entire iteration.
      *
-     * ATTENZIONE: Non chiamare getOrCreateFlow() dal callback
-     * (deadlock per lock ricorsivo).
+     * WARNING: Do not call getOrCreateFlow() from the callback
+     * (deadlock due to recursive lock).
      *
-     * @param callback Funzione da chiamare per ogni flusso
+     * @param callback Function to call for each flow
      */
     template<typename Func>
     void forEach(Func callback) {
@@ -284,9 +284,9 @@ public:
     }
 
     /**
-     * @brief Iterazione thread-safe (const)
+     * @brief Thread-safe iteration (const)
      *
-     * @param callback Funzione da chiamare per ogni flusso (const ref)
+     * @param callback Function to call for each flow (const ref)
      */
     template<typename Func>
     void forEach(Func callback) const {
@@ -297,10 +297,10 @@ public:
     }
 
     /**
-     * @brief Cerca flusso per chiave (thread-safe)
+     * @brief Look up flow by key (thread-safe)
      *
-     * @param key Chiave del flusso
-     * @return Puntatore al flusso, nullptr se non trovato
+     * @param key Flow key
+     * @return Pointer to the flow, nullptr if not found
      */
     FlowData* findFlow(const FlowKey& key) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -310,10 +310,10 @@ public:
     }
 
     /**
-     * @brief Cerca flusso per chiave (const)
+     * @brief Look up flow by key (const)
      *
-     * @param key Chiave del flusso
-     * @return Puntatore const al flusso, nullptr se non trovato
+     * @param key Flow key
+     * @return Const pointer to the flow, nullptr if not found
      */
     const FlowData* findFlow(const FlowKey& key) const {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -323,10 +323,10 @@ public:
     }
 
     /**
-     * @brief Rimuovi flusso per chiave (thread-safe)
+     * @brief Remove flow by key (thread-safe)
      *
-     * @param key Chiave del flusso
-     * @return true se rimosso, false se non trovato
+     * @param key Flow key
+     * @return true if removed, false if not found
      */
     bool removeFlow(const FlowKey& key) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -339,12 +339,12 @@ public:
         return removed > 0;
     }
 
-    // ==================== STATISTICHE ====================
+    // ==================== STATISTICS ====================
 
     /**
-     * @brief Numero flussi attivi
+     * @brief Number of active flows
      *
-     * @return Numero flussi nella tabella
+     * @return Number of flows in the table
      */
     size_t size() const {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -352,9 +352,9 @@ public:
     }
 
     /**
-     * @brief Verifica se tabella vuota
+     * @brief Check whether the table is empty
      *
-     * @return true se vuota, false altrimenti
+     * @return true if empty, false otherwise
      */
     bool empty() const {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -362,30 +362,30 @@ public:
     }
 
     /**
-     * @brief Totale flussi creati (dall'avvio)
+     * @brief Total created flows (since startup)
      *
-     * @return Numero totale flussi creati
+     * @return Total number of created flows
      */
     uint32_t getTotalCreated() const { return total_flows_created_; }
 
     /**
-     * @brief Totale flussi scaduti/rimossi (dall'avvio)
+     * @brief Total expired/removed flows (since startup)
      *
-     * @return Numero totale flussi rimossi
+     * @return Total number of removed flows
      */
     uint32_t getTotalExpired() const { return total_flows_expired_; }
 
     /**
-     * @brief Numero cleanup forzati
+     * @brief Number of forced cleanups
      *
-     * @return Numero volte che cleanup è stato forzato per max_flows
+     * @return Number of times cleanup was forced for max_flows
      */
     uint32_t getForcedCleanups() const { return forced_cleanups_; }
 
     /**
-     * @brief Utilizzo percentuale tabella
+     * @brief Percentage usage of the table
      *
-     * @return Percentuale utilizzo [0.0-1.0]
+     * @return Usage percentage [0.0-1.0]
      */
     float getUsagePercent() const {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -393,12 +393,12 @@ public:
         return static_cast<float>(flows_.size()) / static_cast<float>(max_flows_);
     }
 
-    // ==================== CONFIGURAZIONE RUNTIME ====================
+    // ==================== RUNTIME CONFIGURATION ====================
 
     /**
-     * @brief Imposta numero massimo flussi
+     * @brief Set maximum number of flows
      *
-     * @param max Nuovo massimo
+     * @param max New maximum
      */
     void setMaxFlows(uint32_t max) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -407,9 +407,9 @@ public:
     }
 
     /**
-     * @brief Imposta timeout flusso
+     * @brief Set flow timeout
      *
-     * @param timeout_ms Nuovo timeout in millisecondi
+     * @param timeout_ms New timeout in milliseconds
      */
     void setFlowTimeout(uint32_t timeout_ms) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -418,9 +418,9 @@ public:
     }
 
     /**
-     * @brief Imposta intervallo cleanup
+     * @brief Set cleanup interval
      *
-     * @param interval_ms Nuovo intervallo in millisecondi
+     * @param interval_ms New interval in milliseconds
      */
     void setCleanupInterval(uint32_t interval_ms) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -429,11 +429,11 @@ public:
     }
 
     /**
-     * @brief Ottieni configurazione corrente
+     * @brief Get current configuration
      *
-     * @param max_flows Output: numero massimo flussi
-     * @param timeout_ms Output: timeout flusso
-     * @param cleanup_interval_ms Output: intervallo cleanup
+     * @param max_flows Output: maximum number of flows
+     * @param timeout_ms Output: flow timeout
+     * @param cleanup_interval_ms Output: cleanup interval
      */
     void getConfig(uint32_t& max_flows, uint32_t& timeout_ms, uint32_t& cleanup_interval_ms) const {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -443,7 +443,7 @@ public:
     }
 
     /**
-     * @brief Clear completo della tabella (per testing/reset)
+     * @brief Full clear of the table (for testing/reset)
      */
     void clear() {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -455,16 +455,16 @@ public:
 
 private:
     /**
-     * @brief Cleanup flussi scaduti (NO LOCK - uso interno)
+     * @brief Cleanup expired flows (NO LOCK - internal use)
      *
-     * Rimuove flussi:
-     * 1. Stati terminali (CLOSED, ERROR, TIMEOUT)
-     * 2. Inattivi > flow_timeout_ms
-     * 3. Se force=true, rimuove anche flussi > timeout/2 per liberare spazio
+     * Removes flows:
+     * 1. Terminal states (CLOSED, ERROR, TIMEOUT)
+     * 2. Inactive > flow_timeout_ms
+     * 3. If force=true, also removes flows > timeout/2 to free space
      *
-     * IMPORTANTE: Il lock DEVE essere già acquisito prima di chiamare.
+     * IMPORTANT: The lock MUST already be acquired before calling.
      *
-     * @param force Se true, cleanup aggressivo per liberare spazio
+     * @param force If true, aggressive cleanup to free space
      */
     void cleanupExpiredFlows_NoLock(bool force) {
         uint64_t now_ms = esp_timer_get_time() / 1000;
@@ -475,23 +475,23 @@ private:
             bool should_remove = false;
             FlowData& flow = it->second;
 
-            // Criterio 1: Stato terminale
+            // Criterion 1: Terminal state
             if (flow.isTerminal()) {
                 should_remove = true;
             }
 
-            // Criterio 2: Timeout normale
+            // Criterion 2: Normal timeout
             else if (flow.isExpired(flow_timeout_ms_)) {
                 should_remove = true;
-                // Aggiorna stato prima rimozione
+                // Update state before removal
                 if (flow.state != FlowState::TIMEOUT) {
                     flow.state = FlowState::TIMEOUT;
                 }
             }
 
-            // Criterio 3: Cleanup forzato (se vicini a max_flows)
+            // Criterion 3: Forced cleanup (if close to max_flows)
             else if (force && flows_.size() > max_flows_ * 0.9) {
-                // Rimuovi flussi più vecchi (timeout ridotto a metà)
+                // Remove oldest flows (timeout reduced to half)
                 if (flow.isExpired(flow_timeout_ms_ / 2)) {
                     should_remove = true;
                 }

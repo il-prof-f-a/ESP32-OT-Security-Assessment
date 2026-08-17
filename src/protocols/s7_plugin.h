@@ -172,13 +172,13 @@ private:
     static bool splitTarget(const std::string& t, std::string& ip, uint16_t& port);
     bool doHandshake(const std::string& ip, uint16_t port, uint16_t& negotiated_pdu, std::string& note);
 
-    // --- Enhanced Discovery Methods (Fase 1) ---
+    // --- Enhanced Discovery Methods (Phase 1) ---
     bool sendS7SetupComm(int sock, S7DeviceInfo& dev_info);
     bool readSZL(int sock, uint16_t szl_id, uint16_t szl_index, S7DeviceInfo& dev_info);
     bool parseSZLResponse(const uint8_t* data, size_t len, uint16_t szl_id, S7DeviceInfo& dev_info);
     bool buildDeviceInfoJSON(const S7DeviceInfo& dev_info, const char* target_ip, uint16_t port, psram_string& out_json);
 
-    // --- Vulnerability Check Methods (Fase 2) ---
+    // --- Vulnerability Check Methods (Phase 2) ---
     bool checkAuthentication(int sock, psram_string& finding);
     bool checkProtectionLevel(int sock, S7DeviceInfo& dev_info);
     bool testAnonymousStop(int sock, psram_string& finding);

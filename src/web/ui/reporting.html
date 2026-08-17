@@ -305,7 +305,7 @@
 <div class="card">
 <div class="card-header-row">
 <h2 style="margin:0;">Live Stream by Reporting Channel</h2>
-<button id="report-stream-toggle" class="toggle-btn" onclick="toggleReportStreamPanel()">Comprimi</button>
+<button id="report-stream-toggle" class="toggle-btn" onclick="toggleReportStreamPanel()">Collapse</button>
 </div>
 <div id="report-stream-body">
 <div class="stream-grid">
@@ -314,32 +314,32 @@
         <select id="report-stream-channels" multiple style="min-height:120px;"></select>
     </div>
     <div class="control-group">
-        <label>Preview filtri regex</label>
+        <label>Regex filter preview</label>
         <div>
             <input type="checkbox" id="report-stream-preview-filters" checked>
-            Applica include/exclude definiti nella sezione canali
+            Apply include/exclude defined in the channels section
         </div>
         <div style="margin-top:.4rem;">
             <input type="checkbox" id="report-stream-local-enable" checked>
-            Abilita regex locale solo per questa anteprima
+            Enable local regex only for this preview
         </div>
         <div style="margin-top:.45rem;">
-            <input type="text" id="report-stream-local-include" placeholder="Regex include locale (es. intrusion|threat)">
+            <input type="text" id="report-stream-local-include" placeholder="Local include regex (e.g. intrusion|threat)">
         </div>
         <div style="margin-top:.35rem;">
-            <input type="text" id="report-stream-local-exclude" placeholder="Regex exclude locale (es. debug|heartbeat)">
+            <input type="text" id="report-stream-local-exclude" placeholder="Local exclude regex (e.g. debug|heartbeat)">
         </div>
         <div style="margin-top:.35rem;">
             <input type="checkbox" id="report-stream-local-case">
-            Case sensitive (regex locale)
+            Case sensitive (local regex)
         </div>
         <div class="stream-stats" id="report-stream-stats">Match: 0 | Filtered: 0 | Regex error: 0</div>
     </div>
 </div>
 <div class="stream-actions">
-    <button id="report-stream-start" class="btn" onclick="startReportStream()">Avvia Stream</button>
+    <button id="report-stream-start" class="btn" onclick="startReportStream()">Start Stream</button>
     <button id="report-stream-stop" class="btn" onclick="stopReportStream()" disabled>Stop Stream</button>
-    <button class="btn" onclick="clearReportStream()">Pulisci</button>
+    <button class="btn" onclick="clearReportStream()">Clear</button>
 </div>
 <div id="report-stream-output" class="stream-output"></div>
 </div>
@@ -347,18 +347,18 @@
 <div class="card">
 <h2>Queue Status</h2>
 <div>
-    <button class="btn" onclick="loadQueueStats()">Aggiorna</button>
+    <button class="btn" onclick="loadQueueStats()">Refresh</button>
     <button class="btn" onclick="flush()">Flush Queue</button>
 </div>
 <div id="queueStats" class="queue-grid">
-    <div class="queue-card"><span class="label">Queued</span><span class="value" id="queue-queued">0</span><span class="hint">eventi in attesa</span></div>
-    <div class="queue-card"><span class="label">Capacity</span><span class="value" id="queue-capacity">0</span><span class="hint">slot disponibili</span></div>
-    <div class="queue-card"><span class="label">Usage %</span><span class="value" id="queue-usage">0%</span><span class="hint">rispetto capienza</span></div>
-    <div class="queue-card"><span class="label">Payload</span><span class="value" id="queue-payload">0 KB</span><span class="hint">dati stimati in coda</span></div>
-    <div class="queue-card"><span class="label">Sync Pending</span><span class="value" id="queue-dirty">--</span><span class="hint">eventi da scrivere</span></div>
+    <div class="queue-card"><span class="label">Queued</span><span class="value" id="queue-queued">0</span><span class="hint">events waiting</span></div>
+    <div class="queue-card"><span class="label">Capacity</span><span class="value" id="queue-capacity">0</span><span class="hint">available slots</span></div>
+    <div class="queue-card"><span class="label">Usage %</span><span class="value" id="queue-usage">0%</span><span class="hint">of capacity</span></div>
+    <div class="queue-card"><span class="label">Payload</span><span class="value" id="queue-payload">0 KB</span><span class="hint">estimated data queued</span></div>
+    <div class="queue-card"><span class="label">Sync Pending</span><span class="value" id="queue-dirty">--</span><span class="hint">events to write</span></div>
     <div class="queue-card"><span class="label">Flush Interval</span><span class="value" id="queue-flush">0s</span><span class="hint">worker reporting</span></div>
 </div>
-<div class="queue-status-line" id="queue-last-sync">Ultima sincronizzazione: n/d</div>
+<div class="queue-status-line" id="queue-last-sync">Last sync: N/A</div>
 <div class="queue-status-line" id="queue-backup-path"></div>
 </div>
 <div class="card">
@@ -440,10 +440,10 @@ function applyReportStreamCollapsedState(collapsed, persist){
     if (!body || !btn) return;
     if (collapsed) {
         body.classList.add('collapsed');
-        btn.textContent = 'Espandi';
+        btn.textContent = 'Expand';
     } else {
         body.classList.remove('collapsed');
-        btn.textContent = 'Comprimi';
+        btn.textContent = 'Collapse';
     }
     if (persist) {
         try { localStorage.setItem('report_stream_collapsed', collapsed ? '1' : '0'); } catch (_) {}
@@ -726,19 +726,19 @@ function startReportStream(){
     if (reportStreamSource) stopReportStream();
     const sid = window.__sidToken;
     if (!sid) {
-        status('Sessione non disponibile: manca sid', true);
+        status('Session unavailable: missing sid', true);
         return;
     }
 
     const selected = getSelectedReportStreamChannels();
     if (!selected.length) {
-        status('Seleziona almeno un channel', true);
+        status('Select at least one channel', true);
         return;
     }
     const channels = resolveReportStreamEvalChannels();
     const allStreamSelected = selected.includes(REPORT_STREAM_ALL_KEY);
     if (!channels.length) {
-        status('Nessun channel disponibile per la valutazione', true);
+        status('No channel available for evaluation', true);
         return;
     }
 
@@ -750,7 +750,7 @@ function startReportStream(){
     }
     reportStreamSource = new EventSource(url);
 
-    reportStreamSource.addEventListener('ready', () => appendReportStreamSystemLine('[SSE] stream avviato'));
+    reportStreamSource.addEventListener('ready', () => appendReportStreamSystemLine('[SSE] stream started'));
     reportStreamSource.addEventListener('log', ev => {
         const line = ev.data || '';
         const routedChannels = evaluateRoutingChannels(line, channels);
@@ -759,7 +759,7 @@ function startReportStream(){
         appendReportStreamEntry(line, routedChannels, localPreview);
     });
     reportStreamSource.onerror = () => {
-        appendReportStreamSystemLine('[SSE] stream chiuso');
+        appendReportStreamSystemLine('[SSE] stream closed');
         stopReportStream();
     };
 
@@ -767,7 +767,7 @@ function startReportStream(){
     const stopBtn = document.getElementById('report-stream-stop');
     if (startBtn) startBtn.disabled = true;
     if (stopBtn) stopBtn.disabled = false;
-    status('Stream report avviato', false);
+    status('Report stream started', false);
 }
 
 function stopReportStream(){
@@ -821,16 +821,16 @@ function renderQueueStats(data){
     if(syncLine){
         if(lastSyncMs>0){
             const seconds=(lastSyncMs/1000).toFixed(1);
-            syncLine.textContent='Ultima sincronizzazione: '+seconds+'s, pending '+pending;
+            syncLine.textContent='Last sync: '+seconds+'s, pending '+pending;
         }else{
-            syncLine.textContent='Ultima sincronizzazione: n/d';
+            syncLine.textContent='Last sync: N/A';
         }
     }
     if(backupLine){
         if(data.backup_file){
             backupLine.textContent='Backup file: '+data.backup_file;
         }else{
-            backupLine.textContent='Backup file non configurato';
+            backupLine.textContent='Backup file not configured';
         }
     }
 }
@@ -887,7 +887,7 @@ const div=document.createElement('div');
 div.className='channel-item';
 
 // Configuration status indicator
-const configStatus = hasEndpoint ? '<span style="color:green;font-size:0.8em;">✓ Configurato</span>' : '<span style="color:red;font-size:0.8em;">✗ Non configurato</span>';
+const configStatus = hasEndpoint ? '<span style="color:green;font-size:0.8em;">✓ Configured</span>' : '<span style="color:red;font-size:0.8em;">✗ Not configured</span>';
 
 // Determine download button for file reporter
 let downloadButton = '';
@@ -957,7 +957,7 @@ div.innerHTML=`
     </div>
 </div>
 <small style="color:#666;margin-top:0.5rem;display:block;">
-    ${hasEndpoint ? 'Endpoint configurato - pronto per l\'uso' : 'Configurare endpoint nella sezione "Reporting Endpoints" per abilitare'}
+    ${hasEndpoint ? 'Endpoint configured - ready to use' : 'Configure the endpoint in the "Reporting Endpoints" section to enable'}
 </small>
 `;
 container.appendChild(div);

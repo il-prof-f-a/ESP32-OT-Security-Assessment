@@ -1,10 +1,10 @@
 /**
  * @file flow_intensity.h
- * @brief Classificazione intensità del traffico di rete
+ * @brief Network traffic intensity classification
  *
- * Sistema di classificazione dell'intensità di un flusso basato su
- * packets per second (pps). Utilizzato per identificare traffico
- * normale, intenso o flooding.
+ * System for classifying the intensity of a flow based on
+ * packets per second (pps). Used to identify traffic
+ * that is normal, intense, or flooding.
  *
  * @date 2025-10-21
  * @version 1.0
@@ -16,81 +16,81 @@
 #include <cstdint>
 
 /**
- * @brief Livelli di intensità del traffico
+ * @brief Traffic intensity levels
  *
- * Classificazione basata su packets per second (pps).
- * Le soglie sono configurabili e possono variare per protocollo,
- * ma questi sono i valori di default tipici per reti industriali.
+ * Classification based on packets per second (pps).
+ * The thresholds are configurable and can vary by protocol,
+ * but these are the typical default values for industrial networks.
  */
 enum class FlowIntensity : uint8_t {
     /**
-     * Nessun traffico o traffico sporadico
+     * No traffic or sporadic traffic
      * < 1 pps
      *
-     * Tipico per:
-     * - Connessioni inattive
-     * - Polling molto lento
+     * Typical for:
+     * - Inactive connections
+     * - Very slow polling
      */
     IDLE = 0,
 
     /**
-     * Traffico basso/normale
+     * Low/normal traffic
      * 1-10 pps
      *
-     * Tipico per:
-     * - Polling SCADA standard (1-5 sec)
-     * - Letture periodiche normali
+     * Typical for:
+     * - Standard SCADA polling (1-5 sec)
+     * - Normal periodic reads
      */
     LOW = 1,
 
     /**
-     * Traffico medio
+     * Medium traffic
      * 10-50 pps
      *
-     * Tipico per:
-     * - Polling veloce (< 1 sec)
-     * - Multiple operazioni per secondo
-     * - HMI attivo
+     * Typical for:
+     * - Fast polling (< 1 sec)
+     * - Multiple operations per second
+     * - Active HMI
      */
     MEDIUM = 2,
 
     /**
-     * Traffico alto
+     * High traffic
      * 50-200 pps
      *
-     * Tipico per:
+     * Typical for:
      * - Real-time control loops
      * - Fast polling multiple devices
-     * - Burst di operazioni
+     * - Burst of operations
      */
     HIGH = 3,
 
     /**
-     * Traffico molto alto
+     * Very high traffic
      * 200-1000 pps
      *
-     * Tipico per:
+     * Typical for:
      * - Motion control
      * - Multiple concurrent clients
-     * - Potenziale scanning intensivo
+     * - Potential intensive scanning
      */
     VERY_HIGH = 4,
 
     /**
-     * Flooding: traffico anomalo eccessivo
+     * Flooding: excessive anomalous traffic
      * > 1000 pps
      *
-     * Indica:
-     * - Possibile DoS attack
-     * - Malfunzionamento client
-     * - Loop di rete
-     * - Scanning aggressivo
+     * Indicates:
+     * - Possible DoS attack
+     * - Client malfunction
+     * - Network loop
+     * - Aggressive scanning
      */
     FLOODING = 5
 };
 
 /**
- * @brief Soglie default per classificazione intensità (pps)
+ * @brief Default thresholds for intensity classification (pps)
  */
 struct FlowIntensityThresholds {
     float idle_max;         ///< Max pps per IDLE (default: 1.0)
@@ -101,7 +101,7 @@ struct FlowIntensityThresholds {
     // > very_high_max = FLOODING
 
     /**
-     * Costruttore con valori default
+     * Constructor with default values
      */
     FlowIntensityThresholds()
         : idle_max(1.0f),
@@ -112,11 +112,11 @@ struct FlowIntensityThresholds {
 };
 
 /**
- * @brief Calcola intensità da packets per second con soglie custom
+ * @brief Calculate intensity from packets per second with custom thresholds
  *
- * @param pps Velocità del flusso in pps
- * @param thresholds Soglie personalizzate
- * @return FlowIntensity classificato
+ * @param pps Flow rate in pps
+ * @param thresholds Custom thresholds
+ * @return Classified FlowIntensity
  */
 inline FlowIntensity calculateIntensity(float pps, const FlowIntensityThresholds& thresholds) {
     if (pps < thresholds.idle_max) {
@@ -135,12 +135,12 @@ inline FlowIntensity calculateIntensity(float pps, const FlowIntensityThresholds
 }
 
 /**
- * @brief Calcola intensità da packets per second
+ * @brief Calculate intensity from packets per second
  *
- * Usa soglie default per classificazione.
+ * Uses default thresholds for classification.
  *
- * @param packets_per_second Velocità del flusso in pps
- * @return FlowIntensity classificato
+ * @param packets_per_second Flow rate in pps
+ * @return Classified FlowIntensity
  */
 inline FlowIntensity calculateIntensity(float packets_per_second) {
     FlowIntensityThresholds thresholds;
@@ -148,10 +148,10 @@ inline FlowIntensity calculateIntensity(float packets_per_second) {
 }
 
 /**
- * @brief Converte FlowIntensity in stringa
+ * @brief Convert FlowIntensity to string
  *
- * @param intensity Intensità da convertire
- * @return Nome intensità come stringa
+ * @param intensity Intensity to convert
+ * @return Intensity name as a string
  */
 inline const char* flowIntensityToString(FlowIntensity intensity) {
     switch (intensity) {
@@ -166,10 +166,10 @@ inline const char* flowIntensityToString(FlowIntensity intensity) {
 }
 
 /**
- * @brief Ottieni range pps per intensità
+ * @brief Get the pps range for an intensity
  *
- * @param intensity Intensità
- * @return Stringa descrittiva del range (es: "1-10 pps")
+ * @param intensity Intensity
+ * @return Descriptive string of the range (e.g.: "1-10 pps")
  */
 inline const char* flowIntensityRange(FlowIntensity intensity) {
     switch (intensity) {
@@ -184,12 +184,12 @@ inline const char* flowIntensityRange(FlowIntensity intensity) {
 }
 
 /**
- * @brief Verifica se intensità indica possibile anomalia
+ * @brief Check whether the intensity indicates a possible anomaly
  *
- * VERY_HIGH e FLOODING sono considerati anomali per reti OT tipiche.
+ * VERY_HIGH and FLOODING are considered anomalous for typical OT networks.
  *
- * @param intensity Intensità da verificare
- * @return true se anomalo, false se normale
+ * @param intensity Intensity to check
+ * @return true if anomalous, false if normal
  */
 inline bool isFlowIntensityAnomalous(FlowIntensity intensity) {
     return intensity == FlowIntensity::VERY_HIGH ||
@@ -197,43 +197,43 @@ inline bool isFlowIntensityAnomalous(FlowIntensity intensity) {
 }
 
 /**
- * @brief Verifica se intensità indica flooding
+ * @brief Check whether the intensity indicates flooding
  *
- * @param intensity Intensità da verificare
- * @return true se flooding, false altrimenti
+ * @param intensity Intensity to check
+ * @return true if flooding, false otherwise
  */
 inline bool isFlowIntensityFlooding(FlowIntensity intensity) {
     return intensity == FlowIntensity::FLOODING;
 }
 
 /**
- * @brief Ottieni colore suggerito per UI (CSS class)
+ * @brief Get the suggested color for UI (CSS class)
  *
- * @param intensity Intensità
- * @return Nome classe CSS suggerita
+ * @param intensity Intensity
+ * @return Suggested CSS class name
  */
 inline const char* flowIntensityColorClass(FlowIntensity intensity) {
     switch (intensity) {
-        case FlowIntensity::IDLE:       return "intensity-idle";       // grigio
-        case FlowIntensity::LOW:        return "intensity-low";        // verde
-        case FlowIntensity::MEDIUM:     return "intensity-medium";     // giallo
-        case FlowIntensity::HIGH:       return "intensity-high";       // arancione
-        case FlowIntensity::VERY_HIGH:  return "intensity-very-high";  // rosso chiaro
-        case FlowIntensity::FLOODING:   return "intensity-flooding";   // rosso scuro
+        case FlowIntensity::IDLE:       return "intensity-idle";       // gray
+        case FlowIntensity::LOW:        return "intensity-low";        // green
+        case FlowIntensity::MEDIUM:     return "intensity-medium";     // yellow
+        case FlowIntensity::HIGH:       return "intensity-high";       // orange
+        case FlowIntensity::VERY_HIGH:  return "intensity-very-high";  // light red
+        case FlowIntensity::FLOODING:   return "intensity-flooding";   // dark red
         default:                        return "intensity-unknown";
     }
 }
 
 /**
- * @brief Soglie specifiche per protocolli industriali
+ * @brief Protocol-specific thresholds for industrial protocols
  *
- * Ogni protocollo può avere caratteristiche di traffico diverse.
- * Queste sono soglie suggerite basate su best practices OT.
+ * Each protocol can have different traffic characteristics.
+ * These are suggested thresholds based on OT best practices.
  */
 namespace ProtocolIntensityThresholds {
     /**
      * Modbus TCP
-     * Tipicamente polling lento (1-5 sec), raro > 10 pps
+     * Typically slow polling (1-5 sec), rarely > 10 pps
      */
     inline FlowIntensityThresholds modbusDefaults() {
         FlowIntensityThresholds t;
@@ -247,7 +247,7 @@ namespace ProtocolIntensityThresholds {
 
     /**
      * S7 Communication
-     * Polling più veloce possibile, ma < 100 pps tipico
+     * Faster polling possible, but < 100 pps typical
      */
     inline FlowIntensityThresholds s7Defaults() {
         FlowIntensityThresholds t;
@@ -261,7 +261,7 @@ namespace ProtocolIntensityThresholds {
 
     /**
      * PROFINET DCP
-     * Discovery burst-based, normale < 10 pps, > 50 anomalo
+     * Discovery burst-based, normal < 10 pps, > 50 anomalous
      */
     inline FlowIntensityThresholds profinetDefaults() {
         FlowIntensityThresholds t;
@@ -275,7 +275,7 @@ namespace ProtocolIntensityThresholds {
 
     /**
      * EtherNet/IP
-     * Può avere I/O real-time veloce, > 200 pps possibile
+     * Can have fast real-time I/O, > 200 pps possible
      */
     inline FlowIntensityThresholds ethernetipDefaults() {
         FlowIntensityThresholds t;
@@ -289,7 +289,7 @@ namespace ProtocolIntensityThresholds {
 
     /**
      * OPC UA
-     * Subscriptions possono generare traffico sostenuto
+     * Subscriptions can generate sustained traffic
      */
     inline FlowIntensityThresholds opcuaDefaults() {
         FlowIntensityThresholds t;

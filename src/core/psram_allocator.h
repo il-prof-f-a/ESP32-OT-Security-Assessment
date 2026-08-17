@@ -22,8 +22,8 @@ extern "C" {
 // Emergency micro-pool definition placed before allocator to avoid incomplete type issues
 namespace PSRAMUtils {
     struct EmergencyPool {
-        static constexpr size_t kCapacity = 4096;    // 4 KB totali
-        static constexpr size_t kMaxAlloc = 256;     // alloc max consentita
+        static constexpr size_t kCapacity = 4096;    // 4 KB total
+        static constexpr size_t kMaxAlloc = 256;     // max allocation allowed
         static inline uint8_t  buf[kCapacity];
         static inline size_t   off = 0;
         static inline portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
@@ -84,7 +84,7 @@ public:
 void deallocate(T* ptr, size_type n) noexcept {
         if (!ptr) return;
 
-        // Se il puntatore proviene dal micro-pool d'emergenza, non liberare
+        // If the pointer comes from the emergency micro-pool, do not free it
         if (PSRAMUtils::EmergencyPool::owns(ptr)) return;
 
         // Free memory using ESP-IDF heap capabilities (handles PSRAM/internal regions)
@@ -343,7 +343,7 @@ namespace PSRAMUtils {
         logMemoryStatus("After Emergency Cleanup");
     }
 
-    // Micro-pool d'emergenza per piccole allocazioni dichiarato sopra
+    // Emergency micro-pool for small allocations declared above
 
     // Force allocation in PSRAM (for critical systems with low DRAM)
     template<typename T>

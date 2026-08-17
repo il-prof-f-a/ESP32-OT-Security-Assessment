@@ -66,7 +66,7 @@ void SandboxAuditor::logRateLimit(const char* actor, const char* op) {
     // }
 }
 
-// ===== FASE 2: SYSTEM AUDIT METHODS =====
+// ===== PHASE 2: SYSTEM AUDIT METHODS =====
 
 void SandboxAuditor::logSystemReboot(const char* reason, const char* user, const char* client_ip) {
     if (rep_) {

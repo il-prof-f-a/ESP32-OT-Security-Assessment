@@ -3,7 +3,7 @@
 #include "esp_netif.h"
 
 #ifdef __cplusplus
-// Forward declaration per C++
+// Forward declaration for C++
 class WebServer;
 
 struct WebTaskArgs {
@@ -17,7 +17,7 @@ struct WebTaskArgs {
 extern "C" {
 #endif
 
-// Dichiarazione della funzione task (sempre in C linkage)
+// Declaration of the task function (always in C linkage)
 void web_server_task(void *pv);
 
 #ifdef __cplusplus

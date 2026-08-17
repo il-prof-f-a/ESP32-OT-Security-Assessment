@@ -60,7 +60,7 @@ public:
     Stats getStats() const;
 
 private:
-    // outputTaskThunk e outputTask rimossi - modalità sincrona
+    // outputTaskThunk and outputTask removed - synchronous mode
 
     bool checkRateLimit();
 
@@ -68,7 +68,7 @@ private:
     Config config_;
     mutable std::mutex config_mutex_;
 
-    // Synchronous output - nessuna coda né task asincroni
+    // Synchronous output - no queue or async tasks
     std::atomic<bool> shutdown_requested_{false};
 
     // Statistics and rate limiting

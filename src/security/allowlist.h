@@ -5,7 +5,7 @@
 #include <cctype>
 
 struct AllowConfig {
-    // puntatori ai vettori VIVI del tuo ConfigurationManager
+    // pointers to the LIVE vectors of your ConfigurationManager
     const std::vector<std::string>* allowed_ips = nullptr;
     const std::vector<std::string>* allowed_macs = nullptr;
     const std::vector<std::string>* whitelist_ips = nullptr;   // ip_whitelist.ip
@@ -22,7 +22,7 @@ inline std::string upper(const std::string& s) {
 
 inline std::string canon_mac(std::string mac) {
     mac = upper(mac);
-    for (char& c : mac) if (c == '-') c = ':'; // normalizza separatore
+    for (char& c : mac) if (c == '-') c = ':'; // normalize separator
     return mac;
 }
 
@@ -75,6 +75,6 @@ inline bool is_sender_allowed(const std::string& src_ip,
         src_ip.rfind("224.",0)==0 || src_ip.rfind("239.",0)==0
     );
 
-    if (!has_ip) return mac_ok;       // solo MAC per trame L2
-    return mac_ok || ip_ok;           // IP presente: basta uno dei due
+    if (!has_ip) return mac_ok;       // MAC only for L2 frames
+    return mac_ok || ip_ok;           // IP present: either one is enough
 }

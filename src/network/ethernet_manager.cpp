@@ -21,7 +21,7 @@ extern "C" {
 }
 #include "eth_l2_adapter.h"
 #include "../core/psram_json_parser.h"
-#include "core/network_engine.h"  // per avere il tipo completo
+#include "core/network_engine.h"  // to have the complete type
 
 static const char* TAG = "EthernetManager";
 
@@ -557,7 +557,7 @@ bool EthernetManager::setupMAC_PHY(esp_eth_mac_t** out_mac, esp_eth_phy_t** out_
 #endif
 
     if (!*out_mac || !*out_phy) {
-        LOG_ERROR("EthernetManager", "creazione MAC/PHY FAILED");
+        LOG_ERROR("EthernetManager", "MAC/PHY creation FAILED");
         if (*out_mac) (*out_mac)->del(*out_mac);
         if (*out_phy) (*out_phy)->del(*out_phy);
 #if (ETH_PHY_TYPE == 5500)
@@ -708,10 +708,10 @@ esp_err_t EthernetManager::input_trampoline(esp_eth_handle_t h, uint8_t* buffer,
     // CRITICAL: We must let the packet continue through the normal ESP-IDF stack
     // This ensures the packet still gets processed by lwIP and other components
     if (netif) {
-        LOG_INFO("PacketCapture", "REINOLTRO PACCHETTO ALLO STACK IP ATTIVATO!!!! Testare PING");
+        LOG_INFO("PacketCapture", "FORWARDING PACKET TO IP STACK ENABLED!!!! Test PING");
         return esp_netif_receive(netif, buffer, length, nullptr);
     } else {
-        LOG_INFO("PacketCapture", "REINOLTRO PACCHETTO ALLO STACK IP NON POSSIBILE");
+        LOG_INFO("PacketCapture", "FORWARDING PACKET TO IP STACK NOT POSSIBLE");
         // If no netif provided, just indicate we've sniffed the packet
         return ESP_ERR_NOT_SUPPORTED;
     }

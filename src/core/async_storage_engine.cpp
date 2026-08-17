@@ -219,7 +219,7 @@ namespace {
     }
 
     inline void trace_operation(const char* stage, Operation* op) {
-        return; //disattiva il traceoperation su file
+        return; //disables the traceoperation on file
         if (!op || !stage) {
             return;
         }
@@ -344,7 +344,7 @@ bool Engine::initialize() {
         return false;
     }
 
-    // Pin su core 0 (ESP32 dual core non-SMP)
+    // Pin to core 0 (ESP32 dual core non-SMP)
 #if (portNUM_PROCESSORS > 1)
     worker_task_handle_ = xTaskCreateStaticPinnedToCore(
         workerTaskFunction,

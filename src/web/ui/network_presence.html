@@ -40,7 +40,7 @@ input,select,textarea{width:100%; padding:.45rem .6rem; border:1px solid #ccc; b
 .btn.ghost{background:transparent; color:#333; border:1px solid #bbb}
 .btn.danger{background:#c33}
 .btn.danger:hover{background:#d44}
-/* Varianti utili già usate nello script */
+/* Useful variants already used in the script */
 .btn.primary{background:#06a}
 .btn.primary:hover{background:#07b}
 .btn.success{background:#268c2f}
@@ -120,7 +120,7 @@ th{background:#f8f9fa; color:#333}
   color: #333;
   border: 1px solid #bbb;
 }
-/* Accessibilità: focus visibile con tastiera */
+/* Accessibility: focus visible with keyboard */
 .card h2 + .row a:focus-visible,
 .card h2 + .row button:focus-visible,
 .card h2 + .row .clickable:focus-visible {
@@ -211,50 +211,50 @@ th{background:#f8f9fa; color:#333}
     <!-- Configuration Panel -->
     <div class="grid">
       <div class="card">
-        <h2>⚙️ Configurazione Learning</h2>
+        <h2>⚙️ Learning Configuration</h2>
         <div class="flex" style="margin-bottom:12px">
           <div class="switch">
             <input type="checkbox" id="enabled">
-            <label for="enabled">Sistema Abilitato</label>
+            <label for="enabled">System Enabled</label>
           </div>
           <div class="switch">
             <input type="checkbox" id="learning_mode">
-            <label for="learning_mode">Modalità Learning</label>
+            <label for="learning_mode">Learning Mode</label>
           </div>
         </div>
         
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0">
           <div>
-            <label>Delay Attivazione (min)</label>
+            <label>Activation Delay (min)</label>
             <input type="number" id="activation_delay" min="1" max="60">
           </div>
           <div>
-            <label>Retention (giorni)</label>
+            <label>Retention (days)</label>
             <input type="number" id="retention_days" min="1" max="365">
           </div>
           <div>
-            <label>Soglia Trust (0-1)</label>
+            <label>Trust Threshold (0-1)</label>
             <input type="number" id="trust_threshold" min="0" max="1" step="0.1">
           </div>
           <div>
-            <label>Periodo Osservazione (ore)</label>
+            <label>Observation Period (hours)</label>
             <input type="number" id="observation_hours" min="1" max="168">
           </div>
         </div>
         
         <div class="row">
-          <button class="btn primary" onclick="saveConfig()">💾 Salva Configurazione</button>
-          <button class="btn danger" onclick="clearAllLearning()" title="Elimina tutti i device appresi">🗑️ Reset Learning</button>
+          <button class="btn primary" onclick="saveConfig()">💾 Save Configuration</button>
+          <button class="btn danger" onclick="clearAllLearning()" title="Delete all learned devices">🗑️ Reset Learning</button>
         </div>
       </div>
 
       <!-- Statistics -->
       <div class="card">
-        <h2>📊 Statistiche Globali</h2>
+        <h2>📊 Global Statistics</h2>
         <div id="globalStats" class="stats">
           <div class="stat">
             <div class="stat-number" id="totalDevices">-</div>
-            <div class="stat-label">Device Totali</div>
+            <div class="stat-label">Total Devices</div>
           </div>
           <div class="stat">
             <div class="stat-number" id="trustedDevices">-</div>
@@ -262,17 +262,17 @@ th{background:#f8f9fa; color:#333}
           </div>
           <div class="stat">
             <div class="stat-number" id="learnedDevices">-</div>
-            <div class="stat-label">Appresi</div>
+            <div class="stat-label">Learned</div>
           </div>
           <div class="stat">
             <div class="stat-number" id="untrustedDevices">-</div>
-            <div class="stat-label">Non Trusted</div>
+            <div class="stat-label">Not Trusted</div>
           </div>
         </div>
         
         <div class="row">
-          <button class="btn" onclick="refreshStats()">🔄 Aggiorna</button>
-          <button class="btn ghost" onclick="exportData()">📥 Esporta Dati</button>
+          <button class="btn" onclick="refreshStats()">🔄 Refresh</button>
+          <button class="btn ghost" onclick="exportData()">📥 Export Data</button>
         </div>
       </div>
     </div>
@@ -280,16 +280,16 @@ th{background:#f8f9fa; color:#333}
     <!-- Protocol Devices -->
     <div class="card full-width">
       <div class="section-header">
-        <h2>🔌 Device per Protocollo</h2>
+        <h2>🔌 Devices by Protocol</h2>
         <div class="row">
-          <button class="btn ghost small" onclick="refreshDevices()">🔄 Aggiorna</button>
+          <button class="btn ghost small" onclick="refreshDevices()">🔄 Refresh</button>
           <button class="btn ghost small" onclick="toggleAutoRefresh()" id="autoRefreshBtn">⏱️ Auto Refresh</button>
         </div>
       </div>
 
       <!-- Protocol Tabs -->
       <div class="protocol-tabs" id="protocolTabs">
-        <div class="protocol-tab active" data-protocol="all">🌐 Tutti</div>
+        <div class="protocol-tab active" data-protocol="all">🌐 All</div>
         <div class="protocol-tab" data-protocol="modbus">🔧 Modbus</div>
         <div class="protocol-tab" data-protocol="s7">🏭 S7</div>
         <div class="protocol-tab" data-protocol="opcua">📡 OPC-UA</div>
@@ -300,7 +300,7 @@ th{background:#f8f9fa; color:#333}
       <!-- Device List -->
       <div id="deviceList" class="device-list">
         <div class="empty-state" id="emptyState">
-          <div>🔍 Caricamento device in corso...</div>
+          <div>🔍 Loading devices...</div>
         </div>
       </div>
     </div>
@@ -489,7 +489,7 @@ th{background:#f8f9fa; color:#333}
         document.getElementById('trust_threshold').value = config.trust_threshold_score || 0.75;
         document.getElementById('observation_hours').value = config.min_observation_period_hours || 24;
       } catch (error) {
-        showToast('❌ Errore caricamento configurazione', 'error');
+        showToast('❌ Error loading configuration', 'error');
       }
     }
 
@@ -511,13 +511,13 @@ th{background:#f8f9fa; color:#333}
         });
 
         if (response.ok) {
-          showToast('✅ Configurazione salvata', 'success');
+          showToast('✅ Configuration saved', 'success');
           config = newConfig;
         } else {
-          throw new Error('Errore salvataggio');
+          throw new Error('Save error');
         }
       } catch (error) {
-        showToast('❌ Errore salvataggio configurazione', 'error');
+        showToast('❌ Error saving configuration', 'error');
       }
     }
 
@@ -549,7 +549,7 @@ th{background:#f8f9fa; color:#333}
         document.getElementById('learnedDevices').textContent = learnedDevices;
         document.getElementById('untrustedDevices').textContent = untrustedDevices;
       } catch (error) {
-        showToast('Errore caricamento statistiche', 'error');
+        showToast('Error loading statistics', 'error');
       }
     }
 
@@ -566,7 +566,7 @@ th{background:#f8f9fa; color:#333}
 
         renderDevices();
       } catch (error) {
-        showToast('Errore caricamento device', 'error');
+        showToast('Error loading devices', 'error');
       } finally {
         deviceListElement.classList.remove('loading');
       }
@@ -623,7 +623,7 @@ th{background:#f8f9fa; color:#333}
       const filteredDevices = deviceArray.filter(device => deviceMatchesProtocol(device, currentProtocol));
 
       if (filteredDevices.length === 0) {
-        deviceListElement.innerHTML = '<div class="empty-state">Nessun device trovato per questo protocollo</div>';
+        deviceListElement.innerHTML = '<div class="empty-state">No devices found for this protocol</div>';
         return;
       }
 
@@ -639,13 +639,13 @@ th{background:#f8f9fa; color:#333}
         const isTrusted = trustedSender || trustedWriter;
         const role = getDeviceOperationRole(device);
         const protocols = extractProtocolLabels(device);
-        const protocolLabel = protocols.length > 0 ? protocols[0] : 'n/d';
+        const protocolLabel = protocols.length > 0 ? protocols[0] : 'N/A';
         const displayIp = ip || 'N/A';
         const scorePercent = Math.round((device.presence_score || 0) * 100);
         const scoreColor = scorePercent >= 75 ? 'var(--ok)' : scorePercent >= 50 ? 'var(--warn)' : 'var(--danger)';
 
         let trustTagClass = 'untrusted';
-        let trustText = 'Non trusted';
+        let trustText = 'Not trusted';
         if (isTrusted) {
           trustTagClass = 'trusted';
           trustText = trustedSender && trustedWriter ? 'Trusted S+W' : (trustedWriter ? 'Trusted Writer' : 'Trusted Sender');
@@ -653,13 +653,13 @@ th{background:#f8f9fa; color:#333}
             trustText = 'Whitelist';
           } else if (isLearned) {
             trustTagClass = 'learned';
-            trustText = trustedSender && trustedWriter ? 'Appreso S+W' : (trustedWriter ? 'Appreso Writer' : 'Appreso Sender');
+            trustText = trustedSender && trustedWriter ? 'Learned S+W' : (trustedWriter ? 'Learned Writer' : 'Learned Sender');
           }
         }
 
         const canManageTrust = Boolean(ip);
-        const promoteLabel = trustedSender && !trustedWriter ? 'Trust writer' : 'Promuovi';
-        const promoteTitle = trustedSender && !trustedWriter ? 'Promuovi anche come writer trusted' : 'Promuovi a trusted';
+        const promoteLabel = trustedSender && !trustedWriter ? 'Trust writer' : 'Promote';
+        const promoteTitle = trustedSender && !trustedWriter ? 'Promote also as trusted writer' : 'Promote to trusted';
 
         html += `
           <div class="device-row">
@@ -690,9 +690,9 @@ th{background:#f8f9fa; color:#333}
                 ? (!isTrusted
                   ? `<button class="btn success small" onclick="promoteDevice('${ip}')" title="${promoteTitle}">${promoteLabel}</button>`
                   : (trustedSender && !trustedWriter && !device.is_whitelisted
-                    ? `<button class="btn success small" onclick="promoteDevice('${ip}')" title="${promoteTitle}">${promoteLabel}</button><button class="btn danger small" onclick="demoteDevice('${ip}')" title="Rimuovi dal trust">Rimuovi</button>`
-                    : `<button class="btn danger small" onclick="demoteDevice('${ip}')" title="Rimuovi dal trust">Rimuovi</button>`))
-                : '<span class="muted">IP assente</span>'}
+                    ? `<button class="btn success small" onclick="promoteDevice('${ip}')" title="${promoteTitle}">${promoteLabel}</button><button class="btn danger small" onclick="demoteDevice('${ip}')" title="Remove from trust">Remove</button>`
+                    : `<button class="btn danger small" onclick="demoteDevice('${ip}')" title="Remove from trust">Remove</button>`))
+                : '<span class="muted">IP missing</span>'}
             </div>
           </div>
         `;
@@ -703,7 +703,7 @@ th{background:#f8f9fa; color:#333}
 
     async function promoteDevice(ip) {
       if (!ip) {
-        showToast('IP non valido per la promozione', 'error');
+        showToast('Invalid IP for promotion', 'error');
         return;
       }
 
@@ -715,20 +715,20 @@ th{background:#f8f9fa; color:#333}
         });
 
         if (response.ok) {
-          showToast(`Device ${ip} promosso a trusted`, 'success');
+          showToast(`Device ${ip} promoted to trusted`, 'success');
           await refreshDevices();
           await refreshStats();
         } else {
-          throw new Error('Errore promozione');
+          throw new Error('Promotion error');
         }
       } catch (error) {
-        showToast('Errore promozione device', 'error');
+        showToast('Error promoting device', 'error');
       }
     }
 
     async function demoteDevice(ip) {
       if (!ip) {
-        showToast('IP non valido per la rimozione del trust', 'error');
+        showToast('Invalid IP for trust removal', 'error');
         return;
       }
 
@@ -740,19 +740,19 @@ th{background:#f8f9fa; color:#333}
         });
 
         if (response.ok) {
-          showToast(`Device ${ip} rimosso da trusted`, 'success');
+          showToast(`Device ${ip} removed from trusted`, 'success');
           await refreshDevices();
           await refreshStats();
         } else {
-          throw new Error('Errore demozione');
+          throw new Error('Demotion error');
         }
       } catch (error) {
-        showToast('Errore demozione device', 'error');
+        showToast('Error demoting device', 'error');
       }
     }
 
     async function clearAllLearning() {
-      if (!confirm('⚠️ Sei sicuro di voler eliminare tutti i device appresi? Questa azione non può essere annullata.')) {
+      if (!confirm('⚠️ Are you sure you want to delete all learned devices? This action cannot be undone.')) {
         return;
       }
 
@@ -760,14 +760,14 @@ th{background:#f8f9fa; color:#333}
         const response = await fetch('/api/ids/presence/clear', { method: 'POST' });
         
         if (response.ok) {
-          showToast('🗑️ Tutti i device appresi sono stati eliminati', 'success');
+          showToast('🗑️ All learned devices have been deleted', 'success');
           await refreshDevices();
           await refreshStats();
         } else {
-          throw new Error('Errore reset');
+          throw new Error('Reset error');
         }
       } catch (error) {
-        showToast('❌ Errore reset learning data', 'error');
+        showToast('❌ Error resetting learning data', 'error');
       }
     }
 
@@ -806,7 +806,7 @@ th{background:#f8f9fa; color:#333}
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-      showToast('Dati esportati', 'success');
+      showToast('Data exported', 'success');
     }
 
     function formatTime(timestamp) {
@@ -815,13 +815,13 @@ th{background:#f8f9fa; color:#333}
       const diff = Math.max(0, baseClock - timestamp);
       const seconds = Math.floor(diff / 1000);
 
-      if (seconds < 60) return seconds === 0 ? 'ora' : `${seconds}s fa`;
+      if (seconds < 60) return seconds === 0 ? 'now' : `${seconds}s ago`;
       const minutes = Math.floor(seconds / 60);
-      if (minutes < 60) return `${minutes}m fa`;
+      if (minutes < 60) return `${minutes}m ago`;
       const hours = Math.floor(minutes / 60);
-      if (hours < 24) return `${hours}h fa`;
+      if (hours < 24) return `${hours}h ago`;
       const days = Math.floor(hours / 24);
-      return `${days}d fa`;
+      return `${days}d ago`;
     }
 
     function showToast(message, type = 'info') {

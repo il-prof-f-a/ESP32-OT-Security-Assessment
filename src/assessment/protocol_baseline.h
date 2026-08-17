@@ -1,11 +1,11 @@
 /**
  * @file protocol_baseline.h
- * @brief Sistema di baseline per rilevamento anomalie nei protocolli industriali
+ * @brief Baseline system for anomaly detection in industrial protocols
  *
- * Questo modulo mantiene una baseline del comportamento normale per ciascun protocollo,
- * apprendendo da traffico legittimo e rilevando deviazioni anomale.
+ * This module maintains a baseline of normal behavior for each protocol,
+ * learning from legitimate traffic and detecting anomalous deviations.
  *
- * ALLOCAZIONE: PSRAM (tutte le strutture dati)
+ * ALLOCATION: PSRAM (all data structures)
  *
  * @date 2025-10-25
  * @version 1.0
@@ -21,47 +21,47 @@
 #include "flow_label.h"
 
 /**
- * @brief Statistiche baseline per un singolo endpoint
+ * @brief Baseline statistics for a single endpoint
  *
- * Traccia il comportamento normale di un dispositivo nella rete industriale
+ * Tracks the normal behavior of a device on the industrial network
  */
 struct EndpointBaseline {
-    // Identificazione endpoint
+    // Endpoint identification
     psram_string ip_address;
     psram_string mac_address;
 
-    // Contatori traffico normale
+    // Normal traffic counters
     uint64_t total_packets = 0;
     uint64_t total_bytes = 0;
 
-    // Distribuzione operazioni (READ/WRITE/CONTROL)
+    // Operation distribution (READ/WRITE/CONTROL)
     uint32_t read_operations = 0;
     uint32_t write_operations = 0;
     uint32_t control_operations = 0;
     uint32_t diagnostic_operations = 0;
 
-    // Tasso di errori normale
+    // Normal error rate
     uint32_t error_responses = 0;
-    float normal_error_rate = 0.0f;  // Percentuale di errori attesa
+    float normal_error_rate = 0.0f;  // Expected error percentage
 
-    // Stati visitati normalmente (bitmap)
-    uint16_t normal_states_bitmap = 0;  // Bit per ogni FlowState
+    // Normally visited states (bitmap)
+    uint16_t normal_states_bitmap = 0;  // Bit for each FlowState
 
-    // Intensità traffico normale (packets per second)
+    // Normal traffic intensity (packets per second)
     float avg_pps = 0.0f;
     float max_pps = 0.0f;
 
-    // Peer normali (dispositivi con cui comunica)
+    // Normal peers (devices it communicates with)
     psram_vector<psram_string> known_peers;
 
-    // Timestamp statistiche
+    // Statistics timestamps
     uint64_t first_seen_ms = 0;
     uint64_t last_updated_ms = 0;
-    uint32_t learning_samples = 0;  // Numero di campioni usati per learning
+    uint32_t learning_samples = 0;  // Number of samples used for learning
 
     // Flag
-    bool is_writer = false;        // Dispositivo autorizzato a scrivere
-    bool learning_complete = false;  // Baseline stabilizzata
+    bool is_writer = false;        // Device authorized to write
+    bool learning_complete = false;  // Stabilized baseline
 
     EndpointBaseline() {
         PSRAMAllocator<char> alloc;
@@ -72,40 +72,40 @@ struct EndpointBaseline {
 };
 
 /**
- * @brief Baseline globale per un protocollo
+ * @brief Global baseline for a protocol
  *
- * Contiene statistiche aggregate e pattern normali per l'intero protocollo
+ * Contains aggregate statistics and normal patterns for the entire protocol
  */
 struct ProtocolBaseline {
     ProtocolType protocol;
 
-    // Endpoint tracciati (IP -> baseline)
+    // Tracked endpoints (IP -> baseline)
     psram_map<psram_string, EndpointBaseline> endpoints;
 
-    // Transizioni di stato normali (state_from << 8 | state_to) -> count
+    // Normal state transitions (state_from << 8 | state_to) -> count
     psram_map<uint16_t, uint32_t> normal_state_transitions;
 
-    // Sequenze di operazioni comuni (hash -> count)
-    // Hash calcolato da sequenza tipo: "READ,READ,WRITE"
+    // Common operation sequences (hash -> count)
+    // Hash computed from a sequence like: "READ,READ,WRITE"
     psram_map<uint32_t, uint32_t> operation_sequences;
 
-    // Statistiche globali
+    // Global statistics
     uint64_t total_flows = 0;
     uint64_t total_packets = 0;
 
-    // Threshold anomalie (deviazioni standard)
-    float pps_threshold_factor = 3.0f;       // Soglia per rate anomalo (mean + N*stddev)
-    float error_rate_threshold = 0.1f;       // Soglia percentuale errori
-    float peer_change_threshold = 0.3f;      // Soglia cambio peer (30% nuovi peer)
+    // Anomaly thresholds (standard deviations)
+    float pps_threshold_factor = 3.0f;       // Threshold for anomalous rate (mean + N*stddev)
+    float error_rate_threshold = 0.1f;       // Error percentage threshold
+    float peer_change_threshold = 0.3f;      // Peer change threshold (30% new peers)
 
     // Learning
-    uint32_t min_learning_samples = 100;     // Campioni minimi per baseline
-    uint64_t learning_window_ms = 3600000;   // Finestra learning (1 ora)
+    uint32_t min_learning_samples = 100;     // Minimum samples for baseline
+    uint64_t learning_window_ms = 3600000;   // Learning window (1 hour)
     bool learning_enabled = true;
 
-    // Persistenza
+    // Persistence
     uint64_t last_saved_ms = 0;
-    uint32_t save_interval_ms = 300000;      // Salva ogni 5 minuti
+    uint32_t save_interval_ms = 300000;      // Save every 5 minutes
 
     ProtocolBaseline() {
         PSRAMAllocator<char> alloc;
@@ -116,47 +116,47 @@ struct ProtocolBaseline {
 };
 
 /**
- * @brief Tipo di anomalia rilevata
+ * @brief Type of detected anomaly
  */
 enum class AnomalyType : uint8_t {
     NONE = 0,
 
-    // Anomalie di traffico
-    UNUSUAL_TRAFFIC_RATE,      // Rate pacchetti anomalo (troppo alto/basso)
-    EXCESSIVE_ERRORS,          // Troppi errori
-    FLOODING,                  // Flooding rilevato
+    // Traffic anomalies
+    UNUSUAL_TRAFFIC_RATE,      // Anomalous packet rate (too high/low)
+    EXCESSIVE_ERRORS,          // Too many errors
+    FLOODING,                  // Flooding detected
 
-    // Anomalie comportamentali
-    UNEXPECTED_WRITER,         // Dispositivo non autorizzato scrive
-    UNUSUAL_PEER,              // Comunicazione con peer sconosciuto
-    STATE_VIOLATION,           // Transizione stato invalida
-    OPERATION_SEQUENCE_ANOMALY, // Sequenza operazioni anomala
+    // Behavioral anomalies
+    UNEXPECTED_WRITER,         // Unauthorized device writes
+    UNUSUAL_PEER,              // Communication with unknown peer
+    STATE_VIOLATION,           // Invalid state transition
+    OPERATION_SEQUENCE_ANOMALY, // Anomalous operation sequence
 
-    // Anomalie temporali
-    TRAFFIC_AT_UNUSUAL_TIME,   // Traffico in orari insoliti
-    SUDDEN_TRAFFIC_SPIKE,      // Picco improvviso
+    // Temporal anomalies
+    TRAFFIC_AT_UNUSUAL_TIME,   // Traffic at unusual times
+    SUDDEN_TRAFFIC_SPIKE,      // Sudden spike
 
-    // Anomalie di protocollo
-    MALFORMED_PATTERN,         // Pattern malformato
-    PROTOCOL_DOWNGRADE,        // Tentativo downgrade sicurezza
+    // Protocol anomalies
+    MALFORMED_PATTERN,         // Malformed pattern
+    PROTOCOL_DOWNGRADE,        // Security downgrade attempt
 
-    // Anomalie di sicurezza
+    // Security anomalies
     RECONNAISSANCE,            // Scanning/enumeration
-    PRIVILEGE_ESCALATION,      // Tentativo escalation privilegi
-    DATA_EXFILTRATION          // Possibile esfiltrazione dati
+    PRIVILEGE_ESCALATION,      // Privilege escalation attempt
+    DATA_EXFILTRATION          // Possible data exfiltration
 };
 
 /**
- * @brief Dettagli anomalia rilevata
+ * @brief Detected anomaly details
  */
 struct AnomalyDetection {
     AnomalyType type;
-    float severity;            // 0.0-1.0 (0=info, 1=critico)
-    float confidence;          // 0.0-1.0 (fiducia nella detection)
+    float severity;            // 0.0-1.0 (0=info, 1=critical)
+    float confidence;          // 0.0-1.0 (confidence in the detection)
 
     psram_string endpoint_ip;
     psram_string description;
-    psram_string evidence;     // Dati evidenza (es: "rate=1000pps, baseline=10pps")
+    psram_string evidence;     // Evidence data (e.g.: "rate=1000pps, baseline=10pps")
 
     uint64_t timestamp_ms;
 
@@ -169,7 +169,7 @@ struct AnomalyDetection {
 };
 
 /**
- * @brief Gestore baseline e anomaly detection per protocolli industriali
+ * @brief Baseline and anomaly detection manager for industrial protocols
  */
 class ProtocolBaselineManager {
 public:
@@ -177,30 +177,30 @@ public:
     ~ProtocolBaselineManager() = default;
 
     /**
-     * @brief Inizializza il baseline manager per un protocollo
+     * @brief Initializes the baseline manager for a protocol
      */
     bool initialize(ProtocolType protocol);
 
     /**
-     * @brief Carica baseline da storage persistente
+     * @brief Loads baseline from persistent storage
      */
     bool loadBaseline(const char* filepath);
 
     /**
-     * @brief Salva baseline su storage persistente
+     * @brief Saves baseline to persistent storage
      */
     bool saveBaseline(const char* filepath);
 
     /**
-     * @brief Aggiorna baseline con nuovi dati (learning)
+     * @brief Updates baseline with new data (learning)
      *
-     * @param endpoint_ip IP endpoint
-     * @param mac_address MAC endpoint
-     * @param packet_size Dimensione pacchetto
-     * @param operation_type Tipo operazione (READ/WRITE/etc)
-     * @param is_error true se risposta errore
-     * @param current_state Stato flusso corrente
-     * @param peer_ip IP peer comunicazione
+     * @param endpoint_ip Endpoint IP
+     * @param mac_address Endpoint MAC
+     * @param packet_size Packet size
+     * @param operation_type Operation type (READ/WRITE/etc)
+     * @param is_error true if error response
+     * @param current_state Current flow state
+     * @param peer_ip Communication peer IP
      */
     bool updateBaseline(const psram_string& endpoint_ip,
                         const psram_string& mac_address,
@@ -211,16 +211,16 @@ public:
                         const psram_string& peer_ip);
 
     /**
-     * @brief Rileva anomalie confrontando con baseline
+     * @brief Detects anomalies by comparing against baseline
      *
-     * @param endpoint_ip IP da analizzare
-     * @param current_pps Rate pacchetti corrente
-     * @param error_rate Tasso errori corrente
-     * @param operation_type Tipo operazione
-     * @param current_state Stato flusso
-     * @param peer_ip IP peer
-     * @param anomalies [out] Anomalie rilevate
-     * @return Numero anomalie rilevate
+     * @param endpoint_ip IP to analyze
+     * @param current_pps Current packet rate
+     * @param error_rate Current error rate
+     * @param operation_type Operation type
+     * @param current_state Flow state
+     * @param peer_ip Peer IP
+     * @param anomalies [out] Detected anomalies
+     * @return Number of detected anomalies
      */
     uint32_t detectAnomalies(const psram_string& endpoint_ip,
                             float current_pps,
@@ -231,32 +231,32 @@ public:
                             psram_vector<AnomalyDetection>& anomalies);
 
     /**
-     * @brief Verifica se endpoint è in fase learning
+     * @brief Checks whether the endpoint is in the learning phase
      */
     bool isLearning(const psram_string& endpoint_ip) const;
 
     /**
-     * @brief Forza completamento learning per endpoint
+     * @brief Forces learning completion for the endpoint
      */
     void completeLearning(const psram_string& endpoint_ip);
 
     /**
-     * @brief Resetta baseline (per testing o dopo incident)
+     * @brief Resets baseline (for testing or after an incident)
      */
     void resetBaseline();
 
     /**
-     * @brief Ottieni baseline corrente (read-only)
+     * @brief Gets the current baseline (read-only)
      */
     const ProtocolBaseline& getBaseline() const { return baseline_; }
 
     /**
-     * @brief Abilita/disabilita learning automatico
+     * @brief Enables/disables automatic learning
      */
     void setLearningEnabled(bool enabled) { baseline_.learning_enabled = enabled; }
 
     /**
-     * @brief Imposta threshold detection
+     * @brief Sets detection thresholds
      */
     void setThresholds(float pps_factor, float error_rate, float peer_change) {
         baseline_.pps_threshold_factor = pps_factor;
@@ -265,14 +265,14 @@ public:
     }
 
     /**
-     * @brief Taratura automatica soglie basata su baseline appreso
-     * @param endpoint_ip Endpoint da calibrare (vuoto = tutti)
-     * @return true se almeno un endpoint è stato calibrato
+     * @brief Automatic threshold tuning based on the learned baseline
+     * @param endpoint_ip Endpoint to calibrate (empty = all)
+     * @return true if at least one endpoint was calibrated
      */
     bool autoTuneThresholds(const psram_string& endpoint_ip = psram_string(PSRAMAllocator<char>()));
 
     /**
-     * @brief Ottieni statistiche learning per endpoint
+     * @brief Gets learning statistics for the endpoint
      */
     bool getLearningStats(const psram_string& endpoint_ip,
                          float& out_avg_pps,
@@ -283,13 +283,13 @@ public:
 private:
     ProtocolBaseline baseline_;
 
-    // Helper per calcolo hash sequenze operazioni
+    // Helper for computing the operation sequence hash
     uint32_t hashOperationSequence(const psram_vector<psram_string>& ops) const;
 
-    // Helper per verifica transizioni stato
+    // Helper for checking state transitions
     bool isNormalStateTransition(FlowState from, FlowState to) const;
 
-    // Helper per calcolo statistiche
+    // Helper for computing statistics
     float calculateMean(const psram_vector<float>& values) const;
     float calculateStdDev(const psram_vector<float>& values, float mean) const;
 };

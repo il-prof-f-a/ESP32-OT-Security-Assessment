@@ -1,10 +1,10 @@
 /**
  * @file flow_label.h
- * @brief Etichette di classificazione per flussi di rete
+ * @brief Classification labels for network flows
  *
- * Sistema di classificazione universale per comportamento dei flussi.
- * Utilizzato da tutti i protocolli per identificare pattern di traffico,
- * anomalie e potenziali minacce.
+ * Universal classification system for flow behavior.
+ * Used by all protocols to identify traffic patterns,
+ * anomalies and potential threats.
  *
  * @date 2025-10-21
  * @version 1.0
@@ -17,243 +17,243 @@
 #include "core/logging_system.h"
 
 /**
- * @brief Etichette di classificazione per flussi di rete
+ * @brief Classification labels for network flows
  *
- * Enum che identifica il comportamento/tipo di un flusso.
- * Ogni plugin può assegnare una o più label in base all'analisi
- * del traffico e delle operazioni rilevate.
+ * Enum that identifies the behavior/type of a flow.
+ * Each plugin can assign one or more labels based on the analysis
+ * of traffic and detected operations.
  *
- * Le label sono organizzate in categorie:
- * - 0-9:   Stati base normali
- * - 10-19: Tipi di operazione normale
- * - 20-29: Pattern rilevati (non necessariamente malevoli)
- * - 30-39: Anomalie e comportamenti sospetti
- * - 40-49: Vulnerabilità o configurazioni deboli
- * - 50-59: Operazioni critiche o attacchi confermati
+ * The labels are organized into categories:
+ * - 0-9:   Normal base states
+ * - 10-19: Normal operation types
+ * - 20-29: Detected patterns (not necessarily malicious)
+ * - 30-39: Anomalies and suspicious behaviors
+ * - 40-49: Vulnerabilities or weak configurations
+ * - 50-59: Critical operations or confirmed attacks
  */
 enum class FlowLabel : uint8_t {
-    // ==================== STATI BASE (0-9) ====================
+    // ==================== BASE STATES (0-9) ====================
 
     /**
-     * Operazione normale, nessuna anomalia rilevata
+     * Normal operation, no anomalies detected
      */
     NORMAL_OPERATION = 0,
 
     /**
-     * Flusso inattivo (nessun traffico recente)
+     * Inactive flow (no recent traffic)
      */
     IDLE = 1,
 
     /**
-     * Flusso in fase di inizializzazione (handshake)
+     * Flow in initialization phase (handshake)
      */
     INITIALIZING = 2,
 
     /**
-     * Flusso in chiusura
+     * Flow in closing
      */
     CLOSING = 3,
 
-    // ==================== TIPI OPERAZIONE (10-19) ====================
+    // ==================== OPERATION TYPES (10-19) ====================
 
     /**
-     * Flusso che esegue solo operazioni di lettura
-     * (es: Modbus Read Coils/Registers, S7 Read Variable, OPC UA Read)
+     * Flow that performs only read operations
+     * (e.g.: Modbus Read Coils/Registers, S7 Read Variable, OPC UA Read)
      */
     READER = 10,
 
     /**
-     * Flusso che esegue operazioni di scrittura
-     * (es: Modbus Write, S7 Write Variable, OPC UA Write)
+     * Flow that performs write operations
+     * (e.g.: Modbus Write, S7 Write Variable, OPC UA Write)
      */
     WRITER = 11,
 
     /**
-     * Flusso con mix di letture e scritture
+     * Flow with a mix of reads and writes
      */
     MIXED_RW = 12,
 
     /**
-     * Operazioni broadcast (Modbus unit_id=255)
+     * Broadcast operations (Modbus unit_id=255)
      */
     BROADCASTER = 13,
 
     /**
-     * Operazioni di diagnostica/discovery legittime
-     * (es: Modbus Device ID, PROFINET DCP Identify, ENIP ListIdentity)
+     * Legitimate diagnostic/discovery operations
+     * (e.g.: Modbus Device ID, PROFINET DCP Identify, ENIP ListIdentity)
      */
     DIAGNOSTIC = 14,
 
-    // ==================== PATTERN RILEVATI (20-29) ====================
+    // ==================== DETECTED PATTERNS (20-29) ====================
 
     /**
-     * Scansionamento sistematico di indirizzi/registri
-     * (molte letture sequenziali in breve tempo)
+     * Systematic scanning of addresses/registers
+     * (many sequential reads in a short time)
      */
     SCANNER = 20,
 
     /**
-     * Reconnaissance attivo (discovery services)
-     * (es: PROFINET DCP Get, OPC UA Browse, ENIP ListServices)
+     * Active reconnaissance (discovery services)
+     * (e.g.: PROFINET DCP Get, OPC UA Browse, ENIP ListServices)
      */
     RECONNAISSANCE = 21,
 
     /**
-     * Traffico elevato ma regolare (utente intensivo normale)
+     * High but regular traffic (normal intensive user)
      */
     HEAVY_USER = 22,
 
     /**
-     * Pattern di polling regolare (es: SCADA che legge ciclicamente)
+     * Regular polling pattern (e.g.: SCADA reading cyclically)
      */
     POLLING = 23,
 
-    // ==================== ANOMALIE (30-39) ====================
+    // ==================== ANOMALIES (30-39) ====================
 
     /**
-     * Comportamento sospetto rilevato (pattern insolito)
+     * Suspicious behavior detected (unusual pattern)
      */
     SUSPICIOUS = 30,
 
     /**
-     * Potenziale attacco in corso (da confermare)
+     * Potential attack in progress (to be confirmed)
      */
     POTENTIAL_ATTACK = 31,
 
     /**
-     * Tentativi multipli di autenticazione falliti
-     * (es: OPC UA CreateSession ripetuti, S7 Setup Communication storm)
+     * Multiple failed authentication attempts
+     * (e.g.: repeated OPC UA CreateSession, S7 Setup Communication storm)
      */
     BRUTE_FORCE_ATTEMPT = 32,
 
     /**
-     * Flooding: traffico eccessivo anomalo
-     * (pps oltre soglia, possibile DoS)
+     * Flooding: excessive anomalous traffic
+     * (pps beyond threshold, possible DoS)
      */
     FLOODING = 33,
 
     /**
-     * Violazione del protocollo: pacchetti malformati o sequenza errata
+     * Protocol violation: malformed packets or wrong sequence
      */
     PROTOCOL_VIOLATION = 34,
 
     /**
-     * Ricezione di molti pacchetti malformati
+     * Reception of many malformed packets
      */
     MALFORMED_PACKETS = 35,
 
     /**
-     * Pattern temporale anomalo (es: attività fuori orario lavorativo)
+     * Anomalous temporal pattern (e.g.: activity outside working hours)
      */
     TEMPORAL_ANOMALY = 36,
 
     /**
-     * Accesso a risorse inaspettate o non autorizzate
+     * Access to unexpected or unauthorized resources
      */
     UNAUTHORIZED_ACCESS = 37,
 
-    // ==================== VULNERABILITÀ (40-49) ====================
+    // ==================== VULNERABILITIES (40-49) ====================
 
     /**
-     * Utilizzo di credenziali di default rilevate
+     * Use of detected default credentials
      */
     DEFAULT_CREDENTIALS = 40,
 
     /**
-     * Configurazione di sicurezza debole
-     * (es: PROFINET Security Class 0, OPC UA Policy#None)
+     * Weak security configuration
+     * (e.g.: PROFINET Security Class 0, OPC UA Policy#None)
      */
     WEAK_SECURITY = 41,
 
     /**
-     * Comunicazione non cifrata dove dovrebbe essere cifrata
-     * (es: OPC UA senza encryption, S7 non-TLS)
+     * Unencrypted communication where it should be encrypted
+     * (e.g.: OPC UA without encryption, S7 non-TLS)
      */
     NO_ENCRYPTION = 42,
 
     /**
-     * Autenticazione anonima permessa
-     * (es: OPC UA anonymous login allowed)
+     * Anonymous authentication allowed
+     * (e.g.: OPC UA anonymous login allowed)
      */
     ANONYMOUS_ALLOWED = 43,
 
     /**
-     * Device name di default non modificato
-     * (es: PROFINET "station_1")
+     * Default device name not changed
+     * (e.g.: PROFINET "station_1")
      */
     DEFAULT_DEVICE_NAME = 44,
 
     /**
-     * Porta/servizio esposto non dovrebbe essere accessibile
+     * Exposed port/service should not be accessible
      */
     EXPOSED_SERVICE = 45,
 
-    // ==================== CRITICO (50-59) ====================
+    // ==================== CRITICAL (50-59) ====================
 
     /**
-     * Operazione pericolosa rilevata
-     * (es: S7 STOP CPU, OPC UA DeleteNodes, ENIP Reset)
+     * Dangerous operation detected
+     * (e.g.: S7 STOP CPU, OPC UA DeleteNodes, ENIP Reset)
      */
     DANGEROUS_OPERATION = 50,
 
     /**
-     * Scrittura critica: broadcast write, write su area critica
-     * (es: Modbus write broadcast, S7 write safety area)
+     * Critical write: broadcast write, write on critical area
+     * (e.g.: Modbus write broadcast, S7 write safety area)
      */
     CRITICAL_WRITE = 51,
 
     /**
-     * Attacco confermato in corso
+     * Confirmed attack in progress
      */
     ATTACK_CONFIRMED = 52,
 
     /**
-     * Tentativo di manipolazione configurazione
-     * (es: PROFINET DCP Set storm, cambio IP/nome device)
+     * Configuration manipulation attempt
+     * (e.g.: PROFINET DCP Set storm, IP/device name change)
      */
     CONFIGURATION_TAMPERING = 53,
 
     /**
-     * Tentativo di hijacking sessione
-     * (es: OPC UA session token reuse, ENIP session handle spoofing)
+     * Session hijacking attempt
+     * (e.g.: OPC UA session token reuse, ENIP session handle spoofing)
      */
     SESSION_HIJACKING = 54,
 
     /**
-     * Replay attack rilevato
-     * (es: PROFINET XID reuse, pacchetti duplicati identici)
+     * Replay attack detected
+     * (e.g.: PROFINET XID reuse, identical duplicate packets)
      */
     REPLAY_ATTACK = 55
 };
 
 /**
- * @brief Converte FlowLabel in stringa leggibile
+ * @brief Convert FlowLabel to a readable string
  *
- * @param label Label da convertire
- * @return Nome della label come stringa costante
+ * @param label Label to convert
+ * @return Name of the label as a constant string
  */
 inline const char* flowLabelToString(FlowLabel label) {
     switch (label) {
-        // Stati base
+        // Base states
         case FlowLabel::NORMAL_OPERATION:       return "NORMAL_OPERATION";
         case FlowLabel::IDLE:                   return "IDLE";
         case FlowLabel::INITIALIZING:           return "INITIALIZING";
         case FlowLabel::CLOSING:                return "CLOSING";
 
-        // Tipi operazione
+        // Operation types
         case FlowLabel::READER:                 return "READER";
         case FlowLabel::WRITER:                 return "WRITER";
         case FlowLabel::MIXED_RW:               return "MIXED_RW";
         case FlowLabel::BROADCASTER:            return "BROADCASTER";
         case FlowLabel::DIAGNOSTIC:             return "DIAGNOSTIC";
 
-        // Pattern rilevati
+        // Detected patterns
         case FlowLabel::SCANNER:                return "SCANNER";
         case FlowLabel::RECONNAISSANCE:         return "RECONNAISSANCE";
         case FlowLabel::HEAVY_USER:             return "HEAVY_USER";
         case FlowLabel::POLLING:                return "POLLING";
 
-        // Anomalie
+        // Anomalies
         case FlowLabel::SUSPICIOUS:             return "SUSPICIOUS";
         case FlowLabel::POTENTIAL_ATTACK:       return "POTENTIAL_ATTACK";
         case FlowLabel::BRUTE_FORCE_ATTEMPT:    return "BRUTE_FORCE_ATTEMPT";
@@ -263,7 +263,7 @@ inline const char* flowLabelToString(FlowLabel label) {
         case FlowLabel::TEMPORAL_ANOMALY:       return "TEMPORAL_ANOMALY";
         case FlowLabel::UNAUTHORIZED_ACCESS:    return "UNAUTHORIZED_ACCESS";
 
-        // Vulnerabilità
+        // Vulnerabilities
         case FlowLabel::DEFAULT_CREDENTIALS:    return "DEFAULT_CREDENTIALS";
         case FlowLabel::WEAK_SECURITY:          return "WEAK_SECURITY";
         case FlowLabel::NO_ENCRYPTION:          return "NO_ENCRYPTION";
@@ -271,7 +271,7 @@ inline const char* flowLabelToString(FlowLabel label) {
         case FlowLabel::DEFAULT_DEVICE_NAME:    return "DEFAULT_DEVICE_NAME";
         case FlowLabel::EXPOSED_SERVICE:        return "EXPOSED_SERVICE";
 
-        // Critico
+        // Critical
         case FlowLabel::DANGEROUS_OPERATION:    return "DANGEROUS_OPERATION";
         case FlowLabel::CRITICAL_WRITE:         return "CRITICAL_WRITE";
         case FlowLabel::ATTACK_CONFIRMED:       return "ATTACK_CONFIRMED";
@@ -284,47 +284,47 @@ inline const char* flowLabelToString(FlowLabel label) {
 }
 
 /**
- * @brief Converte FlowLabel in LogLevel appropriato
+ * @brief Convert FlowLabel to the appropriate LogLevel
  *
- * Determina il livello di logging in base alla gravità della label.
+ * Determines the logging level based on the severity of the label.
  *
- * Mappatura:
+ * Mapping:
  * - NORMAL, IDLE, READER, WRITER, etc. -> INFO
  * - SUSPICIOUS, SCANNER -> WARNING
- * - POTENTIAL_ATTACK, vulnerabilità -> WARNING
+ * - POTENTIAL_ATTACK, vulnerability -> WARNING
  * - DANGEROUS_OPERATION, ATTACK_CONFIRMED -> ERROR
  *
- * @param label Label da convertire
- * @return LogLevel appropriato
+ * @param label Label to convert
+ * @return Appropriate LogLevel
  */
 inline LogLevel flowLabelToLogLevel(FlowLabel label) {
     uint8_t val = static_cast<uint8_t>(label);
 
-    // Stati base e tipi operazione normali (0-19)
+    // Base states and normal operation types (0-19)
     if (val < 20) {
         return LogLevel::INFO;
     }
 
-    // Pattern rilevati (20-29) -> INFO/WARNING
+    // Detected patterns (20-29) -> INFO/WARNING
     if (val >= 20 && val < 30) {
-        // SCANNER e RECONNAISSANCE sono WARNING
+        // SCANNER and RECONNAISSANCE are WARNING
         if (label == FlowLabel::SCANNER || label == FlowLabel::RECONNAISSANCE) {
             return LogLevel::WARNING;
         }
         return LogLevel::INFO;
     }
 
-    // Anomalie (30-39) -> WARNING
+    // Anomalies (30-39) -> WARNING
     if (val >= 30 && val < 40) {
         return LogLevel::WARNING;
     }
 
-    // Vulnerabilità (40-49) -> WARNING
+    // Vulnerabilities (40-49) -> WARNING
     if (val >= 40 && val < 50) {
         return LogLevel::WARNING;
     }
 
-    // Critico (50-59) -> ERROR
+    // Critical (50-59) -> ERROR
     if (val >= 50) {
         return LogLevel::ERROR;
     }
@@ -333,49 +333,49 @@ inline LogLevel flowLabelToLogLevel(FlowLabel label) {
 }
 
 /**
- * @brief Verifica se una label indica un comportamento malevolo
+ * @brief Check whether a label indicates malicious behavior
  *
- * @param label Label da verificare
- * @return true se potenzialmente malevolo, false altrimenti
+ * @param label Label to check
+ * @return true if potentially malicious, false otherwise
  */
 inline bool isFlowLabelMalicious(FlowLabel label) {
     uint8_t val = static_cast<uint8_t>(label);
 
-    // Anomalie (30-39), Critico (50-59)
+    // Anomalies (30-39), Critical (50-59)
     return (val >= 30 && val < 40) || (val >= 50);
 }
 
 /**
- * @brief Verifica se una label indica una vulnerabilità
+ * @brief Check whether a label indicates a vulnerability
  *
- * @param label Label da verificare
- * @return true se è una vulnerabilità, false altrimenti
+ * @param label Label to check
+ * @return true if it is a vulnerability, false otherwise
  */
 inline bool isFlowLabelVulnerability(FlowLabel label) {
     uint8_t val = static_cast<uint8_t>(label);
 
-    // Vulnerabilità (40-49)
+    // Vulnerabilities (40-49)
     return (val >= 40 && val < 50);
 }
 
 /**
- * @brief Verifica se una label indica operazione critica
+ * @brief Check whether a label indicates a critical operation
  *
- * @param label Label da verificare
- * @return true se è critico, false altrimenti
+ * @param label Label to check
+ * @return true if it is critical, false otherwise
  */
 inline bool isFlowLabelCritical(FlowLabel label) {
     uint8_t val = static_cast<uint8_t>(label);
 
-    // Critico (50-59)
+    // Critical (50-59)
     return (val >= 50);
 }
 
 /**
- * @brief Ottieni categoria della label
+ * @brief Get the category of the label
  *
- * @param label Label da classificare
- * @return Nome categoria come stringa
+ * @param label Label to classify
+ * @return Category name as a string
  */
 inline const char* getFlowLabelCategory(FlowLabel label) {
     uint8_t val = static_cast<uint8_t>(label);
@@ -391,25 +391,25 @@ inline const char* getFlowLabelCategory(FlowLabel label) {
 }
 
 /**
- * @brief Verifica se una label indica comportamento sospetto
+ * @brief Check whether a label indicates suspicious behavior
  *
- * Include anomalie (30-39) e critico (50-59), esclude vulnerabilità (40-49)
- * perché le vulnerabilità sono configurazioni deboli, non comportamenti attivi.
+ * Includes anomalies (30-39) and critical (50-59), excludes vulnerabilities (40-49)
+ * because vulnerabilities are weak configurations, not active behaviors.
  *
- * @param label Label da verificare
- * @return true se sospetto, false altrimenti
+ * @param label Label to check
+ * @return true if suspicious, false otherwise
  */
 inline bool isFlowLabelSuspicious(FlowLabel label) {
     uint8_t val = static_cast<uint8_t>(label);
-    // Anomalie (30-39) o Critico (50-59)
+    // Anomalies (30-39) or Critical (50-59)
     return (val >= 30 && val < 40) || (val >= 50);
 }
 
 /**
- * @brief Ottieni descrizione dettagliata della label
+ * @brief Get the detailed description of the label
  *
- * @param label Label da descrivere
- * @return Descrizione testuale
+ * @param label Label to describe
+ * @return Textual description
  */
 inline const char* flowLabelDescription(FlowLabel label) {
     switch (label) {

@@ -11,10 +11,10 @@
 
 static const char* TAG = "PSRAMTelemetry";
 
-// Soglie di warning/critical (configurabili via watchdog)
+// Warning/critical thresholds (configurable via watchdog)
 #define DEFAULT_CRITICAL_THRESHOLD 10240   // 10KB
 #define DEFAULT_WARNING_THRESHOLD  30720   // 30KB
-#define WATCHDOG_ALERT_COOLDOWN_MS 30000   // 30s tra alert consecutivi
+#define WATCHDOG_ALERT_COOLDOWN_MS 30000   // 30s between consecutive alerts
 
 PSRAMTelemetry::PSRAMTelemetry()
     : task_handle_(nullptr)
@@ -39,7 +39,7 @@ bool PSRAMTelemetry::initialize(uint32_t update_interval_ms) {
 
     update_interval_ms_ = update_interval_ms;
 
-    // Update iniziale metriche
+    // Initial metrics update
     updateMetrics();
 
     // Spawn telemetry task
@@ -86,10 +86,10 @@ void PSRAMTelemetry::telemetryTask(void* pvParameters) {
     while (true) {
         vTaskDelayUntil(&xLastWakeTime, xPeriod);
 
-        // Update metriche
+        // Update metrics
         self->updateMetrics();
 
-        // Check watchdog se abilitato
+        // Check watchdog if enabled
         if (self->watchdog_enabled_.load()) {
             self->checkWatchdog();
         }
@@ -126,7 +126,7 @@ void PSRAMTelemetry::updateMetrics() {
         current_metrics_.dram_used_percent = 0;
     }
 
-    // Frammentazione DRAM: (free - largest_block) / free * 100
+    // DRAM fragmentation: (free - largest_block) / free * 100
     if (current_metrics_.dram_free > 0) {
         size_t fragmented = current_metrics_.dram_free - current_metrics_.dram_largest_block;
         current_metrics_.dram_fragmentation_percent =
@@ -135,20 +135,20 @@ void PSRAMTelemetry::updateMetrics() {
         current_metrics_.dram_fragmentation_percent = 100;
     }
 
-    // Flags stato
+    // State flags
     current_metrics_.critical_dram = (current_metrics_.dram_free < DEFAULT_CRITICAL_THRESHOLD);
     current_metrics_.warning_dram = (current_metrics_.dram_free < DEFAULT_WARNING_THRESHOLD);
 
     // Timestamp
     current_metrics_.timestamp_ms = esp_timer_get_time() / 1000;
 
-    // Stima allocazioni (non preciso, ma approssimativo)
-    current_metrics_.alloc_count_estimate = 0;  // TODO: hook malloc se necessario
+    // Allocation estimate (not precise, but approximate)
+    current_metrics_.alloc_count_estimate = 0;  // TODO: hook malloc if needed
     current_metrics_.dealloc_count_estimate = 0;
 
     portEXIT_CRITICAL(&metrics_mutex_);
 
-    // Update statistiche aggregate
+    // Update aggregate statistics
     portENTER_CRITICAL(&metrics_mutex_);
 
     stats_.updates_count++;
@@ -159,7 +159,7 @@ void PSRAMTelemetry::updateMetrics() {
     stats_.dram_frag_min = std::min(stats_.dram_frag_min, current_metrics_.dram_fragmentation_percent);
     stats_.dram_frag_max = std::max(stats_.dram_frag_max, current_metrics_.dram_fragmentation_percent);
 
-    // Calcolo running average per DRAM free
+    // Calculate running average for DRAM free
     if (stats_.updates_count == 1) {
         stats_.dram_free_avg = current_metrics_.dram_free;
         stats_.dram_frag_avg = current_metrics_.dram_fragmentation_percent;
@@ -181,7 +181,7 @@ void PSRAMTelemetry::updateMetrics() {
         }
     }
 
-    // Contatori eventi
+    // Event counters
     if (current_metrics_.critical_dram) {
         stats_.critical_events++;
     }
@@ -263,7 +263,7 @@ void PSRAMTelemetry::checkWatchdog() {
     if (m.dram_free < watchdog_threshold_) {
         uint64_t now_ms = esp_timer_get_time() / 1000;
 
-        // Rate limit: 1 alert ogni 30s
+        // Rate limit: 1 alert every 30s
         if (now_ms - last_watchdog_alert_ms_ < WATCHDOG_ALERT_COOLDOWN_MS) {
             return;
         }

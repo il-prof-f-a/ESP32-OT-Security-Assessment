@@ -1,10 +1,10 @@
 /**
  * @file flow_state.h
- * @brief Stati generici per macchina a stati di flussi di rete
+ * @brief Generic states for the network flow state machine
  *
- * Definisce gli stati comuni per la state machine dei flussi.
- * Ogni protocollo può estendere con stati specifici nel proprio
- * protocol_specific_data, ma usa questi stati base per tracking generico.
+ * Defines the common states for the flow state machine.
+ * Each protocol can extend with specific states in its own
+ * protocol_specific_data, but uses these base states for generic tracking.
  *
  * @date 2025-10-21
  * @version 1.0
@@ -16,119 +16,119 @@
 #include <cstdint>
 
 /**
- * @brief Stati generici di una sessione/flusso di rete
+ * @brief Generic states of a network session/flow
  *
- * State machine generico applicabile a tutti i protocolli TCP/IP.
- * Rappresenta gli stati principali del ciclo di vita di un flusso.
+ * Generic state machine applicable to all TCP/IP protocols.
+ * Represents the main states of the life cycle of a flow.
  *
- * Transizioni tipiche:
+ * Typical transitions:
  * INIT -> CONNECTING -> ESTABLISHED -> AUTHENTICATED -> DATA_EXCHANGE -> CLOSING -> CLOSED
  *
- * Stati di errore:
- * - ERROR: errore durante handshake o comunicazione
- * - TIMEOUT: scaduto per inattività
+ * Error states:
+ * - ERROR: error during handshake or communication
+ * - TIMEOUT: expired due to inactivity
  */
 enum class FlowState : uint8_t {
     /**
-     * Flusso appena creato, primo pacchetto ricevuto
-     * Transizione tipica: INIT -> CONNECTING
+     * Flow just created, first packet received
+     * Typical transition: INIT -> CONNECTING
      */
     INIT = 0,
 
     /**
-     * Handshake di connessione in corso
+     * Connection handshake in progress
      *
-     * Esempi:
-     * - TCP SYN inviato
-     * - OPC UA HEL inviato, ACK non ancora ricevuto
-     * - S7 COTP CR inviato, CC non ancora ricevuto
+     * Examples:
+     * - TCP SYN sent
+     * - OPC UA HEL sent, ACK not yet received
+     * - S7 COTP CR sent, CC not yet received
      *
-     * Transizione tipica: CONNECTING -> ESTABLISHED
+     * Typical transition: CONNECTING -> ESTABLISHED
      */
     CONNECTING = 1,
 
     /**
-     * Connessione stabilita a livello trasporto
+     * Connection established at transport level
      *
-     * Esempi:
-     * - TCP three-way handshake completato
-     * - OPC UA HEL/ACK scambiato
+     * Examples:
+     * - TCP three-way handshake completed
+     * - OPC UA HEL/ACK exchanged
      * - S7 COTP connection established
-     * - EtherNet/IP RegisterSession ricevuto
+     * - EtherNet/IP RegisterSession received
      *
-     * Transizione tipica: ESTABLISHED -> AUTHENTICATED (se auth richiesta)
-     *                     ESTABLISHED -> DATA_EXCHANGE (se no auth)
+     * Typical transition: ESTABLISHED -> AUTHENTICATED (if auth required)
+     *                     ESTABLISHED -> DATA_EXCHANGE (if no auth)
      */
     ESTABLISHED = 2,
 
     /**
-     * Scambio dati attivo (per protocolli senza autenticazione)
+     * Active data exchange (for protocols without authentication)
      *
-     * Esempi:
-     * - Modbus TCP: immediatamente dopo connessione TCP
-     * - PROFINET DCP: stateless, sempre in questo stato
+     * Examples:
+     * - Modbus TCP: immediately after TCP connection
+     * - PROFINET DCP: stateless, always in this state
      *
-     * Transizione tipica: DATA_EXCHANGE -> CLOSING
+     * Typical transition: DATA_EXCHANGE -> CLOSING
      */
     DATA_EXCHANGE = 3,
 
     /**
-     * Autenticazione completata con successo
+     * Authentication completed successfully
      *
-     * Esempi:
-     * - OPC UA ActivateSession ACK ricevuto
-     * - S7 Setup Communication ACK ricevuto
+     * Examples:
+     * - OPC UA ActivateSession ACK received
+     * - S7 Setup Communication ACK received
      *
-     * Transizione tipica: AUTHENTICATED -> DATA_EXCHANGE
+     * Typical transition: AUTHENTICATED -> DATA_EXCHANGE
      */
     AUTHENTICATED = 4,
 
     /**
-     * Procedura di chiusura in corso
+     * Closing procedure in progress
      *
-     * Esempi:
-     * - TCP FIN inviato/ricevuto
-     * - OPC UA CloseSecureChannel inviato
-     * - EtherNet/IP UnregisterSession ricevuto
+     * Examples:
+     * - TCP FIN sent/received
+     * - OPC UA CloseSecureChannel sent
+     * - EtherNet/IP UnregisterSession received
      *
-     * Transizione tipica: CLOSING -> CLOSED
+     * Typical transition: CLOSING -> CLOSED
      */
     CLOSING = 5,
 
     /**
-     * Flusso chiuso correttamente
-     * Questo è uno stato finale, il flusso sarà rimosso dalla tabella
-     * dopo il timeout di cleanup.
+     * Flow closed correctly
+     * This is a final state, the flow will be removed from the table
+     * after the cleanup timeout.
      */
     CLOSED = 6,
 
     /**
-     * Errore durante handshake o comunicazione
+     * Error during handshake or communication
      *
-     * Esempi:
-     * - Pacchetti malformati ripetuti
-     * - OPC UA ERR message ricevuto
-     * - TCP RST ricevuto
-     * - Troppi errori di protocollo
+     * Examples:
+     * - Repeated malformed packets
+     * - OPC UA ERR message received
+     * - TCP RST received
+     * - Too many protocol errors
      *
-     * Stato finale, il flusso sarà marcato come errore nei log.
+     * Final state, the flow will be marked as an error in the logs.
      */
     ERROR = 7,
 
     /**
-     * Flusso scaduto per inattività
+     * Flow expired due to inactivity
      *
-     * Nessun pacchetto ricevuto per tempo > timeout configurato.
-     * Stato finale, il flusso sarà rimosso al prossimo cleanup.
+     * No packet received for a time > configured timeout.
+     * Final state, the flow will be removed at the next cleanup.
      */
     TIMEOUT = 8
 };
 
 /**
- * @brief Converte FlowState in stringa leggibile
+ * @brief Convert FlowState to a readable string
  *
- * @param state Stato da convertire
- * @return Nome dello stato come stringa costante
+ * @param state State to convert
+ * @return Name of the state as a constant string
  */
 inline const char* flowStateToString(FlowState state) {
     switch (state) {
@@ -146,12 +146,12 @@ inline const char* flowStateToString(FlowState state) {
 }
 
 /**
- * @brief Verifica se lo stato è terminale (flusso può essere rimosso)
+ * @brief Check whether the state is terminal (flow can be removed)
  *
- * Stati terminali: CLOSED, ERROR, TIMEOUT
+ * Terminal states: CLOSED, ERROR, TIMEOUT
  *
- * @param state Stato da verificare
- * @return true se stato terminale, false altrimenti
+ * @param state State to check
+ * @return true if terminal state, false otherwise
  */
 inline bool isFlowStateTerminal(FlowState state) {
     return state == FlowState::CLOSED ||
@@ -160,12 +160,12 @@ inline bool isFlowStateTerminal(FlowState state) {
 }
 
 /**
- * @brief Verifica se lo stato indica connessione attiva
+ * @brief Check whether the state indicates an active connection
  *
- * Stati attivi: ESTABLISHED, DATA_EXCHANGE, AUTHENTICATED
+ * Active states: ESTABLISHED, DATA_EXCHANGE, AUTHENTICATED
  *
- * @param state Stato da verificare
- * @return true se connessione attiva, false altrimenti
+ * @param state State to check
+ * @return true if active connection, false otherwise
  */
 inline bool isFlowStateActive(FlowState state) {
     return state == FlowState::ESTABLISHED ||
@@ -174,12 +174,12 @@ inline bool isFlowStateActive(FlowState state) {
 }
 
 /**
- * @brief Verifica se lo stato indica errore o problema
+ * @brief Check whether the state indicates an error or problem
  *
- * Stati problema: ERROR, TIMEOUT, CLOSING (potenzialmente)
+ * Problem states: ERROR, TIMEOUT, CLOSING (potentially)
  *
- * @param state Stato da verificare
- * @return true se stato indica problema, false altrimenti
+ * @param state State to check
+ * @return true if the state indicates a problem, false otherwise
  */
 inline bool isFlowStateProblematic(FlowState state) {
     return state == FlowState::ERROR ||
@@ -187,10 +187,10 @@ inline bool isFlowStateProblematic(FlowState state) {
 }
 
 /**
- * @brief Ottieni descrizione estesa dello stato
+ * @brief Get the extended description of the state
  *
- * @param state Stato da descrivere
- * @return Descrizione testuale dello stato
+ * @param state State to describe
+ * @return Textual description of the state
  */
 inline const char* flowStateDescription(FlowState state) {
     switch (state) {
@@ -227,10 +227,10 @@ inline const char* flowStateDescription(FlowState state) {
 }
 
 /**
- * @brief Esempio di transizioni comuni per protocolli
+ * @brief Example of common transitions for protocols
  *
- * Questa enum documenta le transizioni tipiche per ogni protocollo.
- * Non è usata nel codice ma serve come riferimento per implementazioni.
+ * This enum documents the typical transitions for each protocol.
+ * It is not used in the code but serves as a reference for implementations.
  */
 enum class ProtocolStateTransition {
     // Modbus TCP (stateless)

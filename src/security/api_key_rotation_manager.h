@@ -15,16 +15,16 @@ extern "C" {
 class ApiKeyRotationManager;
 extern ApiKeyRotationManager* g_api_key_rotation_manager;
 
-// Policy di rotazione API Keys
+// API key rotation policy
 struct ApiKeyRotationPolicy {
-    bool enabled;                          // Rotazione automatica abilitata
-    uint32_t rotation_interval_days;       // Intervallo rotazione (default: 90 giorni)
-    uint32_t overlap_period_days;          // Periodo overlap prima revoca vecchia key (default: 7 giorni)
-    bool auto_revoke_old_keys;             // Auto-revoca vecchie keys dopo overlap
-    uint32_t warning_days_before_rotation; // Giorni prima della rotazione per inviare warning (default: 7)
-    bool send_notifications;               // Invia notifiche email/webhook
-    psram_string notification_webhook;     // URL webhook per notifiche
-    psram_string notification_email;       // Email destinatario notifiche
+    bool enabled;                          // Automatic rotation enabled
+    uint32_t rotation_interval_days;       // Rotation interval (default: 90 days)
+    uint32_t overlap_period_days;          // Overlap period before revoking the old key (default: 7 days)
+    bool auto_revoke_old_keys;             // Auto-revoke old keys after overlap
+    uint32_t warning_days_before_rotation; // Days before rotation to send a warning (default: 7)
+    bool send_notifications;               // Send email/webhook notifications
+    psram_string notification_webhook;     // Webhook URL for notifications
+    psram_string notification_email;       // Notification recipient email
 
     ApiKeyRotationPolicy() {
         PSRAMAllocator<char> alloc;
@@ -39,15 +39,15 @@ struct ApiKeyRotationPolicy {
     }
 };
 
-// Entry di una scheduled rotation
+// Entry of a scheduled rotation
 struct ApiKeyRotationEntry {
-    psram_string key_id;           // ID della key da ruotare
-    psram_string key_label;        // Label per tracking
-    psram_string new_key_id;       // ID della nuova key creata
-    uint64_t rotation_due_ms;      // Timestamp quando la rotazione è dovuta
-    uint64_t warning_sent_ms;      // Timestamp invio warning
-    uint64_t new_key_created_ms;   // Timestamp creazione nuova key
-    uint64_t old_key_revoke_ms;    // Timestamp quando revocare vecchia key
+    psram_string key_id;           // ID of the key to rotate
+    psram_string key_label;        // Label for tracking
+    psram_string new_key_id;       // ID of the newly created key
+    uint64_t rotation_due_ms;      // Timestamp when the rotation is due
+    uint64_t warning_sent_ms;      // Timestamp when the warning is sent
+    uint64_t new_key_created_ms;   // Timestamp when the new key is created
+    uint64_t old_key_revoke_ms;    // Timestamp when to revoke the old key
     bool warning_sent;
     bool new_key_created;
     bool old_key_revoked;
@@ -72,23 +72,23 @@ public:
     ApiKeyRotationManager();
     ~ApiKeyRotationManager();
 
-    // Inizializzazione
+    // Initialization
     bool initialize(SecurityManager* sec_mgr, CronScheduler* cron_sched);
     void shutdown();
 
-    // Configurazione policy
+    // Policy configuration
     void setPolicy(const ApiKeyRotationPolicy& policy);
     void getPolicy(ApiKeyRotationPolicy& out_policy) const;
 
-    // Gestione rotazioni
+    // Rotation management
     bool scheduleRotation(const char* key_id, const char* label);
     bool cancelRotation(const char* key_id);
     psram_vector<ApiKeyRotationEntry> listScheduledRotations() const;
 
-    // Trigger manuale
+    // Manual trigger
     bool triggerImmediateRotation(const char* key_id, const char* new_label);
 
-    // Persistenza
+    // Persistence
     bool loadPolicyFromNVS();
     bool savePolicyToNVS();
     bool loadRotationsFromNVS();
@@ -105,16 +105,16 @@ public:
     void getStats(RotationStats& out_stats) const;
 
 private:
-    // Cron task callback (chiamato periodicamente dal CronScheduler)
+    // Cron task callback (called periodically by CronScheduler)
     void checkRotations();
 
-    // Helper per singola rotazione
+    // Helper for a single rotation
     void processRotationEntry(ApiKeyRotationEntry& entry);
     void sendWarningNotification(const ApiKeyRotationEntry& entry);
     void createNewKey(ApiKeyRotationEntry& entry);
     void revokeOldKey(ApiKeyRotationEntry& entry);
 
-    // Calcola timestamp rotazione per una key
+    // Calculate the rotation timestamp for a key
     uint64_t calculateRotationDue(uint64_t key_created_ms) const;
 
     SecurityManager* sec_mgr_;
@@ -126,7 +126,7 @@ private:
     mutable SemaphoreHandle_t mutex_;
     bool initialized_;
 
-    psram_string cron_schedule_id_; // ID della scheduled task nel CronScheduler
+    psram_string cron_schedule_id_; // ID of the scheduled task in CronScheduler
 
     static constexpr const char* TAG = "ApiKeyRotation";
 };

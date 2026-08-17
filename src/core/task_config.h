@@ -11,24 +11,24 @@ extern "C" {
     #include "freertos/task.h"
 }
 
-// ==== CONFIGURAZIONE GLOBALE TASK ====
-// Centralizza tutte le configurazioni di stack size e allocazione memoria per tutti i task del sistema
+// ==== GLOBAL TASK CONFIGURATION ====
+// Centralizes all stack size and memory allocation configurations for every system task
 
 namespace TaskConfig {
 
-    // ==== TIPI DI ALLOCAZIONE ====
+    // ==== ALLOCATION TYPES ====
     enum class AllocType {
-        INTERNAL_RAM,   // Forza RAM interna (performance critiche, cache disable)
-        PSRAM,          // Usa PSRAM (task asincroni, non critici)
-        AUTO            // Lascia decidere al sistema (deprecated)
+        INTERNAL_RAM,   // Force internal RAM (critical performance, cache disabled)
+        PSRAM,          // Use PSRAM (asynchronous, non-critical tasks)
+        AUTO            // Let the system decide (deprecated)
     };
 
-    // ==== CONFIGURAZIONI TASK DI SISTEMA ====
+    // ==== SYSTEM TASK CONFIGURATIONS ====
     struct SystemTasks {
         // Main task - IMPORTANT: Must match CONFIG_ESP_MAIN_TASK_STACK_SIZE in sdkconfig.defaults
         static constexpr uint32_t MAIN_STACK_SIZE = CONFIG_ESP_MAIN_TASK_STACK_SIZE; //6144;
         static constexpr AllocType MAIN_ALLOC = AllocType::INTERNAL_RAM;
-        static constexpr UBaseType_t MAIN_PRIORITY = 1;  // Priorità default ESP-IDF
+        static constexpr UBaseType_t MAIN_PRIORITY = 1;  // Default ESP-IDF priority
 
         // AsyncStorage Engine - CRITICAL: Must be in INTERNAL_RAM for flash operations
         static constexpr uint32_t ASYNC_STORAGE_STACK_SIZE = 32768; // 8KB stack in INTERNAL_RAM
@@ -43,58 +43,58 @@ namespace TaskConfig {
         // Reporting - Now can use PSRAM (AsyncStorage engine handles flash operations)
         static constexpr uint32_t REPORT_FLUSH_STACK_SIZE = 8192; // ULTRA-AGGRESSIVE: 12KB → 8KB for memory crisis
         static constexpr AllocType REPORT_FLUSH_ALLOC = AllocType::PSRAM; // HYBRID: PSRAM with runtime filesystem protection
-        static constexpr UBaseType_t REPORT_FLUSH_PRIORITY = 5;  // Media priorità
+        static constexpr UBaseType_t REPORT_FLUSH_PRIORITY = 5;  // Medium priority
 
-        // Filesystem delegate - INTERNAL_RAM per operazioni VFS con cache disabilitata
+        // Filesystem delegate - INTERNAL_RAM for VFS operations with cache disabled
         static constexpr uint32_t FILESYSTEM_DELEGATE_STACK_SIZE = 8192;
         static constexpr AllocType FILESYSTEM_DELEGATE_ALLOC = AllocType::INTERNAL_RAM;
         static constexpr UBaseType_t FILESYSTEM_DELEGATE_PRIORITY = 7;
 
     };
 
-    // ==== CONFIGURAZIONI NETWORK ====
+    // ==== NETWORK CONFIGURATIONS ====
     struct NetworkTasks {
         // NetworkEngine - Now can use PSRAM (AsyncStorage engine handles flash operations)
         static constexpr uint32_t NET_CAP_STACK_SIZE = 8192; // ULTRA-AGGRESSIVE: 12KB → 8KB for memory crisis
         static constexpr AllocType NET_CAP_ALLOC = AllocType::PSRAM;
-        static constexpr UBaseType_t NET_CAP_PRIORITY = 9;  // Alta priorità per capture
+        static constexpr UBaseType_t NET_CAP_PRIORITY = 9;  // High priority for capture
 
-        static constexpr uint32_t NET_ANA_STACK_SIZE = 12288; // Fix crash: 8KB insufficiente per catena IDS+anomaly (vedere docs/net_ana_stack_overflow.md)
+        static constexpr uint32_t NET_ANA_STACK_SIZE = 12288; // Crash fix: 8KB insufficient for the IDS+anomaly chain (see docs/net_ana_stack_overflow.md)
         static constexpr AllocType NET_ANA_ALLOC = AllocType::PSRAM;
-        static constexpr UBaseType_t NET_ANA_PRIORITY = 8;  // Alta priorità per analisi
+        static constexpr UBaseType_t NET_ANA_PRIORITY = 8;  // High priority for analysis
 
         // WebServer - Used by web_server_task wrapper
         static constexpr uint32_t WEB_SERVER_STACK_SIZE = 32 * 1024;
         static constexpr AllocType WEB_SERVER_ALLOC = AllocType::PSRAM;  // HYBRID: PSRAM with runtime filesystem protection
-        static constexpr UBaseType_t WEB_SERVER_PRIORITY = 8;  // Alta priorità per streaming efficace (priorità maggiore di filesystem delegate=8)
+        static constexpr UBaseType_t WEB_SERVER_PRIORITY = 8;  // High priority for efficient streaming (priority higher than filesystem delegate=8)
     };
 
-    // ==== CONFIGURAZIONI SECURITY/ASSESSMENT ====
+    // ==== SECURITY/ASSESSMENT CONFIGURATIONS ====
     struct SecurityTasks {
         // VulnerabilityScanner - Now can use PSRAM (AsyncStorage engine handles flash operations)
         static constexpr uint32_t VULN_SCANNER_STACK_SIZE = 12288;  // ULTRA-AGGRESSIVE: 8KB → 6KB for memory crisis
         static constexpr AllocType VULN_SCANNER_ALLOC = AllocType::PSRAM;
-        static constexpr UBaseType_t VULN_SCANNER_PRIORITY = 6;  // Media-alta priorità
+        static constexpr UBaseType_t VULN_SCANNER_PRIORITY = 6;  // Medium-high priority
 
         // FuzzingEngine - Now can use PSRAM (AsyncStorage engine handles flash operations)
         static constexpr uint32_t FUZZING_ENGINE_STACK_SIZE = 12288;  // ULTRA-AGGRESSIVE: 9KB → 6KB for memory crisis
         static constexpr AllocType FUZZING_ENGINE_ALLOC = AllocType::PSRAM;
-        static constexpr UBaseType_t FUZZING_ENGINE_PRIORITY = 7;  // Alta priorità per fuzzing
+        static constexpr UBaseType_t FUZZING_ENGINE_PRIORITY = 7;  // High priority for fuzzing
 
         // IntrusionDetection - Now can use PSRAM (AsyncStorage engine handles flash operations)
         static constexpr uint32_t IDS_WORKER_STACK_SIZE = 12288; // ULTRA-AGGRESSIVE: 16KB → 12KB for memory crisis
         static constexpr AllocType IDS_WORKER_ALLOC = AllocType::PSRAM;
-        static constexpr UBaseType_t IDS_WORKER_PRIORITY = 5;  // Media priorità
+        static constexpr UBaseType_t IDS_WORKER_PRIORITY = 5;  // Medium priority
 
         // LogRetention - Now can use PSRAM (AsyncStorage engine handles flash operations)
         static constexpr uint32_t LOG_RETENTION_STACK_SIZE = 12288; // ULTRA-AGGRESSIVE: 16KB → 12KB for memory crisis
         static constexpr AllocType LOG_RETENTION_ALLOC = AllocType::PSRAM;
-        static constexpr UBaseType_t LOG_RETENTION_PRIORITY = 3;  // Bassa priorità
+        static constexpr UBaseType_t LOG_RETENTION_PRIORITY = 3;  // Low priority
     };
 
-    // ==== CONFIGURAZIONI DISCOVERY ====
+    // ==== DISCOVERY CONFIGURATIONS ====
     struct DiscoveryTasks {
-        static constexpr uint32_t PROTOCOL_STACK_SIZE = 12288;  // Richiede socket/TLS stabili
+        static constexpr uint32_t PROTOCOL_STACK_SIZE = 12288;  // Requires stable socket/TLS
         static constexpr AllocType PROTOCOL_ALLOC = AllocType::PSRAM;
         static constexpr UBaseType_t PROTOCOL_PRIORITY = tskIDLE_PRIORITY + 2;
 
@@ -103,7 +103,7 @@ namespace TaskConfig {
         static constexpr UBaseType_t GENERAL_PRIORITY = tskIDLE_PRIORITY + 2;
     };
 
-    // ==== CONFIGURAZIONI SANDBOX ====
+    // ==== SANDBOX CONFIGURATIONS ====
     struct SandboxTasks {
         static constexpr uint32_t WORKER_STACK_SIZE = 8192;
         static constexpr AllocType WORKER_ALLOC = AllocType::INTERNAL_RAM;
@@ -111,7 +111,7 @@ namespace TaskConfig {
     };
 
 
-    // ==== CONFIGURAZIONI REPORTING ====
+    // ==== REPORTING CONFIGURATIONS ====
     struct ReportingTasks {
         // EmailSender - Worker task for sending emails with SMTP/TLS operations
         static constexpr uint32_t EMAIL_SENDER_STACK_SIZE = 16384;  // 16KB for SMTP/TLS operations
@@ -124,14 +124,14 @@ namespace TaskConfig {
 
     // ==== HELPER FUNCTIONS ====
 
-    // Struct per configurazione task completa
+    // Struct for the complete task configuration
     struct TaskParams {
         uint32_t stackSize;
         AllocType allocType;
         UBaseType_t priority;
     };
 
-    // Crea task con configurazione completa (stack, allocazione, priorità)
+    // Create a task with complete configuration (stack, allocation, priority)
     inline TaskHandle_t createTask(TaskFunction_t taskFunc, const char* name,
                                  uint32_t stackSize, AllocType allocType,
                                  void* params, UBaseType_t priority,
@@ -147,7 +147,7 @@ namespace TaskConfig {
                                                  STACK_WORDS_FROM_BYTES(stackSize),
                                                  params, priority);
                 } else {
-                    // Default a core 1 per PSRAM
+                    // Default to core 1 for PSRAM
                     return create_task_core1_psram(taskFunc, name,
                                                  STACK_WORDS_FROM_BYTES(stackSize),
                                                  params, priority);
@@ -194,7 +194,7 @@ namespace TaskConfig {
         }
     }
 
-    // Overload semplificato con TaskParams
+    // Simplified overload with TaskParams
     inline TaskHandle_t createTask(TaskFunction_t taskFunc, const char* name,
                                  const TaskParams& params, void* taskParams,
                                  BaseType_t core = tskNO_AFFINITY) {
@@ -202,9 +202,9 @@ namespace TaskConfig {
                         taskParams, params.priority, core);
     }
 
-    // ==== CONFIGURAZIONI PREDEFINITE PER USO FACILE ====
+    // ==== PREDEFINED CONFIGURATIONS FOR EASY USE ====
 
-    // Definisce parametri completi per ogni task comune
+    // Defines complete parameters for each common task
     namespace Presets {
         constexpr TaskParams LOG_WRITER = {
             SystemTasks::LOG_WRITER_STACK_SIZE,
@@ -294,7 +294,7 @@ namespace TaskConfig {
 
     // ==== DEBUG/MONITORING ====
 
-    // Stampa configurazione completa
+    // Print the full configuration
     void printTaskConfiguration();
 
     // Get real memory usage from FreeRTOS
@@ -303,7 +303,7 @@ namespace TaskConfig {
     uint32_t getRealInternalRAMUsed();
     uint32_t getRealPSRAMUsed();
 
-    // Calcola memoria teorica per stack task (deprecated, use real values above)
+    // Calculate theoretical memory for task stacks (deprecated, use real values above)
     uint32_t calculateInternalRAMUsage();
     uint32_t calculatePSRAMUsage();
 

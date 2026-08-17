@@ -1,6 +1,6 @@
 <!doctype html>
 <html><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Gestione File Logging</title>
+<title>Log File Management</title>
 <style>
 body{font-family:system-ui;margin:1rem;background:#f6f6f6}
 .card{background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);padding:1rem;margin-bottom:1rem}
@@ -53,51 +53,51 @@ select[multiple]{min-height:120px}
 <body>
 
 <div class="card">
-<h1>🗂️ Gestione File di Logging</h1>
+<h1>🗂️ Log File Management</h1>
 <a href="/" class="btn nav-btn">← Dashboard</a>
 </div>
 
 <div class="card">
-    <h2>📋 Stato File di Log</h2>
+    <h2>📋 Log File Status</h2>
     <div id="status-msg" class="status" style="display:none;"></div>
 
-    <button class="btn" onclick="refreshFileStatus()">🔄 Aggiorna</button>
-    <button class="btn secondary" onclick="showConfigModal()">⚙️ Configura File</button>
+    <button class="btn" onclick="refreshFileStatus()">🔄 Refresh</button>
+    <button class="btn secondary" onclick="showConfigModal()">⚙️ Configure File</button>
 
     <table class="file-table" id="files-table">
         <thead>
             <tr>
                 <th>File</th>
-                <th>Stato</th>
-                <th>Dimensione</th>
-                <th>Dimensione Max</th>
-                <th>Canali</th>
-                <th>Azioni</th>
+                <th>Status</th>
+                <th>Size</th>
+                <th>Max Size</th>
+                <th>Channels</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody id="files-table-body">
-            <tr><td colspan="6">Caricamento...</td></tr>
+            <tr><td colspan="6">Loading...</td></tr>
         </tbody>
     </table>
 </div>
 
 <div class="card">
-    <h2>Stream Realtime per Canali</h2>
-    <div class="stream-hint">Seleziona file e canali, poi avvia/ferma lo stream SSE.</div>
+    <h2>Realtime Stream for Channels</h2>
+    <div class="stream-hint">Select file and channels, then start/stop the SSE stream.</div>
     <div class="stream-grid">
         <div class="form-group">
-            <label for="stream-file">File di log:</label>
+            <label for="stream-file">Log file:</label>
             <select id="stream-file"></select>
         </div>
         <div class="form-group">
-            <label for="stream-channels">Canali (multi-selezione):</label>
+            <label for="stream-channels">Channels (multi-select):</label>
             <select id="stream-channels" multiple></select>
         </div>
     </div>
     <div class="stream-actions">
-        <button id="stream-start" class="btn" onclick="startLiveStream()">Avvia</button>
+        <button id="stream-start" class="btn" onclick="startLiveStream()">Start</button>
         <button id="stream-stop" class="btn secondary" onclick="stopLiveStream()" disabled>Stop</button>
-        <button class="btn secondary" onclick="clearLiveStream()">Pulisci</button>
+        <button class="btn secondary" onclick="clearLiveStream()">Clear</button>
         <label><input type="checkbox" id="stream-autoscroll" checked> Auto-scroll</label>
     </div>
     <textarea id="stream-output" class="stream-output" readonly></textarea>
@@ -107,35 +107,35 @@ select[multiple]{min-height:120px}
 <div id="config-modal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="closeConfigModal()">&times;</span>
-        <h3>⚙️ Configurazione File</h3>
+        <h3>⚙️ File Configuration</h3>
         <form id="config-form">
             <div class="form-group">
                 <label>File:</label>
                 <select id="config-file" onchange="loadFileConfig()">
-                    <option value="">Seleziona un file...</option>
+                    <option value="">Select a file...</option>
                 </select>
             </div>
             <div class="form-group">
-                <label>Abilitato:</label>
+                <label>Enabled:</label>
                 <label class="toggle-switch">
                     <input type="checkbox" id="config-enabled">
                     <span class="slider"></span>
                 </label>
             </div>
             <div class="form-group">
-                <label>Dimensione Max (KB):</label>
+                <label>Max Size (KB):</label>
                 <input type="number" id="config-size" min="64" max="10240" value="1024">
             </div>
             <div class="form-group">
-                <label>Max File di Backup:</label>
+                <label>Max Backup Files:</label>
                 <input type="number" id="config-files" min="1" max="10" value="3">
             </div>
             <div class="form-group">
-                <label>Canali (separati da virgola):</label>
+                <label>Channels (comma-separated):</label>
                 <input type="text" id="config-channels" placeholder="app,general,system">
             </div>
-            <button type="button" class="btn" onclick="saveFileConfig()">💾 Salva</button>
-            <button type="button" class="btn secondary" onclick="closeConfigModal()">❌ Annulla</button>
+            <button type="button" class="btn" onclick="saveFileConfig()">💾 Save</button>
+            <button type="button" class="btn secondary" onclick="closeConfigModal()">❌ Cancel</button>
         </form>
     </div>
 </div>
@@ -221,12 +221,12 @@ async function refreshFileStatus(override) {
             files_data = data.files;
             updateFilesTable(data.files);
             updateStreamSelectors(data.files);
-            showStatus('✅ Stato file aggiornato', 'ok');
+            showStatus('✅ File status updated', 'ok');
         } else {
-            throw new Error('Formato risposta non valido');
+            throw new Error('Invalid response format');
         }
     } catch (error) {
-        showStatus('❌ Errore nel caricamento: ' + error.message, 'err');
+        showStatus('❌ Error loading: ' + error.message, 'err');
     }
 }
 
@@ -239,14 +239,14 @@ function updateFilesTable(files) {
         row.innerHTML = `
             <td><strong>${file.filename}</strong><br><small>${file.path}</small></td>
             <td><span class="${file.enabled ? 'file-enabled' : 'file-disabled'}">
-                ${file.enabled ? '✅ Abilitato' : '❌ Disabilitato'}</span></td>
+                ${file.enabled ? '✅ Enabled' : '❌ Disabled'}</span></td>
             <td class="file-size">${file.current_size_formatted}</td>
             <td class="file-size">${file.max_size_kb} KB</td>
             <td class="channel-list">${file.channels.join(', ')}</td>
             <td>
                 <button class="btn ${file.enabled ? 'danger' : ''}"
                         onclick="toggleFile('${file.filename}', ${!file.enabled})">
-                    ${file.enabled ? '❌ Disabilita' : '✅ Abilita'}
+                    ${file.enabled ? '❌ Disable' : '✅ Enable'}
                 </button>
             </td>
         `;
@@ -266,13 +266,13 @@ async function toggleFile(filename, enable) {
         });
 
         if (response.ok) {
-            showStatus(`✅ File ${filename} ${enable ? 'abilitato' : 'disabilitato'}`, 'ok');
+            showStatus(`✅ File ${filename} ${enable ? 'enabled' : 'disabled'}`, 'ok');
             refreshFileStatus();
         } else {
-            throw new Error('Errore del server');
+            throw new Error('Server error');
         }
     } catch (error) {
-        showStatus('❌ Errore nell\'operazione: ' + error.message, 'err');
+        showStatus('❌ Error in operation: ' + error.message, 'err');
     }
 }
 
@@ -284,7 +284,7 @@ async function loadFileList(override) {
         })();
 
         const select = document.getElementById('config-file');
-        select.innerHTML = '<option value="">Seleziona un file...</option>';
+        select.innerHTML = '<option value="">Select a file...</option>';
 
         if (data.files) {
             data.files.forEach(file => {
@@ -358,7 +358,7 @@ function startLiveStream() {
 
     const sid = window.__sidToken;
     if (!sid) {
-        showStatus('Errore: sessione non disponibile (sid assente)', 'err');
+        showStatus('Error: session unavailable (sid missing)', 'err');
         return;
     }
 
@@ -367,19 +367,19 @@ function startLiveStream() {
     const url = `/api/logs/sse?sid=${encodeURIComponent(sid)}&name=${encodeURIComponent(file)}&channels=${encodeURIComponent(channels)}&tail=80`;
 
     streamSource = new EventSource(url);
-    streamSource.addEventListener('ready', () => appendLiveLine('[SSE] stream avviato'));
+    streamSource.addEventListener('ready', () => appendLiveLine('[SSE] stream started'));
     streamSource.addEventListener('log', ev => appendLiveLine(ev.data || ''));
     streamSource.addEventListener('error', ev => {
         if (ev && ev.data) appendLiveLine('[SSE][ERROR] ' + ev.data);
     });
     streamSource.onerror = () => {
-        appendLiveLine('[SSE] connessione chiusa');
+        appendLiveLine('[SSE] connection closed');
         stopLiveStream();
     };
 
     document.getElementById('stream-start').disabled = true;
     document.getElementById('stream-stop').disabled = false;
-    showStatus('Stream realtime avviato', 'ok');
+    showStatus('Realtime stream started', 'ok');
 }
 
 function stopLiveStream() {
@@ -412,14 +412,14 @@ async function loadFileConfig() {
             document.getElementById('config-channels').value = config.channels.join(', ');
         }
     } catch (error) {
-        showStatus('❌ Errore nel caricamento configurazione: ' + error.message, 'err');
+        showStatus('❌ Error loading configuration: ' + error.message, 'err');
     }
 }
 
 async function saveFileConfig() {
     const filename = document.getElementById('config-file').value;
     if (!filename) {
-        showStatus('❌ Seleziona un file da configurare', 'err');
+        showStatus('❌ Select a file to configure', 'err');
         return;
     }
 
@@ -439,14 +439,14 @@ async function saveFileConfig() {
         });
 
         if (response.ok) {
-            showStatus('✅ Configurazione salvata', 'ok');
+            showStatus('✅ Configuration saved', 'ok');
             closeConfigModal();
             refreshFileStatus();
         } else {
-            throw new Error('Errore del server');
+            throw new Error('Server error');
         }
     } catch (error) {
-        showStatus('❌ Errore nel salvataggio: ' + error.message, 'err');
+        showStatus('❌ Error saving: ' + error.message, 'err');
     }
 }
 

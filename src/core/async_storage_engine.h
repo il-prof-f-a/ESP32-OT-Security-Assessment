@@ -225,7 +225,7 @@ struct Operation {
 // POD message structure for FreeRTOS queue (avoids std::shared_ptr issues)
 struct OpMsg {
     Operation* op;
-    bool is_sync;                 // true = chiamante in attesa
+    bool is_sync;                 // true = caller waiting
 };
 
 // ========================= MAIN ENGINE CLASS =========================

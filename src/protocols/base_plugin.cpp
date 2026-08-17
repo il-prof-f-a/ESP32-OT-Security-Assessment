@@ -66,9 +66,9 @@ namespace {
             tmp.timeout_ms = desired;
             if (esp_task_wdt_reconfigure(&tmp) == ESP_OK) {
                 valid_ = true;
-                LOG_INFOF(TAG_GENERAL, "Task WDT esteso a %ums per general discovery", (unsigned)desired);
+                LOG_INFOF(TAG_GENERAL, "Task WDT extended to %ums for general discovery", (unsigned)desired);
             } else {
-                LOG_WARNING(TAG_GENERAL, "Impossibile estendere il Task WDT per general discovery");
+                LOG_WARNING(TAG_GENERAL, "Unable to extend the Task WDT for general discovery");
             }
         }
 
@@ -77,9 +77,9 @@ namespace {
                 return;
             }
             if (esp_task_wdt_reconfigure(&saved_config_) == ESP_OK) {
-                LOG_INFOF(TAG_GENERAL, "Task WDT ripristinato a %ums", (unsigned)saved_config_.timeout_ms);
+                LOG_INFOF(TAG_GENERAL, "Task WDT restored to %ums", (unsigned)saved_config_.timeout_ms);
             } else {
-                LOG_WARNING(TAG_GENERAL, "Ripristino Task WDT fallito dopo general discovery");
+                LOG_WARNING(TAG_GENERAL, "Task WDT restore failed after general discovery");
             }
         }
     private:
@@ -556,7 +556,7 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
         copyTrimmed(raw_target, raw_len, target_norm, sizeof(target_norm));
     }
     if (!raw_target || target_norm[0] == '\0') {
-        LOG_WARNING(TAG_GENERAL, "Target non valido per general discovery");
+        LOG_WARNING(TAG_GENERAL, "Invalid target for general discovery");
         cJSON* err = cJSON_CreateObject();
         if (!err) {
             return std::string("{}");
@@ -582,14 +582,14 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
     cJSON* reachable_summary = cJSON_CreateArray();
     cJSON_AddItemToObject(root, "reachable_hosts", reachable_summary);
 
-    // Selezione interfaccia: default ETH_DEF (Ethernet-only come in passato).
+    // Interface selection: default ETH_DEF (Ethernet-only, as before).
     esp_netif_t* netif = nullptr;
     const char* requested_ifkey = nullptr;
     if (!cfg.bind_ifkey.empty()) {
         requested_ifkey = cfg.bind_ifkey.c_str();
     }
     if (requested_ifkey && strcmp(requested_ifkey, "AUTO") == 0) {
-        // AUTO: prova Ethernet poi WiFi STA (non AP, per evitare scansioni dalla rete di setup).
+        // AUTO: try Ethernet then WiFi STA (not AP, to avoid scans from the setup network).
         netif = esp_netif_get_handle_from_ifkey("ETH_DEF");
         if (!netif) {
             netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
@@ -664,7 +664,7 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
     const uint16_t ping_tcp_port = (cfg.ping_tcp_port == 0) ? 80 : cfg.ping_tcp_port;
 
     LOG_INFOF(TAG_GENERAL,
-              "Avvio general discovery: mode=%s target=%s hosts=%u port_scan=%s per_host_timeout=%u connect_timeout=%u batch=%u delay_ms=%u bound_ip=%s",
+              "Starting general discovery: mode=%s target=%s hosts=%u port_scan=%s per_host_timeout=%u connect_timeout=%u batch=%u delay_ms=%u bound_ip=%s",
               mode_label,
               target_norm,
               (unsigned)hosts_enumerated,
@@ -759,7 +759,7 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
         local.sin_addr.s_addr = ip_info.ip.addr;
         local.sin_port = 0;
         if (::bind(ctx.sock, (struct sockaddr*)&local, sizeof(local)) != 0) {
-            LOG_WARNINGF(TAG_GENERAL, "bind() fallita su sock=%d errno=%d - il socket potrebbe usare l'interfaccia errata", ctx.sock, errno);
+            LOG_WARNINGF(TAG_GENERAL, "bind() failed on sock=%d errno=%d - the socket might be using the wrong interface", ctx.sock, errno);
         }
 #ifdef SO_BINDTODEVICE
         if (netif) {
@@ -890,19 +890,19 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
             }
         }
 
-        // lwIP (ESP-IDF): connect non-bloccante riuscito → wfds; fallito (ECONNREFUSED/RST) → rfds.
-        // Monitoriamo entrambi per rilevare correttamente gli host attivi con porta chiusa.
+        // lwIP (ESP-IDF): non-blocking connect succeeded → wfds; failed (ECONNREFUSED/RST) → rfds.
+        // We monitor both to correctly detect active hosts with a closed port.
         //
-        // In modalita' port_scan apriamo UN round per porta anziche' batch*port_count socket
-        // contemporaneamente. Con batch=4 e 4 porte questo riduce i socket concorrenti da 16 a 4,
-        // evitando di esaurire il pool lwIP (CONFIG_LWIP_MAX_SOCKETS ~10-16) dell'ESP32.
+        // In port_scan mode we open ONE round per port instead of batch*port_count sockets
+        // simultaneously. With batch=4 and 4 ports this reduces concurrent sockets from 16 to 4,
+        // avoiding exhausting the ESP32's lwIP pool (CONFIG_LWIP_MAX_SOCKETS ~10-16).
 
         if (cfg.port_scan) {
             const size_t batch_host_count = batch_end - batch_start;
             const size_t num_ports = port_list.size();
 
             for (size_t p = 0; p < num_ports; ++p) {
-                // Apri socket solo per la porta p su tutti gli host del batch corrente
+                // Open socket only for port p on all hosts of the current batch
                 size_t pending_count = 0;
                 for (size_t h = 0; h < batch_host_count; ++h) {
                     SocketResult& job = socket_jobs[h * num_ports + p];
@@ -915,7 +915,7 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
                     }
                 }
 
-                // Attendi il completamento di questa porta per tutti gli host del batch
+                // Wait for this port to complete for all hosts in the batch
                 while (pending_count > 0) {
                     feedGeneralDiscoveryWatchdog();
 
@@ -974,7 +974,7 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
                     int sel = select(max_fd + 1, &rfds, &wfds, NULL, &tv);
                     if (sel < 0) {
                         int sel_err = errno;
-                        LOG_WARNINGF(TAG_GENERAL, "select fallita porta %u: errno=%d",
+                        LOG_WARNINGF(TAG_GENERAL, "select failed port %u: errno=%d",
                                      (unsigned)port_list[p], sel_err);
                         for (size_t h = 0; h < batch_host_count; ++h) {
                             SocketResult& job = socket_jobs[h * num_ports + p];
@@ -1025,12 +1025,12 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
                     }
                 }
 
-                // Chiudi eventuali socket rimasti aperti (uscita anticipata per errore select)
+                // Close any sockets left open (early exit due to select error)
                 for (size_t h = 0; h < batch_host_count; ++h) {
                     closeSocket(socket_jobs[h * num_ports + p]);
                 }
 
-                // Piccola pausa tra porte per rilasciare risorse lwIP prima del round successivo
+                // Small pause between ports to release lwIP resources before the next round
                 if (p + 1 < num_ports) {
                     vTaskDelay(pdMS_TO_TICKS(20));
                     feedGeneralDiscoveryWatchdog();
@@ -1107,7 +1107,7 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
                 int sel = select(max_fd + 1, &rfds, &wfds, NULL, &tv);
                 if (sel < 0) {
                     int sel_err = errno;
-                    LOG_WARNINGF(TAG_GENERAL, "select fallita nel batch: errno=%d", sel_err);
+                    LOG_WARNINGF(TAG_GENERAL, "select failed in batch: errno=%d", sel_err);
                     for (size_t i = 0; i < socket_jobs.size(); ++i) {
                         SocketResult& job = socket_jobs[i];
                         if (!job.pending) {
@@ -1297,13 +1297,13 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
 
             if (cfg.port_scan) {
                 LOG_INFOF(TAG_GENERAL,
-                          "Host %s completato: reachable=%s open_ports=%u",
+                          "Host %s completed: reachable=%s open_ports=%u",
                           ip,
                           reachable ? "true" : "false",
                           (unsigned)host_open_ports);
             } else {
                 LOG_INFOF(TAG_GENERAL,
-                          "Host %s completato: reachable=%s latency=%dms",
+                          "Host %s completed: reachable=%s latency=%dms",
                           ip,
                           reachable ? "true" : "false",
                           (int)summary_latency_ms);
@@ -1327,7 +1327,7 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
                     psram_string payload = PSRAMUtils::createPSRAMString(ev_json);
                     rep->reportEvent(type, payload);
                     LOG_INFOF(TAG_GENERAL,
-                              "Progresso discovery %u/%u ip=%s raggiungibili=%u porte_aperte=%u",
+                              "Discovery progress %u/%u ip=%s reachable=%u open_ports=%u",
                               (unsigned)hosts_scanned,
                               (unsigned)hosts_enumerated,
                               ip,
@@ -1385,7 +1385,7 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
     }
 
     LOG_INFOF(TAG_GENERAL,
-              "General discovery completata: target=%s mode=%s hosts_scansionati=%u raggiungibili=%u porte_aperte=%u",
+              "General discovery completed: target=%s mode=%s hosts_scanned=%u reachable=%u open_ports=%u",
               target_norm,
               mode_label,
               (unsigned)hosts_scanned,
@@ -1452,37 +1452,37 @@ void BasePlugin::loadIDSRulesPSRAM(const psram_string& rules_json) {
 // ==================== FLOW MANAGEMENT IMPLEMENTATION ====================
 
 bool BasePlugin::trackPacketInFlow(const NetworkPacket& packet) {
-    // 1. Costruisci FlowKey specifica del protocollo
+    // 1. Build the protocol-specific FlowKey
     PSRAMAllocator<char> alloc;
     FlowKey key(alloc);
 
     if (!buildFlowKey(packet, key)) {
-        // Pacchetto non tracciabile (es: handshake incompleto, malformato)
+        // Non-trackable packet (e.g., incomplete handshake, malformed)
         return false;
     }
 
-    // 2. Ottieni o crea flusso
+    // 2. Get or create the flow
     FlowData* flow = flow_table_.getOrCreateFlow(key);
     if (!flow) {
-        // Tabella piena o errore allocazione PSRAM
+        // Table full or PSRAM allocation error
         return false;
     }
 
-    // 3. Aggiorna metriche base
+    // 3. Update base metrics
     flow->metrics.onPacketReceived(packet.length);
 
-    // Aggiorna timestamp
+    // Update timestamp
     if (flow->metrics.first_packet_ms == 0) {
         flow->metrics.first_packet_ms = esp_timer_get_time() / 1000;
     }
 
-    // 4. Classifica operazione
+    // 4. Classify the operation
     psram_string operation_type(alloc);
     psram_string operation_details(alloc);
     bool is_error = false;
 
     if (classifyPacketOperation(packet, operation_type, operation_details, is_error)) {
-        // Aggiorna contatori specifici
+        // Update specific counters
         if (!operation_type.empty()) {
             if (operation_type == "READ") {
                 flow->metrics.onReadOperation();
@@ -1497,31 +1497,31 @@ bool BasePlugin::trackPacketInFlow(const NetworkPacket& packet) {
             flow->metrics.onErrorResponse();
         }
 
-        // 5. Aggiungi operazione allo storico
+        // 5. Add the operation to the history
         uint32_t timestamp = esp_timer_get_time() / 1000;
         flow->addOperation(operation_type.c_str(), operation_details.c_str(),
                           timestamp, !is_error);
     } else {
-        // Pacchetto non classificabile, potrebbe essere malformato
-        if (packet.length < 8) {  // Soglia arbitraria per pacchetti sospetti
+        // Unclassifiable packet, it might be malformed
+        if (packet.length < 8) {  // Arbitrary threshold for suspicious packets
             flow->metrics.onMalformedPacket();
         }
     }
 
-    // 6. Aggiorna velocità (ogni 100 pacchetti per efficienza)
+    // 6. Update speed (every 100 packets for efficiency)
     if (flow->metrics.packet_count % 100 == 0) {
         flow->metrics.updateRatesRolling();
     }
 
-    // 7. Aggiorna stato protocollo tramite SessionStateMachine centralizzata
-    // Questo processa il pacchetto attraverso la state machine generica
+    // 7. Update the protocol state via the centralized SessionStateMachine
+    // This processes the packet through the generic state machine
     session_state_machine_.processPacket(packet, *flow);
 
-    // 8. Aggiorna stato protocollo specifico del plugin (opzionale, per estensioni)
-    // I plugin possono usare questo per tracking addizionale oltre alla state machine
+    // 8. Update the plugin-specific protocol state (optional, for extensions)
+    // Plugins can use this for additional tracking beyond the state machine
     updateProtocolState(packet, *flow);
 
-    // 9. Assegna label
+    // 9. Assign label
     assignFlowLabel(*flow);
 
     return true;

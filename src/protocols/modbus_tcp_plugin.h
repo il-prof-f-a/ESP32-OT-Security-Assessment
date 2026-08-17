@@ -10,26 +10,26 @@
 
 // Forward declarations for Modbus Attack Types
 enum class ModbusAttackType {
-    BASIC_FUZZING = 0,           // Fuzzing standard già implementato
-    UNAUTHORIZED_WRITES,         // Scritture non autorizzate avanzate
+    BASIC_FUZZING = 0,           // Standard fuzzing already implemented
+    UNAUTHORIZED_WRITES,         // Advanced unauthorized writes
     DOS_LISTEN_ONLY,            // DoS via Diagnostics Listen-Only Mode
-    BROADCAST_ATTACKS,          // Attacchi broadcast RTU
-    DEVICE_DISCOVERY,           // Enumerazione e discovery approfondita
-    VULNERABILITY_EXPLOITS      // Exploit specifici per buffer overflow/malform
+    BROADCAST_ATTACKS,          // RTU broadcast attacks
+    DEVICE_DISCOVERY,           // In-depth enumeration and discovery
+    VULNERABILITY_EXPLOITS      // Specific exploits for buffer overflow/malformed
 };
 
-// Configurazione avanzata per attacchi Modbus
+// Advanced configuration for Modbus attacks
 struct ModbusAttackConfig {
     ModbusAttackType attack_type = ModbusAttackType::BASIC_FUZZING;
-    std::vector<uint16_t> critical_registers;    // Registri critici da targetizzare
-    std::vector<uint8_t> unit_id_range;         // Range Unit ID per discovery
-    bool stealth_mode = false;                  // Modalità stealth (broadcast, no response)
+    std::vector<uint16_t> critical_registers;    // Critical registers to target
+    std::vector<uint8_t> unit_id_range;         // Unit ID range for discovery
+    bool stealth_mode = false;                  // Stealth mode (broadcast, no response)
     std::string discovery_depth = "basic";      // "basic", "regular", "extended"
-    uint32_t timing_delay_ms = 100;             // Delay tra attacchi per timing attacks
-    bool force_broadcast = false;               // Forza uso Unit ID 0 (broadcast)
+    uint32_t timing_delay_ms = 100;             // Delay between attacks for timing attacks
+    bool force_broadcast = false;               // Force use of Unit ID 0 (broadcast)
 };
 
-// Struttura per risultati discovery
+// Structure for discovery results
 struct ModbusDeviceInfo {
     std::string ip_address;
     uint16_t port = 502;
@@ -42,7 +42,7 @@ struct ModbusDeviceInfo {
     bool supports_broadcast = false;
 };
 
-// Classe base per attack profiles specializzati (integrata nel plugin)
+// Base class for specialized attack profiles (integrated into the plugin)
 class ModbusAttackProfile {
 public:
     virtual ~ModbusAttackProfile() = default;

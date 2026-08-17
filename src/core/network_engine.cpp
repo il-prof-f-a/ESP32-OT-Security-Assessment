@@ -92,7 +92,7 @@ bool NetworkEngine::initialize(esp_netif* /*netif*/, const NetRingConfig& rcfg){
     //LOG_INFO("NetEngine", "Semaphores created");
 
     // tasks: cap (idle feeder) on core 0; analysis on core 1 - PERFORMANCE CRITICAL in internal memory
-    // Usa configurazione centralizzata per net_cap task
+    // Use centralized configuration for net_cap task
     th_cap_ = TaskConfig::createTask(&NetworkEngine::capTaskThunk, "net_cap",
                                     TaskConfig::Presets::NET_CAP,
                                     this, 0);
@@ -101,7 +101,7 @@ bool NetworkEngine::initialize(esp_netif* /*netif*/, const NetRingConfig& rcfg){
         LOG_ERROR("NetEngine", "Failed to create capture task");
         return false;
     }
-    // Usa configurazione centralizzata per net_ana task
+    // Use centralized configuration for net_ana task
     th_ana_ = TaskConfig::createTask(&NetworkEngine::anaTaskThunk, "net_ana",
                                     TaskConfig::Presets::NET_ANA,
                                     this, 1);
@@ -194,9 +194,9 @@ void NetworkEngine::ingestIP(bool tcp, const char* src_ip, uint16_t sport,
 void NetworkEngine::ingestL2(const uint8_t src_mac[6], const uint8_t dst_mac[6], uint16_t ethertype,
                              const uint8_t* payload, uint16_t len){
     //if (!payload || !len) return;
-    //LOG_INFO("NetworkEngine", "ingestL2 prima semaforo");
+    //LOG_INFO("NetworkEngine", "ingestL2 before semaphore");
     if (xSemaphoreTake(sem_space_, 0) != pdTRUE) { cnt_dropped_.fetch_add(1); return; }
-    //LOG_INFO("NetworkEngine", "ingestL2 dopo semaforo");
+    //LOG_INFO("NetworkEngine", "ingestL2 after semaphore");
     uint32_t w = wr_.fetch_add(1);
     Slot& s = ring_[w % ring_.size()];
     const uint32_t cap = slot_buf_size_ ? slot_buf_size_ : 0;
@@ -299,7 +299,7 @@ void NetworkEngine::anaLoop(){
     for(;;){
         if (xSemaphoreTake(sem_items_, portMAX_DELAY) == pdTRUE){
 
-            //LOG_INFO("NetworkEngine", "anaLoop: prelievo del dato dal buffer ad anello");
+            //LOG_INFO("NetworkEngine", "anaLoop: retrieving the data from the ring buffer");
             uint32_t r = rd_.fetch_add(1);
             Slot& s = ring_[r % ring_.size()];
             // Dispatch to callbacks

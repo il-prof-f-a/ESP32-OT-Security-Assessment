@@ -22,7 +22,7 @@ typedef struct {
     size_t files;
     size_t dirs;
     size_t bytes;
-    top_file_t top[5]; // top 5 per dimensione
+    top_file_t top[5]; // top 5 by size
 } fs_stats_t;
 
 static void insert_top(top_file_t top[], const char* path, size_t size){
@@ -79,7 +79,7 @@ static esp_err_t fs_rm_rf(const char* base, const char* const* whitelist, size_t
 
     struct dirent *ent;
     char path[300];
-    // Prima: rimuovi file
+    // First: remove files
     rewinddir(dir);
     while ((ent = readdir(dir)) != NULL){
         if (strcmp(ent->d_name, ".")==0 || strcmp(ent->d_name, "..")==0) continue;
@@ -87,17 +87,17 @@ static esp_err_t fs_rm_rf(const char* base, const char* const* whitelist, size_t
         struct stat sb;
         if (stat(path, &sb) == 0 && S_ISREG(sb.st_mode)){
             if (is_in_whitelist(path, whitelist, wl_count) == ESP_OK){
-                LOG_INFOF(TAG, "Preservato (whitelist): %s", path);
+                LOG_INFOF(TAG, "Preserved (whitelist): %s", path);
                 continue;
             }
             if (unlink(path) != 0){
-                LOG_WARNINGF(TAG, "unlink fallita: %s", path);
+                LOG_WARNINGF(TAG, "unlink failed: %s", path);
             } else {
-                LOG_INFOF(TAG, "Rimosso file: %s", path);
+                LOG_INFOF(TAG, "Removed file: %s", path);
             }
         }
     }
-    // Poi: rimuovi directory ricorsivamente
+    // Then: remove directories recursively
     rewinddir(dir);
     while ((ent = readdir(dir)) != NULL){
         if (strcmp(ent->d_name, ".")==0 || strcmp(ent->d_name, "..")==0) continue;
@@ -105,14 +105,14 @@ static esp_err_t fs_rm_rf(const char* base, const char* const* whitelist, size_t
         struct stat sb;
         if (stat(path, &sb) == 0 && S_ISDIR(sb.st_mode)){
             if (is_in_whitelist(path, whitelist, wl_count) == ESP_OK){
-                LOG_INFOF(TAG, "Preservata dir (whitelist): %s", path);
+                LOG_INFOF(TAG, "Preserved dir (whitelist): %s", path);
                 continue;
             }
             fs_rm_rf(path, whitelist, wl_count);
             if (rmdir(path) != 0){
-                LOG_WARNINGF(TAG, "rmdir fallita: %s", path);
+                LOG_WARNINGF(TAG, "rmdir failed: %s", path);
             } else {
-                LOG_INFOF(TAG, "Rimossa dir: %s", path);
+                LOG_INFOF(TAG, "Removed dir: %s", path);
             }
         }
     }
@@ -131,7 +131,7 @@ void fs_print_littlefs_report(const char* base_path, const char* part_label){
 
     LOG_INFOF(TAG, "LittleFS '%s' @ %s", part_label, base_path);
     LOG_INFOF(TAG, " Volume: total=%u, used=%u, free=%u", (unsigned)total, (unsigned)used, (unsigned)free);
-    LOG_INFOF(TAG, " Contenuto: files=%u, dirs=%u, bytes_totali=%u", (unsigned)st.files, (unsigned)st.dirs, (unsigned)st.bytes);
+    LOG_INFOF(TAG, " Contents: files=%u, dirs=%u, total_bytes=%u", (unsigned)st.files, (unsigned)st.dirs, (unsigned)st.bytes);
 
     for (int i=0;i<5;i++){
         if (st.top[i].size > 0){
@@ -141,7 +141,7 @@ void fs_print_littlefs_report(const char* base_path, const char* part_label){
 }
 
 void fs_purge_littlefs(const char* base_path, const char* const* whitelist, size_t wl_count){
-    LOG_WARNINGF(TAG, "Pulizia LittleFS in corso su %s ...", base_path);
+    LOG_WARNINGF(TAG, "LittleFS cleanup in progress on %s ...", base_path);
     fs_rm_rf(base_path, whitelist, wl_count);
-    LOG_WARNINGF(TAG, "Pulizia completata.");
+    LOG_WARNINGF(TAG, "Cleanup completed.");
 }

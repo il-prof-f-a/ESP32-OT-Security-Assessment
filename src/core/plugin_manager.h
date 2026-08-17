@@ -21,8 +21,8 @@ struct PluginStatus {
 
 struct ProtocolInfo {
     ProtocolType type;
-    const char*  key;   // es. "modbus", "s7", "opcua", "ethernetip", "profinet"
-    std::string  name;  // human-friendly, es. "Modbus TCP"
+    const char*  key;   // e.g. "modbus", "s7", "opcua", "ethernetip", "profinet"
+    std::string  name;  // human-friendly, e.g. "Modbus TCP"
 };
 
 class PluginManager {

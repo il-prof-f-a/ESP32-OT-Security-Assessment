@@ -1,15 +1,15 @@
 /**
  * @file flow_data.h
- * @brief Struttura dati unificata per flussi di rete
+ * @brief Unified data structure for network flows
  *
- * Combina tutti gli elementi di un flusso:
- * - Chiave identificativa (FlowKey)
- * - Stato macchina (FlowState)
- * - Metriche (FlowMetrics)
- * - Buffer circolare operazioni recenti (PSRAM)
- * - Dati specifici del protocollo (puntatore opaco)
+ * Combines all the elements of a flow:
+ * - Identifying key (FlowKey)
+ * - Machine state (FlowState)
+ * - Metrics (FlowMetrics)
+ * - Circular buffer of recent operations (PSRAM)
+ * - Protocol-specific data (opaque pointer)
  *
- * ALLOCAZIONE: PSRAM (tutte le stringhe e buffer)
+ * ALLOCATION: PSRAM (all strings and buffers)
  *
  * @date 2025-10-21
  * @version 1.0
@@ -27,26 +27,26 @@
 #include <cstdint>
 
 /**
- * @brief Singola operazione tracciata nel flusso
+ * @brief Single operation tracked in the flow
  *
- * Rappresenta un'azione significativa rilevata nel flusso
- * (es: READ, WRITE, CONTROL, ERROR).
+ * Represents a significant action detected in the flow
+ * (e.g.: READ, WRITE, CONTROL, ERROR).
  *
- * ALLOCAZIONE: PSRAM (stringhe usano PSRAMAllocator)
+ * ALLOCATION: PSRAM (strings use PSRAMAllocator)
  */
 struct FlowOperation {
     /**
-     * Tipo operazione (es: "READ", "WRITE", "CONTROL", "ERROR", "DIAGNOSTIC")
+     * Operation type (e.g.: "READ", "WRITE", "CONTROL", "ERROR", "DIAGNOSTIC")
      */
     psram_string type;
 
     /**
-     * Dettagli specifici protocollo (es: "FC=0x03 addr=100", "Browse /Root")
+     * Protocol-specific details (e.g.: "FC=0x03 addr=100", "Browse /Root")
      */
     psram_string details;
 
     /**
-     * Timestamp operazione (millisecondi da boot)
+     * Operation timestamp (milliseconds since boot)
      */
     uint32_t timestamp_ms;
 
@@ -56,7 +56,7 @@ struct FlowOperation {
     bool success;
 
     /**
-     * Costruttore default PSRAM-safe
+     * PSRAM-safe default constructor
      */
     FlowOperation(PSRAMAllocator<char> alloc = PSRAMAllocator<char>())
         : type(alloc),
@@ -65,7 +65,7 @@ struct FlowOperation {
           success(true) {}
 
     /**
-     * Costruttore con parametri
+     * Constructor with parameters
      */
     FlowOperation(const char* op_type, const char* op_details,
                  uint32_t timestamp, bool op_success = true,
@@ -77,79 +77,79 @@ struct FlowOperation {
 };
 
 /**
- * @brief Struttura dati completa per un flusso di rete
+ * @brief Complete data structure for a network flow
  *
  * Contiene:
- * - Identificazione (FlowKey)
- * - Stato corrente (FlowState)
- * - Metriche accumulate (FlowMetrics)
- * - Buffer circolare operazioni recenti (std::deque in PSRAM)
- * - Puntatore opaco a dati specifici del protocollo
+ * - Identification (FlowKey)
+ * - Current state (FlowState)
+ * - Accumulated metrics (FlowMetrics)
+ * - Circular buffer of recent operations (std::deque in PSRAM)
+ * - Opaque pointer to protocol-specific data
  *
- * ALLOCAZIONE: PSRAM per tutte le allocazioni dinamiche
+ * ALLOCATION: PSRAM for all dynamic allocations
  */
 struct FlowData {
-    // ==================== IDENTIFICAZIONE ====================
+    // ==================== IDENTIFICATION ====================
 
     /**
-     * Chiave identificativa del flusso
+     * Identifying key of the flow
      */
     FlowKey key;
 
-    // ==================== STATO ====================
+    // ==================== STATE ====================
 
     /**
-     * Stato corrente della macchina a stati
+     * Current state of the state machine
      */
     FlowState state;
 
-    // ==================== METRICHE ====================
+    // ==================== METRICS ====================
 
     /**
-     * Metriche accumulate del flusso
+     * Accumulated metrics of the flow
      */
     FlowMetrics metrics;
 
-    // ==================== OPERAZIONI RECENTI ====================
+    // ==================== RECENT OPERATIONS ====================
 
     /**
-     * Buffer circolare di operazioni recenti
-     * Usa std::deque con PSRAMAllocator per allocazione in PSRAM
-     * FIFO: quando raggiunge max_operations, rimuove le più vecchie
+     * Circular buffer of recent operations
+     * Uses std::deque with PSRAMAllocator for PSRAM allocation
+     * FIFO: when it reaches max_operations, it removes the oldest ones
      */
     std::deque<FlowOperation, PSRAMAllocator<FlowOperation>> recent_operations;
 
     /**
-     * Numero massimo di operazioni da mantenere nel buffer
-     * Configurabile (default: 50)
+     * Maximum number of operations to keep in the buffer
+     * Configurable (default: 50)
      */
     uint16_t max_operations;
 
-    // ==================== DATI SPECIFICI PROTOCOLLO ====================
+    // ==================== PROTOCOL-SPECIFIC DATA ====================
 
     /**
-     * Puntatore opaco a dati specifici del protocollo
+     * Opaque pointer to protocol-specific data
      *
-     * Ogni plugin può allocare la propria struttura dati in PSRAM
-     * e memorizzare il puntatore qui.
+     * Each plugin can allocate its own data structure in PSRAM
+     * and store the pointer here.
      *
-     * Esempi:
-     * - Modbus: ModbusSessionData* (indirizzo unit, registri acceduti, etc.)
+     * Examples:
+     * - Modbus: ModbusSessionData* (unit address, accessed registers, etc.)
      * - S7: S7SessionData* (rack/slot, PDU ref, SZL reads, etc.)
      * - OPC UA: OPCUASessionData* (channel_id, token_id, endpoints, etc.)
      *
-     * IMPORTANTE: Il plugin è responsabile di allocare e deallocare
-     * questi dati usando heap_caps_malloc(MALLOC_CAP_SPIRAM).
+     * IMPORTANT: The plugin is responsible for allocating and deallocating
+     * this data using heap_caps_malloc(MALLOC_CAP_SPIRAM).
      */
     void* protocol_specific_data;
 
     /**
-     * Funzione di cleanup per protocol_specific_data
+     * Cleanup function for protocol_specific_data
      *
-     * Il plugin fornisce questa funzione per deallocare i propri dati.
-     * Chiamata automaticamente nel distruttore di FlowData.
+     * The plugin provides this function to deallocate its own data.
+     * Called automatically in the FlowData destructor.
      *
-     * Esempio:
+     * Example:
      * void cleanupModbusData(void* data) {
      *     if (data) {
      *         ModbusSessionData* mdata = static_cast<ModbusSessionData*>(data);
@@ -160,10 +160,10 @@ struct FlowData {
     typedef void (*CleanupFunc)(void*);
     CleanupFunc cleanup_func;
 
-    // ==================== COSTRUTTORI E DISTRUTTORE ====================
+    // ==================== CONSTRUCTORS AND DESTRUCTOR ====================
 
     /**
-     * Costruttore default PSRAM-safe
+     * PSRAM-safe default constructor
      */
     FlowData(PSRAMAllocator<char> alloc = PSRAMAllocator<char>())
         : key(alloc),
@@ -175,7 +175,7 @@ struct FlowData {
           cleanup_func(nullptr) {}
 
     /**
-     * Distruttore: chiama cleanup function se presente
+     * Destructor: calls the cleanup function if present
      */
     ~FlowData() {
         if (protocol_specific_data && cleanup_func) {
@@ -184,11 +184,11 @@ struct FlowData {
         }
     }
 
-    // Disabilita copia (ha puntatore opaco)
+    // Disable copy (it has an opaque pointer)
     FlowData(const FlowData&) = delete;
     FlowData& operator=(const FlowData&) = delete;
 
-    // Abilita move
+    // Enable move
     FlowData(FlowData&& other) noexcept
         : key(std::move(other.key)),
           state(other.state),
@@ -197,14 +197,14 @@ struct FlowData {
           max_operations(other.max_operations),
           protocol_specific_data(other.protocol_specific_data),
           cleanup_func(other.cleanup_func) {
-        // Previeni double-free
+        // Prevent double-free
         other.protocol_specific_data = nullptr;
         other.cleanup_func = nullptr;
     }
 
     FlowData& operator=(FlowData&& other) noexcept {
         if (this != &other) {
-            // Cleanup dati esistenti
+            // Clean up existing data
             if (protocol_specific_data && cleanup_func) {
                 cleanup_func(protocol_specific_data);
             }
@@ -218,23 +218,23 @@ struct FlowData {
             protocol_specific_data = other.protocol_specific_data;
             cleanup_func = other.cleanup_func;
 
-            // Previeni double-free
+            // Prevent double-free
             other.protocol_specific_data = nullptr;
             other.cleanup_func = nullptr;
         }
         return *this;
     }
 
-    // ==================== METODI ====================
+    // ==================== METHODS ====================
 
     /**
-     * @brief Aggiungi operazione al buffer (FIFO)
+     * @brief Add operation to the buffer (FIFO)
      *
-     * Se il buffer è pieno, rimuove l'operazione più vecchia.
+     * If the buffer is full, it removes the oldest operation.
      *
-     * @param type Tipo operazione (es: "READ", "WRITE")
-     * @param details Dettagli operazione (es: "FC=0x03 addr=100")
-     * @param timestamp Timestamp in millisecondi
+     * @param type Operation type (e.g.: "READ", "WRITE")
+     * @param details Operation details (e.g.: "FC=0x03 addr=100")
+     * @param timestamp Timestamp in milliseconds
      * @param success Success flag
      */
     void addOperation(const psram_string& type, const psram_string& details,
@@ -248,18 +248,18 @@ struct FlowData {
 
         recent_operations.push_back(std::move(op));
 
-        // Mantieni dimensione massima (FIFO)
+        // Keep maximum size (FIFO)
         while (recent_operations.size() > max_operations) {
             recent_operations.pop_front();
         }
     }
 
     /**
-     * @brief Aggiungi operazione (versione const char*)
+     * @brief Add operation (const char* version)
      *
-     * @param type Tipo operazione
-     * @param details Dettagli operazione
-     * @param timestamp Timestamp in millisecondi
+     * @param type Operation type
+     * @param details Operation details
+     * @param timestamp Timestamp in milliseconds
      * @param success Success flag
      */
     void addOperation(const char* type, const char* details,
@@ -271,11 +271,11 @@ struct FlowData {
     }
 
     /**
-     * @brief Cleanup operazioni vecchie (> age_ms)
+     * @brief Cleanup old operations (> age_ms)
      *
-     * Rimuove operazioni più vecchie di age_ms dal buffer.
+     * Removes operations older than age_ms from the buffer.
      *
-     * @param age_ms Età massima in millisecondi
+     * @param age_ms Maximum age in milliseconds
      */
     void cleanupOldOperations(uint32_t age_ms) {
         uint32_t now_ms = esp_timer_get_time() / 1000;
@@ -285,33 +285,33 @@ struct FlowData {
             if ((now_ms - oldest.timestamp_ms) > age_ms) {
                 recent_operations.pop_front();
             } else {
-                break;  // Ordinate per timestamp, se prima non scaduta stop
+                break;  // Sorted by timestamp; if the first one is not expired, stop
             }
         }
     }
 
     /**
-     * @brief Ottieni numero operazioni nel buffer
+     * @brief Get the number of operations in the buffer
      *
-     * @return Numero operazioni presenti
+     * @return Number of operations present
      */
     size_t getOperationCount() const {
         return recent_operations.size();
     }
 
     /**
-     * @brief Verifica se buffer operazioni è pieno
+     * @brief Check whether the operation buffer is full
      *
-     * @return true se pieno, false altrimenti
+     * @return true if full, false otherwise
      */
     bool isOperationBufferFull() const {
         return recent_operations.size() >= max_operations;
     }
 
     /**
-     * @brief Ottieni ultima operazione
+     * @brief Get the last operation
      *
-     * @return Puntatore all'ultima operazione, nullptr se buffer vuoto
+     * @return Pointer to the last operation, nullptr if the buffer is empty
      */
     const FlowOperation* getLastOperation() const {
         if (recent_operations.empty()) return nullptr;
@@ -319,10 +319,10 @@ struct FlowData {
     }
 
     /**
-     * @brief Conta operazioni per tipo
+     * @brief Count operations by type
      *
-     * @param type Tipo operazione da contare (es: "READ", "WRITE")
-     * @return Numero occorrenze
+     * @param type Operation type to count (e.g.: "READ", "WRITE")
+     * @return Number of occurrences
      */
     uint32_t countOperations(const char* type) const {
         uint32_t count = 0;
@@ -335,9 +335,9 @@ struct FlowData {
     }
 
     /**
-     * @brief Conta operazioni fallite
+     * @brief Count failed operations
      *
-     * @return Numero operazioni con success=false
+     * @return Number of operations with success=false
      */
     uint32_t countFailedOperations() const {
         uint32_t count = 0;
@@ -350,25 +350,25 @@ struct FlowData {
     }
 
     /**
-     * @brief Alloca dati specifici protocollo
+     * @brief Allocate protocol-specific data
      *
-     * Helper per allocare dati in PSRAM.
+     * Helper to allocate data in PSRAM.
      *
-     * Esempio:
+     * Example:
      * ModbusSessionData* data = flow.allocateProtocolData<ModbusSessionData>(cleanupModbusData);
      *
-     * @tparam T Tipo struttura dati
-     * @param cleanup Funzione di cleanup
-     * @return Puntatore alla struttura allocata in PSRAM
+     * @tparam T Data structure type
+     * @param cleanup Cleanup function
+     * @return Pointer to the structure allocated in PSRAM
      */
     template<typename T>
     T* allocateProtocolData(CleanupFunc cleanup) {
-        // Cleanup vecchi dati se presenti
+        // Clean up old data if present
         if (protocol_specific_data && cleanup_func) {
             cleanup_func(protocol_specific_data);
         }
 
-        // Alloca in PSRAM
+        // Allocate in PSRAM
         T* data = static_cast<T*>(heap_caps_malloc(sizeof(T), MALLOC_CAP_SPIRAM));
         if (data) {
             new (data) T();  // Placement new
@@ -380,10 +380,10 @@ struct FlowData {
     }
 
     /**
-     * @brief Ottieni dati specifici protocollo
+     * @brief Get protocol-specific data
      *
-     * @tparam T Tipo struttura dati
-     * @return Puntatore ai dati, nullptr se non allocati
+     * @tparam T Data structure type
+     * @return Pointer to the data, nullptr if not allocated
      */
     template<typename T>
     T* getProtocolData() {
@@ -391,10 +391,10 @@ struct FlowData {
     }
 
     /**
-     * @brief Ottieni dati specifici protocollo (const)
+     * @brief Get protocol-specific data (const)
      *
-     * @tparam T Tipo struttura dati
-     * @return Puntatore const ai dati, nullptr se non allocati
+     * @tparam T Data structure type
+     * @return Const pointer to the data, nullptr if not allocated
      */
     template<typename T>
     const T* getProtocolData() const {
@@ -402,33 +402,33 @@ struct FlowData {
     }
 
     /**
-     * @brief Verifica se il flusso è scaduto
+     * @brief Check whether the flow has expired
      *
-     * @param timeout_ms Timeout in millisecondi
-     * @return true se scaduto, false altrimenti
+     * @param timeout_ms Timeout in milliseconds
+     * @return true if expired, false otherwise
      */
     bool isExpired(uint32_t timeout_ms) const {
         return metrics.getAge() > timeout_ms;
     }
 
     /**
-     * @brief Verifica se il flusso è in stato terminale
+     * @brief Check whether the flow is in a terminal state
      *
-     * @return true se stato terminale (CLOSED, ERROR, TIMEOUT)
+     * @return true if terminal state (CLOSED, ERROR, TIMEOUT)
      */
     bool isTerminal() const {
         return isFlowStateTerminal(state);
     }
 
     /**
-     * @brief Clear buffer operazioni (mantiene max_operations)
+     * @brief Clear the operation buffer (keeps max_operations)
      */
     void clearOperations() {
         recent_operations.clear();
     }
 
     /**
-     * @brief Reset completo del flusso (per riutilizzo)
+     * @brief Full flow reset (for reuse)
      */
     void reset() {
         state = FlowState::INIT;

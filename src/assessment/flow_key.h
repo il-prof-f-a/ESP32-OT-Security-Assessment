@@ -1,13 +1,13 @@
 /**
  * @file flow_key.h
- * @brief Chiave universale per identificazione flussi di rete
+ * @brief Universal key for network flow identification
  *
- * Sistema di identificazione univoca per flussi di rete multi-protocollo.
- * Utilizza PSRAM per allocazione stringhe (NO IRAM).
+ * Unique identification system for multi-protocol network flows.
+ * Uses PSRAM for string allocation (NO IRAM).
  *
- * Formato chiave: "src_ip:src_port:dst_ip:dst_port:proto_specific"
+ * Key format: "src_ip:src_port:dst_ip:dst_port:proto_specific"
  *
- * Esempi:
+ * Examples:
  * - Modbus TCP:  "192.168.1.100:5000:192.168.1.200:502:1" (unit_id=1)
  * - S7:          "192.168.1.100:5000:192.168.1.200:102:0:1" (rack=0, slot=1)
  * - PROFINET:    "AA:BB:CC:DD:EE:FF:12345" (src_mac:xid)
@@ -26,35 +26,35 @@
 #include <functional>
 
 /**
- * Alias per stringhe allocate in PSRAM
- * REGOLA: Solo PSRAM, MAI IRAM
+ * Alias for strings allocated in PSRAM
+ * RULE: Only PSRAM, NEVER IRAM
  */
 using psram_string = std::basic_string<char, std::char_traits<char>, PSRAMAllocator<char>>;
 
 /**
- * @brief Chiave universale per identificazione flussi
+ * @brief Universal key for flow identification
  *
- * Struttura che identifica univocamente un flusso di rete combinando:
- * - Indirizzi IP sorgente e destinazione
- * - Porte sorgente e destinazione
- * - Identificatore specifico del protocollo (opzionale)
+ * Structure that uniquely identifies a network flow by combining:
+ * - Source and destination IP addresses
+ * - Source and destination ports
+ * - Protocol-specific identifier (optional)
  *
- * ALLOCAZIONE: PSRAM (tutte le stringhe usano PSRAMAllocator)
+ * ALLOCATION: PSRAM (all strings use PSRAMAllocator)
  */
 struct FlowKey {
-    psram_string src_ip;              ///< Indirizzo IP sorgente (es: "192.168.1.100")
-    psram_string dst_ip;              ///< Indirizzo IP destinazione (es: "192.168.1.200")
-    uint16_t src_port;                ///< Porta sorgente
-    uint16_t dst_port;                ///< Porta destinazione
-    psram_string protocol_specific;   ///< Identificatore specifico protocollo
+    psram_string src_ip;              ///< Source IP address (e.g.: "192.168.1.100")
+    psram_string dst_ip;              ///< Destination IP address (e.g.: "192.168.1.200")
+    uint16_t src_port;                ///< Source port
+    uint16_t dst_port;                ///< Destination port
+    psram_string protocol_specific;   ///< Protocol-specific identifier
 
     /**
-     * @brief Costruttore default con allocatore PSRAM
+     * @brief Default constructor with PSRAM allocator
      *
-     * Inizializza tutte le stringhe con PSRAMAllocator per garantire
-     * allocazione in PSRAM senza fallback a IRAM.
+     * Initializes all strings with PSRAMAllocator to ensure
+     * PSRAM allocation without fallback to IRAM.
      *
-     * @param alloc Allocatore PSRAM (default: PSRAMAllocator<char>())
+     * @param alloc PSRAM allocator (default: PSRAMAllocator<char>())
      */
     FlowKey(PSRAMAllocator<char> alloc = PSRAMAllocator<char>())
         : src_ip(alloc),
@@ -64,13 +64,13 @@ struct FlowKey {
           protocol_specific(alloc) {}
 
     /**
-     * @brief Costruttore con parametri
+     * @brief Constructor with parameters
      *
-     * @param src Indirizzo IP sorgente
-     * @param s_port Porta sorgente
-     * @param dst Indirizzo IP destinazione
-     * @param d_port Porta destinazione
-     * @param proto_spec Identificatore specifico protocollo (opzionale)
+     * @param src Source IP address
+     * @param s_port Source port
+     * @param dst Destination IP address
+     * @param d_port Destination port
+     * @param proto_spec Protocol-specific identifier (optional)
      */
     FlowKey(const char* src, uint16_t s_port,
             const char* dst, uint16_t d_port,
@@ -83,22 +83,22 @@ struct FlowKey {
           protocol_specific(proto_spec, alloc) {}
 
     /**
-     * @brief Converte la chiave in stringa per uso in hashtable
+     * @brief Converts the key to a string for use in a hashtable
      *
-     * Formato: "src_ip:src_port:dst_ip:dst_port[:protocol_specific]"
+     * Format: "src_ip:src_port:dst_ip:dst_port[:protocol_specific]"
      *
-     * Esempi:
+     * Examples:
      * - "192.168.1.100:5000:192.168.1.200:502:1"
      * - "192.168.1.100:5000:192.168.1.200:4840:0xABCD"
      *
-     * @return Stringa PSRAM-allocated rappresentante la chiave
+     * @return PSRAM-allocated string representing the key
      */
     psram_string toString() const {
         PSRAMAllocator<char> alloc;
         psram_string key(alloc);
-        key.reserve(128);  // Pre-alloca per evitare riallocazioni
+        key.reserve(128);  // Pre-allocate to avoid reallocations
 
-        // Formato base: src_ip:src_port:dst_ip:dst_port
+        // Base format: src_ip:src_port:dst_ip:dst_port
         key = src_ip;
         key += ":";
         key += std::to_string(src_port).c_str();
@@ -107,7 +107,7 @@ struct FlowKey {
         key += ":";
         key += std::to_string(dst_port).c_str();
 
-        // Aggiungi identificatore protocollo se presente
+        // Add the protocol identifier if present
         if (!protocol_specific.empty()) {
             key += ":";
             key += protocol_specific;
@@ -117,12 +117,12 @@ struct FlowKey {
     }
 
     /**
-     * @brief Operatore di uguaglianza per confronto chiavi
+     * @brief Equality operator for key comparison
      *
-     * Due chiavi sono uguali se tutti i campi coincidono.
+     * Two keys are equal if all fields match.
      *
-     * @param other Altra chiave da confrontare
-     * @return true se le chiavi sono identiche, false altrimenti
+     * @param other Other key to compare
+     * @return true if the keys are identical, false otherwise
      */
     bool operator==(const FlowKey& other) const {
         return src_ip == other.src_ip &&
@@ -133,43 +133,43 @@ struct FlowKey {
     }
 
     /**
-     * @brief Operatore di disuguaglianza
+     * @brief Inequality operator
      *
-     * @param other Altra chiave da confrontare
-     * @return true se le chiavi sono diverse, false altrimenti
+     * @param other Other key to compare
+     * @return true if the keys are different, false otherwise
      */
     bool operator!=(const FlowKey& other) const {
         return !(*this == other);
     }
 
     /**
-     * @brief Functor di hash per uso in std::unordered_map
+     * @brief Hash functor for use in std::unordered_map
      *
-     * Calcola hash della rappresentazione stringa della chiave.
-     * Necessario per usare FlowKey come chiave in unordered_map.
+     * Computes the hash of the string representation of the key.
+     * Necessary to use FlowKey as a key in unordered_map.
      */
     struct Hash {
         size_t operator()(const FlowKey& k) const {
-            // Hash sulla rappresentazione stringa
+            // Hash on the string representation
             return std::hash<psram_string>{}(k.toString());
         }
     };
 
     /**
-     * @brief Crea chiave per flusso bidirezionale
+     * @brief Create a key for a bidirectional flow
      *
-     * Normalizza la chiave ordinando src/dst in modo che flussi
-     * bidirezionali (A->B e B->A) abbiano la stessa chiave.
+     * Normalizes the key by ordering src/dst so that flows
+     * bidirectional flows (A->B and B->A) have the same key.
      *
-     * Utile per protocolli request/response dove vogliamo tracciare
-     * entrambe le direzioni nello stesso flusso.
+     * Useful for request/response protocols where we want to track
+     * both directions in the same flow.
      *
-     * @return Chiave normalizzata
+     * @return Normalized key
      */
     FlowKey toBidirectional() const {
         PSRAMAllocator<char> alloc;
 
-        // Ordina per IP (poi porta se IP uguali)
+        // Sort by IP (then by port if IPs are equal)
         bool swap = false;
         if (src_ip > dst_ip) {
             swap = true;
@@ -190,20 +190,20 @@ struct FlowKey {
     }
 
     /**
-     * @brief Verifica se la chiave è valida
+     * @brief Check whether the key is valid
      *
-     * Una chiave è valida se ha almeno IP sorgente e destinazione.
+     * A key is valid if it has at least source and destination IP.
      *
-     * @return true se chiave valida, false altrimenti
+     * @return true if the key is valid, false otherwise
      */
     bool isValid() const {
         return !src_ip.empty() && !dst_ip.empty();
     }
 
     /**
-     * @brief Ottieni direzione flusso come stringa
+     * @brief Get the flow direction as a string
      *
-     * @return Stringa formato "src_ip:src_port -> dst_ip:dst_port"
+     * @return String formatted as "src_ip:src_port -> dst_ip:dst_port"
      */
     psram_string toDirectionString() const {
         PSRAMAllocator<char> alloc;

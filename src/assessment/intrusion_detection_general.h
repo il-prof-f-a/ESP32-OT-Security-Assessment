@@ -131,7 +131,7 @@ private:
     bool psram_low_alert_sent_ = false;
     bool dram_low_alert_sent_ = false;
 
-    // Motore centralizzato di anomaly detection
+    // Centralized anomaly detection engine
     AnomalyDetectionEngine anomaly_engine_;
     uint64_t last_baseline_save_ms_ = 0;
 

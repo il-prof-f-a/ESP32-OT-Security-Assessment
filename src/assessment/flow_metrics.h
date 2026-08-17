@@ -1,16 +1,16 @@
 /**
  * @file flow_metrics.h
- * @brief Metriche comuni per flussi di rete
+ * @brief Common metrics for network flows
  *
- * Struttura dati che raccoglie tutte le metriche quantitative di un flusso:
- * - Contatori temporali (first/last packet, duration)
- * - Contatori pacchetti e bytes
- * - Contatori operazioni (read/write/control/error)
- * - Velocità calcolate (pps, bps, rps)
- * - Statistiche (avg packet size, request/response ratio)
- * - Classificazione (intensity, labels)
+ * Data structure that collects all the quantitative metrics of a flow:
+ * - Temporal counters (first/last packet, duration)
+ * - Packet and byte counters
+ * - Operation counters (read/write/control/error)
+ * - Calculated rates (pps, bps, rps)
+ * - Statistics (avg packet size, request/response ratio)
+ * - Classification (intensity, labels)
  *
- * ALLOCAZIONE: Stack o PSRAM (nessuna stringa, solo dati numerici)
+ * ALLOCATION: Stack or PSRAM (no strings, only numeric data)
  *
  * @date 2025-10-21
  * @version 1.0
@@ -26,30 +26,30 @@
 #include "esp_timer.h"
 
 /**
- * @brief Metriche comuni per tutti i flussi di rete
+ * @brief Common metrics for all network flows
  *
- * Struttura che contiene tutti i contatori e le metriche calcolate
- * per un flusso. Utilizzata da tutti i protocolli.
+ * Structure that contains all the counters and calculated metrics
+ * for a flow. Used by all protocols.
  *
- * ALLOCAZIONE: Questa struttura è POD (Plain Old Data) e può essere
- * allocata sia su stack che in PSRAM. Non contiene puntatori o stringhe.
+ * ALLOCATION: This structure is POD (Plain Old Data) and can be
+ * allocated either on stack or in PSRAM. It contains no pointers or strings.
  */
 struct FlowMetrics {
-    // ==================== TEMPORALE ====================
+    // ==================== TEMPORAL ====================
 
     /**
-     * Timestamp primo pacchetto (millisecondi da boot)
+     * First packet timestamp (milliseconds since boot)
      */
     uint64_t first_packet_ms;
 
     /**
-     * Timestamp ultimo pacchetto (millisecondi da boot)
+     * Last packet timestamp (milliseconds since boot)
      */
     uint64_t last_packet_ms;
 
     /**
-     * Calcola durata flusso in millisecondi
-     * @return Durata in ms
+     * Calculate flow duration in milliseconds
+     * @return Duration in ms
      */
     uint32_t duration_ms() const {
         if (last_packet_ms < first_packet_ms) return 0;
@@ -57,65 +57,65 @@ struct FlowMetrics {
     }
 
     /**
-     * Calcola durata flusso in secondi
-     * @return Durata in secondi
+     * Calculate flow duration in seconds
+     * @return Duration in seconds
      */
     float duration_sec() const {
         return duration_ms() / 1000.0f;
     }
 
-    // ==================== CONTATORI PACCHETTI ====================
+    // ==================== PACKET COUNTERS ====================
 
     /**
-     * Numero totale di pacchetti ricevuti
+     * Total number of received packets
      */
     uint32_t packet_count;
 
     /**
-     * Numero totale di bytes ricevuti
+     * Total number of received bytes
      */
     uint64_t byte_count;
 
-    // ==================== CONTATORI OPERAZIONI ====================
+    // ==================== OPERATION COUNTERS ====================
 
     /**
-     * Numero di operazioni di lettura rilevate
-     * (es: Modbus Read, S7 Read Variable, OPC UA Read)
+     * Number of detected read operations
+     * (e.g.: Modbus Read, S7 Read Variable, OPC UA Read)
      */
     uint32_t read_operations;
 
     /**
-     * Numero di operazioni di scrittura rilevate
-     * (es: Modbus Write, S7 Write Variable, OPC UA Write)
+     * Number of detected write operations
+     * (e.g.: Modbus Write, S7 Write Variable, OPC UA Write)
      */
     uint32_t write_operations;
 
     /**
-     * Numero di operazioni di controllo rilevate
-     * (es: S7 STOP/RESTART, OPC UA Call, ENIP Reset)
+     * Number of detected control operations
+     * (e.g.: S7 STOP/RESTART, OPC UA Call, ENIP Reset)
      */
     uint32_t control_operations;
 
     /**
-     * Numero di risposte di errore ricevute
-     * (es: Modbus Exception, S7 Error, OPC UA Bad StatusCode)
+     * Number of error responses received
+     * (e.g.: Modbus Exception, S7 Error, OPC UA Bad StatusCode)
      */
     uint32_t error_responses;
 
     /**
-     * Numero di pacchetti malformati rilevati
+     * Number of detected malformed packets
      */
     uint32_t malformed_packets;
 
-    // ==================== VELOCITÀ (calcolate) ====================
+    // ==================== RATES (calculated) ====================
 
     /**
-     * Packets per second (calcolato su finestra temporale)
+     * Packets per second (calculated over a time window)
      */
     float packets_per_second;
 
     /**
-     * Bytes per second (calcolato su finestra temporale)
+     * Bytes per second (calculated over a time window)
      */
     float bytes_per_second;
 
@@ -124,43 +124,43 @@ struct FlowMetrics {
      */
     float requests_per_second;
 
-    // ==================== STATISTICHE ====================
+    // ==================== STATISTICS ====================
 
     /**
-     * Dimensione media pacchetto in bytes
+     * Average packet size in bytes
      */
     float avg_packet_size;
 
     /**
-     * Ratio request/response per protocolli request-response
-     * Valore atteso ~1.0 per traffico bilanciato
-     * > 1.0 indica più request che response (possibile timeout/loss)
-     * < 1.0 indica più response che request (anomalo)
+     * Request/response ratio for request-response protocols
+     * Expected value ~1.0 for balanced traffic
+     * > 1.0 indicates more requests than responses (possible timeout/loss)
+     * < 1.0 indicates more responses than requests (anomalous)
      */
     float request_response_ratio;
 
-    // ==================== CLASSIFICAZIONE ====================
+    // ==================== CLASSIFICATION ====================
 
     /**
-     * Intensità del traffico (calcolata da pps)
+     * Traffic intensity (calculated from pps)
      */
     FlowIntensity intensity;
 
     /**
-     * Label primaria assegnata dal plugin
+     * Primary label assigned by the plugin
      */
     FlowLabel primary_label;
 
     /**
-     * Label secondaria (opzionale, per classificazione multipla)
-     * Default: NORMAL_OPERATION se non usata
+     * Secondary label (optional, for multiple classification)
+     * Default: NORMAL_OPERATION if unused
      */
     FlowLabel secondary_label;
 
-    // ==================== COSTRUTTORI ====================
+    // ==================== CONSTRUCTORS ====================
 
     /**
-     * Costruttore default: azzera tutte le metriche
+     * Default constructor: zeroes all metrics
      */
     FlowMetrics() {
         memset(this, 0, sizeof(FlowMetrics));
@@ -170,19 +170,19 @@ struct FlowMetrics {
         request_response_ratio = 1.0f;
     }
 
-    // ==================== METODI ====================
+    // ==================== METHODS ====================
 
     /**
-     * @brief Aggiorna velocità calcolate
+     * @brief Update calculated rates
      *
-     * Ricalcola pps, bps, rps basandosi sulla finestra temporale specificata.
-     * Tipicamente chiamato periodicamente (es: ogni 60 secondi).
+     * Recalculates pps, bps, rps based on the specified time window.
+     * Typically called periodically (e.g.: every 60 seconds).
      *
-     * @param window_ms Finestra temporale in millisecondi (default: 60000 = 1 min)
+     * @param window_ms Time window in milliseconds (default: 60000 = 1 min)
      */
     void updateRates(uint32_t window_ms = 60000) {
         if (window_ms == 0) {
-            // Evita divisione per zero
+            // Avoid division by zero
             packets_per_second = 0.0f;
             bytes_per_second = 0.0f;
             requests_per_second = 0.0f;
@@ -191,43 +191,43 @@ struct FlowMetrics {
 
         float window_sec = window_ms / 1000.0f;
 
-        // Calcola velocità
+        // Calculate rates
         packets_per_second = static_cast<float>(packet_count) / window_sec;
         bytes_per_second = static_cast<float>(byte_count) / window_sec;
 
         uint32_t total_requests = read_operations + write_operations + control_operations;
         requests_per_second = static_cast<float>(total_requests) / window_sec;
 
-        // Calcola avg packet size
+        // Calculate avg packet size
         if (packet_count > 0) {
             avg_packet_size = static_cast<float>(byte_count) / static_cast<float>(packet_count);
         } else {
             avg_packet_size = 0.0f;
         }
 
-        // Aggiorna intensità
+        // Update intensity
         intensity = calculateIntensity(packets_per_second);
     }
 
     /**
-     * @brief Aggiorna velocità su rolling window
+     * @brief Update rates on a rolling window
      *
-     * Calcola velocità considerando solo la durata effettiva del flusso,
-     * non una finestra fissa. Più preciso per flussi giovani.
+     * Calculates rates considering only the actual duration of the flow,
+     * not a fixed window. More accurate for young flows.
      */
     void updateRatesRolling() {
         uint32_t duration = duration_ms();
         if (duration < 1000) {
-            // Flusso troppo giovane, usa almeno 1 secondo
+            // Flow too young, use at least 1 second
             duration = 1000;
         }
         updateRates(duration);
     }
 
     /**
-     * @brief Incrementa contatori per pacchetto ricevuto
+     * @brief Increment counters for a received packet
      *
-     * @param packet_size Dimensione pacchetto in bytes
+     * @param packet_size Packet size in bytes
      */
     void onPacketReceived(uint16_t packet_size) {
         packet_count++;
@@ -236,44 +236,44 @@ struct FlowMetrics {
     }
 
     /**
-     * @brief Incrementa contatore read operations
+     * @brief Increment read operations counter
      */
     void onReadOperation() {
         read_operations++;
     }
 
     /**
-     * @brief Incrementa contatore write operations
+     * @brief Increment write operations counter
      */
     void onWriteOperation() {
         write_operations++;
     }
 
     /**
-     * @brief Incrementa contatore control operations
+     * @brief Increment control operations counter
      */
     void onControlOperation() {
         control_operations++;
     }
 
     /**
-     * @brief Incrementa contatore error responses
+     * @brief Increment error responses counter
      */
     void onErrorResponse() {
         error_responses++;
     }
 
     /**
-     * @brief Incrementa contatore malformed packets
+     * @brief Increment malformed packets counter
      */
     void onMalformedPacket() {
         malformed_packets++;
     }
 
     /**
-     * @brief Calcola error rate (% di errori sul totale operazioni)
+     * @brief Calculate error rate (% of errors over total operations)
      *
-     * @return Error rate [0.0-1.0], 0.0 = nessun errore, 1.0 = tutti errori
+     * @return Error rate [0.0-1.0], 0.0 = no errors, 1.0 = all errors
      */
     float getErrorRate() const {
         uint32_t total_ops = read_operations + write_operations + control_operations;
@@ -282,9 +282,9 @@ struct FlowMetrics {
     }
 
     /**
-     * @brief Calcola write ratio (% di write sul totale r/w)
+     * @brief Calculate write ratio (% of writes over total r/w)
      *
-     * @return Write ratio [0.0-1.0], 0.0 = solo read, 1.0 = solo write
+     * @return Write ratio [0.0-1.0], 0.0 = read only, 1.0 = write only
      */
     float getWriteRatio() const {
         uint32_t total_rw = read_operations + write_operations;
@@ -293,56 +293,56 @@ struct FlowMetrics {
     }
 
     /**
-     * @brief Verifica se il flusso è principalmente reader
+     * @brief Check whether the flow is mainly a reader
      *
-     * @return true se > 90% read operations, false altrimenti
+     * @return true if > 90% read operations, false otherwise
      */
     bool isReader() const {
         return write_operations == 0 && read_operations > 0;
     }
 
     /**
-     * @brief Verifica se il flusso è principalmente writer
+     * @brief Check whether the flow is mainly a writer
      *
-     * @return true se contiene almeno una write, false altrimenti
+     * @return true if it contains at least one write, false otherwise
      */
     bool isWriter() const {
         return write_operations > 0;
     }
 
     /**
-     * @brief Verifica se il flusso ha troppi errori
+     * @brief Check whether the flow has too many errors
      *
-     * @param threshold Soglia error rate (default: 0.1 = 10%)
-     * @return true se error rate > threshold
+     * @param threshold Error rate threshold (default: 0.1 = 10%)
+     * @return true if error rate > threshold
      */
     bool hasTooManyErrors(float threshold = 0.1f) const {
         return getErrorRate() > threshold;
     }
 
     /**
-     * @brief Verifica se il flusso è in flooding
+     * @brief Check whether the flow is flooding
      *
-     * @return true se intensity == FLOODING
+     * @return true if intensity == FLOODING
      */
     bool isFlooding() const {
         return intensity == FlowIntensity::FLOODING;
     }
 
     /**
-     * @brief Verifica se il flusso è idle
+     * @brief Check whether the flow is idle
      *
-     * @return true se intensity == IDLE
+     * @return true if intensity == IDLE
      */
     bool isIdle() const {
         return intensity == FlowIntensity::IDLE;
     }
 
     /**
-     * @brief Verifica se il flusso è attivo (ha traffico recente)
+     * @brief Check whether the flow is active (has recent traffic)
      *
      * @param timeout_ms Timeout in ms (default: 60000 = 1 min)
-     * @return true se ultimo pacchetto < timeout_ms fa
+     * @return true if last packet < timeout_ms ago
      */
     bool isActive(uint32_t timeout_ms = 60000) const {
         uint64_t now_ms = esp_timer_get_time() / 1000;
@@ -350,9 +350,9 @@ struct FlowMetrics {
     }
 
     /**
-     * @brief Ottieni età del flusso (tempo dall'ultimo pacchetto)
+     * @brief Get flow age (time since the last packet)
      *
-     * @return Millisecondi dall'ultimo pacchetto
+     * @return Milliseconds since the last packet
      */
     uint64_t getAge() const {
         uint64_t now_ms = esp_timer_get_time() / 1000;
@@ -361,7 +361,7 @@ struct FlowMetrics {
     }
 
     /**
-     * @brief Reset metriche (per testing o riutilizzo)
+     * @brief Reset metrics (for testing or reuse)
      */
     void reset() {
         memset(this, 0, sizeof(FlowMetrics));
@@ -372,14 +372,14 @@ struct FlowMetrics {
     }
 
     /**
-     * @brief Merge con altre metriche (per aggregazione)
+     * @brief Merge with other metrics (for aggregation)
      *
-     * Utile per sommare metriche di più flussi (es: tutti i flussi di un IP).
+     * Useful for summing metrics from multiple flows (e.g.: all flows of an IP).
      *
-     * @param other Metriche da sommare
+     * @param other Metrics to sum
      */
     void merge(const FlowMetrics& other) {
-        // Temporale: prendi min/max
+        // Temporal: take min/max
         if (other.first_packet_ms < first_packet_ms || first_packet_ms == 0) {
             first_packet_ms = other.first_packet_ms;
         }
@@ -387,7 +387,7 @@ struct FlowMetrics {
             last_packet_ms = other.last_packet_ms;
         }
 
-        // Contatori: somma
+        // Counters: sum
         packet_count += other.packet_count;
         byte_count += other.byte_count;
         read_operations += other.read_operations;
@@ -396,7 +396,7 @@ struct FlowMetrics {
         error_responses += other.error_responses;
         malformed_packets += other.malformed_packets;
 
-        // Ricalcola velocità
+        // Recalculate rates
         updateRatesRolling();
     }
 };

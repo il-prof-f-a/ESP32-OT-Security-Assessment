@@ -281,7 +281,7 @@ static bool parseCipPath(const uint8_t* p, size_t bytes,
 }
     // implicit I/O (not parsed deeply here)
 
-// Configura il socket TCP per chiudersi in modo aggressivo e liberare subito i PCB
+// Configure the TCP socket to close aggressively and free the PCBs immediately
 static void configureTcpSocket(int sock) {
     if (sock < 0) {
         return;
@@ -893,11 +893,11 @@ bool EtherNetIPPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
         if (!identity_ok) {
             add_finding("enip_identity_probe_failed", "ListIdentity probe failed", "INFO", "not_executed",
                         identity_json.empty() ? "ListIdentity did not return a valid payload." : identity_json.c_str(),
-                        "Verificare target e raggiungibilita EtherNet/IP (UDP/TCP 44818).");
+                        "Verify the target and EtherNet/IP reachability (UDP/TCP 44818).");
         } else if (!asset_reported_ip.empty() && asset_reported_ip != ip_ps) {
             add_finding("enip_identity_reported_ip_mismatch", "Identity reported IP mismatch", "LOW", "detected",
-                        "L'IP nel payload Identity non coincide con IP target/sorgente osservato.",
-                        "Validare configurazione rete dispositivo e possibili fenomeni di spoofing/NAT.");
+                        "The IP in the Identity payload does not match the observed target/source IP.",
+                        "Validate the device network configuration and possible spoofing/NAT phenomena.");
         }
     }
 
@@ -905,8 +905,8 @@ bool EtherNetIPPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
         tests_executed++;
         if (!session_ok) {
             add_finding("enip_session_setup_failed", "Session setup failed", "MEDIUM", "detected",
-                        session_error.empty() ? "Impossibile stabilire sessione EtherNet/IP." : session_error.c_str(),
-                        "Verificare endpoint, ACL e raggiungibilita TCP/44818.");
+                        session_error.empty() ? "Unable to establish an EtherNet/IP session." : session_error.c_str(),
+                        "Verify the endpoint, ACLs and TCP/44818 reachability.");
         }
     }
     if (wants("cip_security_advertisement")) {
@@ -914,8 +914,8 @@ bool EtherNetIPPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
             tests_executed++;
             if (!cip_security_advertised) {
                 add_finding("enip_cip_security_not_advertised", "CIP Security not advertised", "HIGH", "detected",
-                            "L'endpoint non pubblicizza servizi CIP Security; il canale explicit puo risultare non protetto.",
-                            "Abilitare CIP Security ove supportato e segmentare strettamente la rete.");
+                            "The endpoint does not advertise CIP Security services; the explicit channel may be unprotected.",
+                            "Enable CIP Security where supported and strictly segment the network.");
             }
         } else {
             tests_skipped++;
@@ -925,49 +925,49 @@ bool EtherNetIPPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
         tests_executed++;
         if (!list_services_ok) {
             add_finding("enip_list_services_failed", "ListServices failed", "INFO", "not_executed",
-                        list_services_error.empty() ? "ListServices non ha prodotto output parseable." : list_services_error.c_str(),
-                        "Analizzare il comportamento stack ENIP del target.");
+                        list_services_error.empty() ? "ListServices did not produce parseable output." : list_services_error.c_str(),
+                        "Analyze the target's ENIP stack behavior.");
         } else if (services.empty()) {
             add_finding("enip_list_services_empty", "ListServices returned no services", "LOW", "detected",
-                        "Endpoint raggiungibile ma senza servizi dichiarati.",
-                        "Verificare coerenza firmware/profilo dispositivo.");
+                        "Endpoint reachable but with no declared services.",
+                        "Verify firmware/device profile consistency.");
         }
         if (!list_interfaces_ok) {
             add_finding("enip_list_interfaces_failed", "ListInterfaces failed", "INFO", "not_executed",
-                        list_interfaces_error.empty() ? "ListInterfaces non parseabile." : list_interfaces_error.c_str(),
-                        "Dato utile di baseline anche se non sempre supportato.");
+                        list_interfaces_error.empty() ? "ListInterfaces not parseable." : list_interfaces_error.c_str(),
+                        "Useful baseline data even if not always supported.");
         }
     }
     if (wants("io_channel_exposure")) {
         if (read_probe.attempted) tests_executed++; else tests_skipped++;
         if (read_probe.attempted && read_probe.success) {
             add_finding("enip_explicit_read_exposed", "Explicit read exposure detected", "MEDIUM", "detected",
-                        "GetAttributeSingle su Identity accettato (general status 0x00).",
-                        "Limitare l'accesso ENIP e usare policy di protezione canale.");
+                        "GetAttributeSingle on Identity accepted (general status 0x00).",
+                        "Restrict ENIP access and use channel protection policies.");
         }
     }
     if (wants("explicit_write_capability_assessment")) {
         if (write_probe.attempted) tests_executed++; else tests_skipped++;
         if (write_probe.attempted && write_probe.success) {
             add_finding("enip_write_capability_exposed", "Write capability accepted", "CRITICAL", "detected",
-                        "SetAttributeSingle ha risposto con successo (general status 0x00).",
-                        "Ridurre superficie di attacco: ACL strette e controllo accessi industriali.");
+                        "SetAttributeSingle responded successfully (general status 0x00).",
+                        "Reduce the attack surface: strict ACLs and industrial access control.");
         }
     }
     if (wants("reset_capability_assessment")) {
         if (reset_probe.attempted) tests_executed++; else tests_skipped++;
         if (reset_probe.attempted && reset_probe.success) {
             add_finding("enip_reset_capability_exposed", "Reset capability accepted", "CRITICAL", "detected",
-                        "CIP Reset ha risposto con successo (general status 0x00).",
-                        "Rischio operativo elevato: isolare immediatamente i path di controllo.");
+                        "CIP Reset responded successfully (general status 0x00).",
+                        "High operational risk: isolate the control paths immediately.");
         }
     }
     if (wants("forward_open_risk_assessment")) {
         if (fwd_probe.attempted) tests_executed++; else tests_skipped++;
         if (fwd_probe.attempted && fwd_probe.success) {
             add_finding("enip_forward_open_capability_exposed", "ForwardOpen capability accepted", "HIGH", "detected",
-                        "ForwardOpen ha risposto con successo (general status 0x00).",
-                        "Limitare originator non autorizzati e harden del connection manager.");
+                        "ForwardOpen responded successfully (general status 0x00).",
+                        "Restrict unauthorized originators and harden the connection manager.");
         }
     }
 
@@ -2886,7 +2886,7 @@ bool checkENIP(uint32_t now_ms, uint32_t src, uint32_t dst, uint8_t cip_service,
 
 // Complete doPacketAnalysis implementation with 5 IDS rules
 bool EtherNetIPPlugin::doPacketAnalysis(const NetworkPacket& pkt) {
-    // ===== FLOW MANAGEMENT: Traccia pacchetto nel sistema di flow tracking =====
+    // ===== FLOW MANAGEMENT: Track the packet in the flow tracking system =====
     trackPacketInFlow(pkt);
 
     if (pkt.is_udp && (pkt.src_port == ENIP_IO_UDP || pkt.dst_port == ENIP_IO_UDP)) {

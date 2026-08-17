@@ -21,14 +21,14 @@ extern "C" {
     #include "mbedtls/aes.h"
 }
 
-// Struttura API key in PSRAM
+// API key structure in PSRAM
 struct ApiKeyEntry {
-    psram_string id;           // UUID della chiave
-    psram_string label;        // Label descrittiva
-    psram_string hash;         // SHA-256 hash del token
-    uint64_t created_ms;       // Timestamp creazione
-    uint64_t last_used_ms;     // Timestamp ultimo utilizzo
-    bool enabled;              // Flag attivazione
+    psram_string id;           // UUID of the key
+    psram_string label;        // Descriptive label
+    psram_string hash;         // SHA-256 hash of the token
+    uint64_t created_ms;       // Creation timestamp
+    uint64_t last_used_ms;     // Timestamp of last use
+    bool enabled;              // Activation flag
     bool rotation_alert_sent;
     bool disable_alert_sent;
 
@@ -208,7 +208,7 @@ private:
     // API Keys storage in PSRAM
     psram_vector<ApiKeyEntry> api_keys_;
     mutable std::mutex api_keys_mutex_;
-    psram_string master_key_;  // Master key for encryption (derivata da chip ID)
+    psram_string master_key_;  // Master key for encryption (derived from chip ID)
     psram_string admin_password_hash_;
     bool admin_hash_dirty_ = false;
     bool security_gap_detected_ = false;

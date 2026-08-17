@@ -52,7 +52,7 @@
 #include "../core/plugin_manager.h"
 #include "../core/task_config.h"
 #include "web_server_task.h"
-#include "web/ui/gen/all_gen.hpp"   // creato dallo script
+#include "web/ui/gen/all_gen.hpp"   // created by the script
 #include <vector>
 #include <algorithm>
 #include <string>
@@ -86,7 +86,7 @@ extern "C" {
     #include "lwip/inet.h"
     #include "cJSON.h"
     #include "esp_psram.h"
-    #include <inttypes.h>  // in C++ va bene anche <cinttypes>
+    #include <inttypes.h>  // in C++ <cinttypes> is also fine
     #include <esp_err.h>
 }
 
@@ -104,9 +104,9 @@ static inline void report_event_ps(ReportingEngine* rep, const char* type, const
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Opzione B: stack task in PSRAM per l'HTTP server
-// Abilita in menuconfig: CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM
-// In ESP-IDF la dimensione dello stack è in BYTE (non in word).
+// Option B: task stack in PSRAM for the HTTP server
+// Enable in menuconfig: CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM
+// In ESP-IDF the stack size is in BYTES (not in words).
 // ─────────────────────────────────────────────────────────────────────────────
 #ifndef CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM
 #warning "External task stacks (PSRAM) not enabled. HTTP server will fall back to internal DRAM stack."
@@ -394,7 +394,7 @@ psram_string WebServer::reporting_channels_cache_;
 std::mutex WebServer::reporting_channels_mutex_;
 bool WebServer::reporting_channels_valid_ = false;
 
-// Forza la modalità "minimal web" se i buffer non riescono ad andare in PSRAM
+// Force "minimal web" mode if the buffers cannot go into PSRAM
 static bool g_force_minimal_web = false;
 
 // Utility function to check if current task is running on PSRAM stack
@@ -403,34 +403,34 @@ static bool isCurrentTaskOnPSRAMStack() {
     return esp_ptr_external_ram(&stack_var);
 }
 
-// Helper: verifica che un puntatore punti davvero in PSRAM esterna
+// Helper: verify that a pointer really points into external PSRAM
 static bool ensure_psram_buf(const char* name, void* ptr, size_t size_bytes) {
     if (!ptr) {
-        LOG_ERRORF(TAG_WEB, "🔴 CRITICO: allocazione %s fallita (%u bytes)", name, (unsigned)size_bytes);
+        LOG_ERRORF(TAG_WEB, "🔴 CRITICAL: %s allocation failed (%u bytes)", name, (unsigned)size_bytes);
         g_force_minimal_web = true;
         return false;
     }
     if (!esp_ptr_external_ram(ptr)) {
-        LOG_ERRORF(TAG_WEB, "🔴 CRITICO: %s NON in PSRAM (ptr=%p, size=%u)", name, ptr, (unsigned)size_bytes);
+        LOG_ERRORF(TAG_WEB, "🔴 CRITICAL: %s NOT in PSRAM (ptr=%p, size=%u)", name, ptr, (unsigned)size_bytes);
         g_force_minimal_web = true;
         return false;
     }
     return true;
 }
 
-// Helper: verifica che un puntatore NON sia in PSRAM e sia DMA-capable (necessario per socket TX e vari driver)
+// Helper: verify that a pointer is NOT in PSRAM and is DMA-capable (required for socket TX and various drivers)
 static bool ensure_internal_dma_buf(const char* name, void* ptr, size_t size_bytes) {
     if (!ptr) {
-        LOG_ERRORF(TAG_WEB, "💾 CRITICO: allocazione %s fallita (%u bytes)", name, (unsigned)size_bytes);
+        LOG_ERRORF(TAG_WEB, "💾 CRITICAL: %s allocation failed (%u bytes)", name, (unsigned)size_bytes);
         return false;
     }
     if (esp_ptr_external_ram(ptr)) {
-        LOG_ERRORF(TAG_WEB, "💾 CRITICO: %s in PSRAM ma serve INTERNAL/DMA (ptr=%p, size=%u)",
+        LOG_ERRORF(TAG_WEB, "💾 CRITICAL: %s in PSRAM but INTERNAL/DMA is required (ptr=%p, size=%u)",
                    name, ptr, (unsigned)size_bytes);
         return false;
     }
     if (!esp_ptr_dma_capable(ptr)) {
-        LOG_ERRORF(TAG_WEB, "💾 CRITICO: %s NON DMA-capable (ptr=%p, size=%u)", name, ptr, (unsigned)size_bytes);
+        LOG_ERRORF(TAG_WEB, "💾 CRITICAL: %s NOT DMA-capable (ptr=%p, size=%u)", name, ptr, (unsigned)size_bytes);
         return false;
     }
     return true;
@@ -2039,7 +2039,7 @@ void* http_malloc_psram(size_t size) {
     void* ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!ensure_psram_buf("http_malloc_psram", ptr, size)) {
         if (ptr && !esp_ptr_external_ram(ptr)) { heap_caps_free(ptr); }
-        // Nessun fallback: chi usa questa funzione deve gestire nullptr o modalità minimale
+        // No fallback: whoever uses this function must handle nullptr or minimal mode
         return nullptr;
     }
     return ptr;
@@ -2069,8 +2069,8 @@ static esp_err_t send_chunked_from_psram(httpd_req_t* req, const char* psram_dat
     }
 
     if (!g_chunk_buffer) {
-        // Non inviare mai puntatori PSRAM direttamente a httpd_resp_send_chunk().
-        // Best-effort: usa un buffer temporaneo INTERNAL+DMA.
+        // Never send PSRAM pointers directly to httpd_resp_send_chunk().
+        // Best-effort: use a temporary INTERNAL+DMA buffer.
         LOG_WARNING(TAG_WEB, "Chunk buffer unavailable, using temporary INTERNAL DMA fallback");
         const size_t tmp_cap = (data_len > CHUNK_BUFFER_SIZE) ? CHUNK_BUFFER_SIZE : data_len;
         char* tmp = static_cast<char*>(heap_caps_malloc(tmp_cap, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT));
@@ -2140,13 +2140,13 @@ static esp_err_t send_chunked_from_psram(httpd_req_t* req, const char* psram_dat
 // Forward declaration of the optimized version
 static esp_err_t send_html_chunked(httpd_req_t* req, const char* html_data, size_t html_len);
 
-// Invio HTML da buffer costante (in FLASH/rodata) senza copie e senza side-effects.
-// Non fa allocazioni, non fa ritardi, non fa retry: se la socket cade, esce subito.
+// Send HTML from a constant buffer (in FLASH/rodata) without copies and without side-effects.
+// Does no allocations, no delays, no retries: if the socket drops, it exits immediately.
 static esp_err_t send_html_chunked(httpd_req_t* req, const char* html_data, size_t html_len) {
-    // Log minimale per non frammentare la DRAM
+    // Minimal logging to avoid fragmenting DRAM
     LOG_INFOF(TAG_WEB, "📄 Serving %.120s (len=%u)", req->uri ? req->uri : "(null)", (unsigned)html_len);
 
-    // Validazione basilare
+    // Basic validation
     if (!html_data || html_len == 0) {
         httpd_resp_set_status(req, "500 Internal Server Error");
         return httpd_resp_send(req, "Invalid HTML data", 16);
@@ -2155,11 +2155,11 @@ static esp_err_t send_html_chunked(httpd_req_t* req, const char* html_data, size
     // Headers
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_set_hdr(req, "Connection", "close");
-    // Se non vuoi caching lato client:
+    // If you don't want client-side caching:
     // httpd_resp_set_hdr(req, "Cache-Control", "no-store");
 
-    // Per robustezza: inviamo sempre usando il chunk buffer in Internal RAM (se disponibile).
-    // Su alcune build/driver lwIP la send puo' essere zero-copy: puntatori in FLASH/PSRAM possono causare abort.
+    // For robustness: we always send using the chunk buffer in Internal RAM (if available).
+    // On some lwIP builds/drivers the send can be zero-copy: pointers in FLASH/PSRAM can cause abort.
     const size_t SMALL_SEND_THRESHOLD = 1024;
     if (html_len <= SMALL_SEND_THRESHOLD || !g_chunk_buffer || !g_chunk_buffer_mutex) {
         return httpd_resp_send(req, html_data, html_len);
@@ -2308,8 +2308,8 @@ void WebServer::attachFull(PluginManager* plugins,
     this->scanner_ = scanner;
     this->net_ = net;
 
-    // Diagnostica: utile per capire se il WebServer ha tutte le dipendenze prima di servire API/UI.
-    // (In particolare: NO_PLUGINS/NO_IDS sui device dove il WebServer parte "tardi" in fallback AP/STA.)
+    // Diagnostics: useful to understand whether the WebServer has all dependencies before serving API/UI.
+    // (In particular: NO_PLUGINS/NO_IDS on devices where the WebServer starts "late" in AP/STA fallback.)
     LOG_INFOF(TAG_WEB,
               "attachFull: plugins=%p ids=%p eth=%p wifi=%p scanner=%p net=%p",
               (void*)plugins_, (void*)ids_, (void*)eth_, (void*)wifi_, (void*)scanner_, (void*)net_);
@@ -2445,12 +2445,12 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     // These are per-send/per-recv wait bounds. Keep them low to avoid multi-chunk responses stalling the whole HTTPD task.
     cfg.send_wait_timeout = 3;
     cfg.recv_wait_timeout = 3;
-    cfg.core_id = 1;             // Pinna il server su APP CPU (core 1)
+    cfg.core_id = 1;             // Pin the server on APP CPU (core 1)
     // NOTE: stack_size will be set below for PSRAM allocation
 
     // ── PSRAM stack allocation for HTTP server ─────
 
-    // Stack in PSRAM 8-bit capable (richiesto per lo stack)
+    // Stack in PSRAM 8-bit capable (required for the stack)
     cfg.task_caps  = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
     // TLS + cert parsing can be stack-hungry; but keep this balanced to avoid hurting internal heap pressure.
     cfg.stack_size = 48 * 1024;
@@ -2460,9 +2460,9 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
               (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
               (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT));
 /*
-    // Fallback sicuro: tieni lo stack in DRAM interna
+    // Safe fallback: keep the stack in internal DRAM
     cfg.task_caps  = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
-    cfg.stack_size = 48 * 1024;  // fallback conservativo; aumenta se necessario
+    cfg.stack_size = 48 * 1024;  // conservative fallback; increase if necessary
     LOG_WARNINGF(TAG_WEB,
                  "PSRAM stack not allowed by Kconfig. Falling back to INTERNAL stack: size=%u, free_int=%u",
                  (unsigned)cfg.stack_size,
@@ -2473,17 +2473,17 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     size_t free_8bit = heap_caps_get_free_size(MALLOC_CAP_8BIT);
     size_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     size_t largest_free_block = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
-    // Abbassiamo la soglia per mantenere full-mode più spesso
+    // We lower the threshold to keep full-mode more often
     const bool minimal_mode =
         g_force_minimal_web ||
         (free_internal < 90 * 1024) ||
         (largest_free_block < 45 * 1024);
 
     // Tune HTTPD resource usage based on mode.
-    // Il vero killer di DRAM interna durante la navigazione e' il numero di socket TLS contemporanee:
-    // il browser tende a mantenere aperte piu' connessioni in parallelo.
+    // The real killer of internal DRAM during browsing is the number of concurrent TLS sockets:
+    // the browser tends to keep multiple connections open in parallel.
     //
-    // NOTA: max_uri_handlers deve rimanere >= numero handler registrati in startOnInterface().
+    // NOTE: max_uri_handlers must remain >= the number of handlers registered in startOnInterface().
     if (minimal_mode) {
         cfg.max_open_sockets = 3;
         cfg.backlog_conn     = 3;
@@ -2565,10 +2565,10 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
         LOG_INFO(TAG_WEB, "✅ GOOD FRAGMENTATION: Memory layout looks healthy");
     }
 
-    // Nota operativa: se usi stack in PSRAM, evita operazioni che disabilitano la cache flash
-    // (NVS/OTA/erase) nel contesto degli handler. Invia quei lavori a un worker in DRAM.
-    // Vedi anche LOG di high-water-mark per calibrare lo stack effettivo.
-    // (Puoi aggiungere httpd_get_global_transport_ctx() per metriche avanzate se necessario.)
+    // Operational note: if you use a PSRAM stack, avoid operations that disable the flash cache
+    // (NVS/OTA/erase) in the context of the handlers. Send those jobs to a worker in DRAM.
+    // Also see the high-water-mark LOG to calibrate the actual stack.
+    // (You can add httpd_get_global_transport_ctx() for advanced metrics if needed.)
 
     // === HTTPS SERVER START WITH RETRY + PROFILE FALLBACK ===
     // Under memory pressure, esp_https_server may fail with ESP_FAIL during TLS initialization/parsing.
@@ -3231,7 +3231,7 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     httpd_register_uri_handler(active_server_, &logs_incr);
     httpd_register_uri_handler(active_server_, &logs_sse);
 
-    // Lista dei protocolli
+    // List of protocols
     httpd_uri_t protocols_read = { .uri="/api/protocols", .method=HTTP_GET, .handler=&WebServer::h_protocols_get, .user_ctx=nullptr };
     httpd_uri_t protocols_read_details = { .uri="/api/protocols/details", .method=HTTP_GET, .handler=&WebServer::h_protocols_get_details, .user_ctx=nullptr };
     httpd_register_uri_handler(active_server_, &protocols_read);
@@ -5374,7 +5374,7 @@ esp_err_t WebServer::h_report_format_get(httpd_req_t* req){
     heap_caps_free(jbuf);
     return rr;
 
-    //TODO: remove se il codice va bene senza buffer preallocato
+    //TODO: remove if the code works fine without a preallocated buffer
     // Initialize PSRAM buffers if needed
     web_buf_init();
     if (!web_buf) {
@@ -6525,7 +6525,7 @@ esp_err_t WebServer::h_presence_learned_get(httpd_req_t* req) {
 
 esp_err_t WebServer::h_presence_config_get(httpd_req_t* req) {
     AccessLogger::getInstance().logRequest(req);
-    //LOG_INFO("PRESENCE_CONFIG", "Processing presence config get request FASE 0");
+    //LOG_INFO("PRESENCE_CONFIG", "Processing presence config get request PHASE 0");
 
     if (!check_api_auth(req)) {
         LOG_WARNING("PRESENCE_CONFIG", "Authentication failed for presence config endpoint");
@@ -6533,27 +6533,27 @@ esp_err_t WebServer::h_presence_config_get(httpd_req_t* req) {
         return httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "auth");
     }
 
-    //LOG_INFO("PRESENCE_CONFIG", "Processing presence config get request FASE 1");
+    //LOG_INFO("PRESENCE_CONFIG", "Processing presence config get request PHASE 1");
 
-    //LOG_INFO("PRESENCE_CONFIG", "Processing presence config get request FASE 2");
+    //LOG_INFO("PRESENCE_CONFIG", "Processing presence config get request PHASE 2");
     // Get presence configuration from global IDS tracker (not per-protocol)
     if (!self_->ids_) {
         LOG_WARNING("PRESENCE_CONFIG", "IDS not available");
         AccessLogger::getInstance().logResponse(req, 500, "NO_IDS");
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "IDS not available");
     }
-    //LOG_INFO("PRESENCE_CONFIG", "Processing presence config get request FASE 3");
+    //LOG_INFO("PRESENCE_CONFIG", "Processing presence config get request PHASE 3");
 
     // Use PSRAM for JSON strings to save DRAM
     psram_string config_json_psram = self_->ids_->getNetworkPresenceTracker().getConfigJSON();
     //std::string config_json = PSRAMUtils::fromPSRAMString(config_json_psram);
 
-    //LOG_INFO("PRESENCE_CONFIG", "Processing presence config get request FASE 4");
+    //LOG_INFO("PRESENCE_CONFIG", "Processing presence config get request PHASE 4");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Connection", "close");
-    //LOG_INFO("PRESENCE_CONFIG", "Processing presence config get request FASE 5");
+    //LOG_INFO("PRESENCE_CONFIG", "Processing presence config get request PHASE 5");
     AccessLogger::getInstance().logResponse(req, 200, "SUCCESS");
-    //LOG_INFO("PRESENCE_CONFIG", "Processed presence config get request FASE 6");
+    //LOG_INFO("PRESENCE_CONFIG", "Processed presence config get request PHASE 6");
     return httpd_resp_send(req, config_json_psram.c_str(), config_json_psram.length());
 }
 
@@ -6625,7 +6625,7 @@ esp_err_t WebServer::h_presence_clear_post(httpd_req_t* req) {
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "IDS not available");
     }
 
-    // Global tracker (consolidato): non dipende dai plugin.
+    // Global tracker (consolidated): does not depend on the plugins.
     self_->ids_->getNetworkPresenceTracker().clearLearningData();
 
     httpd_resp_set_type(req, "application/json");
@@ -6665,7 +6665,7 @@ esp_err_t WebServer::h_presence_promote_post(httpd_req_t* req) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
     }
 
-    // Frontend legacy/compat: alcune chiamate usano "address" invece di "ip".
+    // Frontend legacy/compat: some calls use "address" instead of "ip".
     cJSON* ip_item = cJSON_GetObjectItem(json, "ip");
     if (!ip_item || !cJSON_IsString(ip_item)) {
         ip_item = cJSON_GetObjectItem(json, "address");
@@ -6686,7 +6686,7 @@ esp_err_t WebServer::h_presence_promote_post(httpd_req_t* req) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing or invalid 'ip' field");
     }
 
-    // Global tracker (consolidato)
+    // Global tracker (consolidated)
     self_->ids_->getNetworkPresenceTracker().promoteToTrusted(ip_address);
     LOG_INFOF("PRESENCE_PROMOTE", "Promoted device %s to trusted (global tracker)", ip_address.c_str());
 
@@ -6747,7 +6747,7 @@ esp_err_t WebServer::h_presence_demote_post(httpd_req_t* req) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing or invalid 'ip' field");
     }
 
-    // Global tracker (consolidato)
+    // Global tracker (consolidated)
     self_->ids_->getNetworkPresenceTracker().demoteFromTrusted(ip_address);
     LOG_INFOF("PRESENCE_DEMOTE", "Demoted device %s from trusted (global tracker)", ip_address.c_str());
 
@@ -6955,8 +6955,8 @@ esp_err_t WebServer::h_wifi_connect_result(httpd_req_t* req) {
 bool WebServer::persistWiFiConfig(const char* ssid, const char* password) {
     if (!cfg_) return false;
 
-    // Salva SSID e password direttamente in NVS come chiavi separate
-    // per evitare l'errore ESP_ERR_NVS_VALUE_TOO_LONG
+    // Save SSID and password directly to NVS as separate keys
+    // to avoid the ESP_ERR_NVS_VALUE_TOO_LONG error
     esp_err_t err_ssid = AsyncStorage::Global::nvsSet("wifi", "ssid", std::string(ssid ? ssid : ""));
     esp_err_t err_pass = AsyncStorage::Global::nvsSet("wifi", "password", std::string(password ? password : ""));
     esp_err_t err_enabled = AsyncStorage::Global::nvsSet("wifi", "enabled", (uint8_t)1);
@@ -6976,7 +6976,7 @@ bool WebServer::persistWiFiConfig(const char* ssid, const char* password) {
 
     LOG_INFO("WebServer", "WiFi credentials saved to NVS successfully");
 
-    // Aggiorna anche il file di configurazione su filesystem per coerenza
+    // Also update the configuration file on the filesystem for consistency
     size_t json_size = 0;
     char* json_buf = cfg_->getRawConfigInPSRAM(&json_size);
     cJSON* root = nullptr;
@@ -7015,8 +7015,8 @@ bool WebServer::persistWiFiConfig(const char* ssid, const char* password) {
     }
     cJSON_Delete(root);
 
-    // Ritorna true se almeno NVS è stato salvato correttamente
-    // Il salvataggio su filesystem è secondario
+    // Returns true if at least NVS was saved correctly
+    // The filesystem save is secondary
     return true;
 }
 
@@ -7144,7 +7144,7 @@ esp_err_t WebServer::h_wifi_connect(httpd_req_t* req) {
 
     cJSON_Delete(root);
 
-    // Invia risposta di successo prima del riavvio
+    // Send success response before the reboot
     cJSON* response = cJSON_CreateObject();
     if (response) {
         cJSON_AddBoolToObject(response, "success", true);
@@ -7162,7 +7162,7 @@ esp_err_t WebServer::h_wifi_connect(httpd_req_t* req) {
 
     AccessLogger::getInstance().logResponse(req, 200, "OK");
 
-    // Programma il riavvio dopo 2 secondi per dare tempo alla risposta HTTP di arrivare
+    // Schedule the reboot after 2 seconds to give the HTTP response time to arrive
     LOG_INFO("WebServer", "WiFi credentials saved. Rebooting in 2 seconds...");
     vTaskDelay(pdMS_TO_TICKS(2000));
     esp_restart();
@@ -10720,7 +10720,7 @@ esp_err_t WebServer::h_whitelist_get(httpd_req_t* req) {
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "server");
     }
 
-    // Prova a leggere dal config persistente (PSRAM-safe)
+    // Try to read from the persistent config (PSRAM-safe)
     std::string response;
     if (server->cfg_) {
         size_t sz = 0; char* buf = server->cfg_->getRawConfigInPSRAM(&sz);
@@ -10737,7 +10737,7 @@ esp_err_t WebServer::h_whitelist_get(httpd_req_t* req) {
             cJSON_Delete(root);
         }
     }
-    // fallback: stato runtime del manager
+    // fallback: manager runtime state
     if (response.empty() && server->ids_) response = server->ids_->getWhitelistManager().saveToConfigJSON();
     if (response.empty()) response = std::string("{\"ip_whitelist\":{}}\n");
 
@@ -10766,7 +10766,7 @@ esp_err_t WebServer::h_whitelist_post(httpd_req_t* req) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty payload");
     }
 
-    // 1) Valida e applica a runtime se IDS disponibile
+    // 1) Validate and apply at runtime if IDS is available
     if (server->ids_) {
         const std::string payload_std = PSRAMUtils::fromPSRAMString(payload);
         if (!server->ids_->getWhitelistManager().loadFromConfig(payload_std)) {
@@ -10775,7 +10775,7 @@ esp_err_t WebServer::h_whitelist_post(httpd_req_t* req) {
         }
     }
 
-    // 2) Persiste nel config.json (PSRAM-safe), anche se IDS non c'è
+    // 2) Persist in config.json (PSRAM-safe), even if IDS is not present
     if (server->cfg_) {
         size_t psz = 0; char* pbuf = server->cfg_->getRawConfigInPSRAM(&psz);
         PSRAMJsonParser::PSRAMContext ctx2;
@@ -10799,7 +10799,7 @@ esp_err_t WebServer::h_whitelist_post(httpd_req_t* req) {
         cJSON_Delete(root);
     }
 
-    // 3) Forza reload (se IDS disponibile)
+    // 3) Force reload (if IDS is available)
     if (server->ids_) {
         server->ids_->reloadWhitelistFromConfig();
 

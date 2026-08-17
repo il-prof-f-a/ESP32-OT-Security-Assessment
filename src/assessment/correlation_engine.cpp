@@ -25,21 +25,21 @@ void CorrelationEngine::recordEvent(const CorrelationEvent& event) {
         return;
     }
 
-    // Verifica severity threshold
+    // Check severity threshold
     if (event.severity < config_.severity_threshold) {
         return;
     }
 
-    // Verifica limite eventi
+    // Check event limit
     if (events_.size() >= config_.max_events_tracked) {
-        // Rimuovi evento più vecchio
+        // Remove the oldest event
         events_.erase(events_.begin());
     }
 
     events_.push_back(event);
     total_events_processed_++;
 
-    // Cleanup periodico ogni 30s
+    // Periodic cleanup every 30s
     uint64_t now_ms = esp_timer_get_time() / 1000;
     if (now_ms - last_cleanup_ms_ > 30000) {
         cleanupOldEvents();
@@ -55,7 +55,7 @@ uint32_t CorrelationEngine::analyzeCorrelations(psram_vector<CorrelatedAttack>& 
     uint64_t now_ms = esp_timer_get_time() / 1000;
     uint64_t window_start = now_ms - config_.time_window_ms;
 
-    // Filtra eventi nella time window
+    // Filter events in the time window
     PSRAMAllocator<CorrelationEvent> alloc;
     psram_vector<CorrelationEvent> recent_events(alloc);
 
@@ -105,7 +105,7 @@ uint32_t CorrelationEngine::analyzeCorrelations(psram_vector<CorrelatedAttack>& 
 
 bool CorrelationEngine::detectDistributedScan(const psram_vector<CorrelationEvent>& events,
                                               CorrelatedAttack& out_attack) const {
-    // Raggruppa eventi per target
+    // Group events by target
     PSRAMAllocator<psram_string> str_alloc;
     PSRAMAllocator<psram_vector<CorrelationEvent>> vec_alloc;
     PSRAMAllocator<std::pair<const psram_string, psram_vector<CorrelationEvent>>> map_alloc;
@@ -113,7 +113,7 @@ bool CorrelationEngine::detectDistributedScan(const psram_vector<CorrelationEven
 
     groupEventsByTarget(events, by_target);
 
-    // Cerca target con molteplici sorgenti diverse (scan distribuito)
+    // Look for targets with multiple different sources (distributed scan)
     for (const auto& pair : by_target) {
         psram_vector<psram_string> unique_sources(str_alloc);
 
@@ -130,7 +130,7 @@ bool CorrelationEngine::detectDistributedScan(const psram_vector<CorrelationEven
             }
         }
 
-        // Rileva se >=3 sorgenti diverse attaccano stesso target
+        // Detect if >=3 different sources attack the same target
         if (unique_sources.size() >= 3 && pair.second.size() >= config_.min_events_for_correlation) {
             out_attack.attack_pattern = PSRAMUtils::createPSRAMString("distributed_port_scan");
             out_attack.involved_sources = unique_sources;
@@ -139,7 +139,7 @@ bool CorrelationEngine::detectDistributedScan(const psram_vector<CorrelationEven
             out_attack.first_seen_ms = pair.second.front().timestamp_ms;
             out_attack.last_seen_ms = pair.second.back().timestamp_ms;
 
-            // Calcola severity combinata
+            // Calculate combined severity
             float total_severity = 0.0f;
             for (const auto& event : pair.second) {
                 total_severity += event.severity;
@@ -158,14 +158,14 @@ bool CorrelationEngine::detectDistributedScan(const psram_vector<CorrelationEven
 
 bool CorrelationEngine::detectCoordinatedFlood(const psram_vector<CorrelationEvent>& events,
                                                CorrelatedAttack& out_attack) const {
-    // Raggruppa eventi per target
+    // Group events by target
     PSRAMAllocator<psram_string> str_alloc;
     PSRAMAllocator<std::pair<const psram_string, psram_vector<CorrelationEvent>>> map_alloc;
     psram_map<psram_string, psram_vector<CorrelationEvent>> by_target{std::less<psram_string>(), map_alloc};
 
     groupEventsByTarget(events, by_target);
 
-    // Cerca eventi "flooding" multipli verso stesso target
+    // Look for multiple "flooding" events toward the same target
     for (const auto& pair : by_target) {
         uint32_t flood_count = 0;
         psram_vector<psram_string> flood_sources(str_alloc);
@@ -187,7 +187,7 @@ bool CorrelationEngine::detectCoordinatedFlood(const psram_vector<CorrelationEve
             }
         }
 
-        // Rileva se >=2 sorgenti flood verso stesso target
+        // Detect if >=2 flood sources toward the same target
         if (flood_count >= config_.min_events_for_correlation && flood_sources.size() >= 2) {
             out_attack.attack_pattern = PSRAMUtils::createPSRAMString("coordinated_flooding");
             out_attack.involved_sources = flood_sources;
@@ -222,14 +222,14 @@ bool CorrelationEngine::detectCoordinatedFlood(const psram_vector<CorrelationEve
 
 bool CorrelationEngine::detectBruteForceDistributed(const psram_vector<CorrelationEvent>& events,
                                                    CorrelatedAttack& out_attack) const {
-    // Raggruppa eventi per target
+    // Group events by target
     PSRAMAllocator<psram_string> str_alloc;
     PSRAMAllocator<std::pair<const psram_string, psram_vector<CorrelationEvent>>> map_alloc;
     psram_map<psram_string, psram_vector<CorrelationEvent>> by_target{std::less<psram_string>(), map_alloc};
 
     groupEventsByTarget(events, by_target);
 
-    // Cerca tentativi multipli autenticazione fallita da sorgenti diverse
+    // Look for multiple failed authentication attempts from different sources
     for (const auto& pair : by_target) {
         uint32_t auth_fail_count = 0;
         psram_vector<psram_string> attack_sources(str_alloc);
@@ -252,7 +252,7 @@ bool CorrelationEngine::detectBruteForceDistributed(const psram_vector<Correlati
             }
         }
 
-        // Rileva se >=3 sorgenti diverse tentano auth verso stesso target
+        // Detect if >=3 different sources attempt auth toward the same target
         if (auth_fail_count >= config_.min_events_for_correlation && attack_sources.size() >= 2) {
             out_attack.attack_pattern = PSRAMUtils::createPSRAMString("distributed_brute_force");
             out_attack.involved_sources = attack_sources;
@@ -328,7 +328,7 @@ void CorrelationEngine::cleanupOldEvents() {
 
     size_t before = events_.size();
 
-    // Rimuovi eventi oltre retention period
+    // Remove events beyond the retention period
     events_.erase(
         std::remove_if(events_.begin(), events_.end(),
             [retention_cutoff](const CorrelationEvent& e) {

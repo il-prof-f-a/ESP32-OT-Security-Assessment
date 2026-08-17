@@ -1436,7 +1436,7 @@ psram_vector<psram_string> NetworkPresenceTracker::getTrustedDevices() const {
     return trusted;
 }
 
-// Salva un blob binario versionato, endianness little-endian, con top-N per mappe.
+// Save a versioned binary blob, little-endian, with top-N per map.
 bool NetworkPresenceTracker::saveDeviceToNVS(const NetworkDeviceInfo& d) {
     if (!persistent_storage_initialized_) return false;
 
@@ -1445,11 +1445,11 @@ bool NetworkPresenceTracker::saveDeviceToNVS(const NetworkDeviceInfo& d) {
     static constexpr uint8_t  TOP_PORTS     = 8;
 
     const char* ns = NVS_NAMESPACE_PRESENCE;
-    const psram_string key_psram = getStorageKey(d.ip_address); // es. "learned:192.168.1.23"
+    const psram_string key_psram = getStorageKey(d.ip_address); // e.g. "learned:192.168.1.23"
     const std::string key = PSRAMUtils::fromPSRAMString(key_psram);
 
     std::vector<uint8_t> buf;
-    buf.reserve(192); // stima iniziale
+    buf.reserve(192); // initial estimate
 
     auto putU8  = [&](uint8_t v){ buf.push_back(v); };
     auto putU16 = [&](uint16_t v){ buf.push_back((uint8_t)(v)); buf.push_back((uint8_t)(v>>8)); };
@@ -1474,18 +1474,18 @@ bool NetworkPresenceTracker::saveDeviceToNVS(const NetworkDeviceInfo& d) {
     // Header
     putU16(BLOB_VER);
 
-    // Identità
+    // Identity
     putShortStr(d.ip_address);   // len + bytes
     putShortStr(d.mac_address);  // len + bytes
 
-    // Statistiche di traffico
+    // Traffic statistics
     putU64(d.total_packets);
     putU64(d.total_read_packets);
     putU64(d.total_write_packets);
     putU64(d.first_seen_ms);
     putU64(d.last_seen_ms);
 
-    // Scoring/presenza/trust
+    // Scoring/presence/trust
     putDouble(d.presence_score);
     putBool(d.is_continuously_present);
     putBool(d.is_learned_sender);
@@ -1493,11 +1493,11 @@ bool NetworkPresenceTracker::saveDeviceToNVS(const NetworkDeviceInfo& d) {
     putBool(d.is_whitelisted);
     putU64(d.inactive_since_ms);
 
-    // Persistenza/learned
+    // Persistence/learned
     putBool(d.is_persistent);
     putU64(d.learned_timestamp_ms);
 
-    // Protocol counts: prendi i TOP_PROTOCOLS per frequenza
+    // Protocol counts: take the TOP_PROTOCOLS by frequency
     {
         std::vector<std::pair<uint16_t, uint64_t>> v;
         v.reserve(d.protocol_counts.size());
@@ -1514,7 +1514,7 @@ bool NetworkPresenceTracker::saveDeviceToNVS(const NetworkDeviceInfo& d) {
         }
     }
 
-    // Port usage: prendi i TOP_PORTS per frequenza
+    // Port usage: take the TOP_PORTS by frequency
     {
         std::vector<std::pair<uint16_t, uint64_t>> v;
         v.reserve(d.port_usage.size());
@@ -1528,7 +1528,7 @@ bool NetworkPresenceTracker::saveDeviceToNVS(const NetworkDeviceInfo& d) {
         }
     }
 
-    // Scrittura atomica su NVS tramite AsyncStorage engine
+    // Atomic write to NVS via AsyncStorage engine
     esp_err_t err = AsyncStorage::Global::nvsSetBlob(ns, key, buf.data(), buf.size());
     if (err != ESP_OK) {
         LOG_ERRORF(TAG_NET_PRESENCE, "NVS set_blob failed for key '%s': %s",
@@ -1884,13 +1884,13 @@ bool NetworkPresenceTracker::loadDeviceFromNVS(const std::string& ip, NetworkDev
         return s;
     };
 
-    // 2) Prova a leggere come BLOB versionato (inizia con u16 versione)
+    // 2) Try to read as a versioned BLOB (starts with u16 version)
     bool parsed = false;
     size_t off = 0;
     if (buf.size() >= 2) {
         uint16_t ver = rdU16(off);
         if (ver == 3 || ver == 2) {
-            // v3/v2: decodifica sequenza
+            // v3/v2: decode sequence
             NetworkDeviceInfo d{};
             d.ip_address  = PSRAMUtils::toPSRAMString(rdStr8(off));
             d.mac_address = PSRAMUtils::toPSRAMString(rdStr8(off));
@@ -1945,8 +1945,8 @@ bool NetworkPresenceTracker::loadDeviceFromNVS(const std::string& ip, NetworkDev
 
     if (parsed) return true;
 
-    // 3) Fallback: vecchio blob "struct fissa"
-    // Layout atteso (salvato in passato):
+    // 3) Fallback: old "fixed struct" blob
+    // Expected layout (saved in the past):
     //   ip[16], mac[18], u64 learned_ts, double presence_score, bool learned, bool persistent, padding ~6
     struct OldBlob {
         char     ip[16];
@@ -1971,12 +1971,12 @@ bool NetworkPresenceTracker::loadDeviceFromNVS(const std::string& ip, NetworkDev
         d.is_learned_sender    = d.is_learned_writer;
         d.is_persistent        = (ob.is_persistent != 0);
 
-        // Campi non presenti nel vecchio formato rimangono default (0/false)
+        // Fields not present in the old format remain default (0/false)
         device = std::move(d);
         return true;
     }
 
-    // Formato sconosciuto
+    // Unknown format
     return false;
 }
 
