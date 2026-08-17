@@ -25,6 +25,7 @@ credentials/
 *.cer
 components/config_blob/config.json
 src/web/tls_cert.h
+src/web/ui/gen/
 
 # Local test output
 reports/
