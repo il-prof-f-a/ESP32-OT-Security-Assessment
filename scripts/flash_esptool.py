@@ -93,6 +93,7 @@ def build_flash_command(
     firmware = _artifact(build_dir, "firmware.bin")
     app_offset = parse_application_offset(partitions_path or DEFAULT_PARTITIONS)
     command = list(esptool_command or [_python_command(), "-m", "esptool"])
+    bootloader_offset = "0x2000" if config.chip == "esp32p4" else "0x1000"
     return [
         *command,
         "--chip",
@@ -108,7 +109,7 @@ def build_flash_command(
         "40m",
         "--flash-size",
         "detect",
-        "0x1000",
+        bootloader_offset,
         str(bootloader),
         "0x8000",
         str(partitions),
@@ -158,7 +159,9 @@ def default_build_dir(project_dir: Path, target: str) -> Path:
 
 def _run(command: Sequence[str], *, cwd: Path) -> None:
     print("$ " + " ".join(str(part) for part in command), flush=True)
-    subprocess.run(list(command), cwd=cwd, check=True)
+    environment = dict(os.environ)
+    environment.setdefault("PYTHONUTF8", "1")
+    subprocess.run(list(command), cwd=cwd, check=True, env=environment)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
