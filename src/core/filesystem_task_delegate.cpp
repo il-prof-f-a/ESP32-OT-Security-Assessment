@@ -303,8 +303,9 @@ void FilesystemTaskDelegate::processMessages() {
     while (true) {
         // Check for file I/O requests first (higher priority)
         if (xQueueReceive(fileio_request_queue_, &fileio_req, 0) == pdTRUE) {
-            // Process file I/O request
-            memset(&fileio_resp, 0, sizeof(fileio_resp));
+            // Reset via assignment: fileio_resp holds a psram_string, so
+            // memset would skip its destructor and corrupt its internal state.
+            fileio_resp = FileIOResponse{};
             fileio_resp.request_id = fileio_req.request_id;
             fileio_resp.result = OperationResult::FAILURE;
 
