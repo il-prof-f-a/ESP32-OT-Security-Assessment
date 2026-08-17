@@ -327,10 +327,17 @@ without one.
 A committed `.vscode/tasks.json` also exposes **Upload & Monitor (correct flash)**
 and **Upload only (correct flash)** tasks (Terminal → Run Task…, or
 Ctrl+Shift+B for the default build task). They prompt for the board target and
-serial port, then invoke `build_flash.ps1`, so the ESP32-P4 is always flashed at
-the correct offsets. On Windows hosts whose checkout path contains spaces,
-prefer these tasks or the wrappers below over `pio run -t upload`, which can fail
-while PlatformIO re-installs the platform.
+serial port, then invoke `build_flash.ps1`, which flashes the ESP32-P4 at the
+correct offsets (`0x2000`/`0x8000`/`0x200000`).
+
+> **Important — do not use the PlatformIO "Upload" / "Upload and Monitor" buttons
+> for `waveshare-esp32p4-eth`.** This environment uses the
+> `pioarduino/platform-espressif32` git fork (required to build the RISC-V
+> ESP32-P4). On Windows hosts whose checkout path contains spaces, `pio run
+> -t upload` re-checks/re-installs that git platform and hangs at "Processing
+> …". Use `Ctrl+Shift+B` or `build_flash.ps1` instead. The `t-poe-pro` and
+> `esp32-s3-eth` environments use the stock `espressif32` platform, so their
+> native upload buttons work normally.
 
 ### Explicit esptool workflow
 
