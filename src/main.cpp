@@ -986,18 +986,19 @@ extern "C" void app_main(void) {
         }
     }
 
-    /*
-    // Try Ethernet in the end (most reliable for T-POE Pro)
+    // Try Ethernet last (reliable for Ethernet-only boards such as T-POE Pro
+    // and ESP32-P4). The actual port/scheme (HTTP 80 vs HTTPS 443) is chosen
+    // inside startOnInterface based on ESP32_OT_WEB_HTTP_ONLY.
     if (!web_started && eth.netif() && eth.hasValidIP()) {
         LOG_INFO(TAG, "Attempting to start WebServer on Ethernet interface...");
-        if (web.startWithTask(80, eth.netif())) {
-            std::string eth_ip = eth.getIP();
-            LOG_INFOF(TAG, "HTTP server started on Ethernet: http://%s:80/ (Web Management)", eth_ip.c_str());
+        if (web.startWithTask(443, eth.netif())) {
+            psram_string eth_ip = eth.getIP();
+            LOG_INFOF(TAG, "Web server started on Ethernet (%s)", eth_ip.c_str());
             web_started = true;
         } else {
             LOG_ERROR(TAG, "Failed to start WebServer on Ethernet interface");
         }
-    }*/
+    }
 
     if (!web_started) {
         LOG_ERROR(TAG, " HTTP server failed to start on all interfaces (Ethernet, WiFi STA, WiFi AP)");
