@@ -421,6 +421,28 @@ The main engineering limitations are tracked in [GitHub Issues](https://github.c
 
 Security-sensitive findings that would enable exploitation may be handled privately until a fix is available. For a vulnerability report, do not open a public issue containing exploit details, credentials, private network data, or device logs with sensitive content.
 
+### Secure Boot and Flash Encryption
+
+Secure Boot and Flash Encryption (the device memory encryption) are supported but
+**not enabled**. The Security Manager reads the eFuses at boot and, when the
+configuration requires them, reports that the hardware protection is missing:
+
+    [Security] Secure Boot (efuse): 0
+    [Security] Flash Encryption (efuse): 0
+    [Security] Security hardening requirement not met: secure_boot -> Enable eFuse secure boot before deployment
+    [Security] Security hardening requirement not met: flash_encryption -> Enable flash encryption in eFuse
+
+These are one-time, eFuse-backed hardware protections, not runtime settings. They
+are intentionally left off during development and will be enabled only when the
+project reaches a mature, deployment-ready phase, because programming the eFuses
+is permanent (in release mode the flash cannot be re-read or re-flashed without
+the keys), the ESP32-P4 path uses the immature `pioarduino` fork for this feature
+(prefer the native `idf.py` build), and the keys must be backed up securely.
+
+When the time comes: enable `CONFIG_SECURE_FLASH_ENC_ENABLED=y` (and optionally
+`CONFIG_SECURE_BOOT=y`), flash with `idf.py encrypted-flash`, and store the flash
+encryption and secure boot keys.
+
 ## License
 
 This project is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). It permits the noncommercial uses described in the license; it is not an OSI-approved open-source license. Contact the copyright holder before any commercial use.
