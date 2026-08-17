@@ -80,7 +80,7 @@ bool FilesystemTaskDelegate::initialize() {
         return false;
     }
 
-    fileio_response_queue_ = xQueueCreate(RESPONSE_QUEUE_SIZE, sizeof(FileIOResponse));
+    fileio_response_queue_ = xQueueCreate(RESPONSE_QUEUE_SIZE, sizeof(FileIOResponse*));
     if (!fileio_response_queue_) {
         LOG_ERROR(TAG, "Failed to create file I/O response queue");
         vQueueDelete(request_queue_);
@@ -298,21 +298,23 @@ void FilesystemTaskDelegate::processMessages() {
     DelegationMessage msg;
     DelegationResponse response;
     FileIORequest fileio_req;
-    FileIOResponse fileio_resp;
 
     while (true) {
         // Check for file I/O requests first (higher priority)
         if (xQueueReceive(fileio_request_queue_, &fileio_req, 0) == pdTRUE) {
-            // Reset via assignment: fileio_resp holds a psram_string, so
-            // memset would skip its destructor and corrupt its internal state.
-            fileio_resp = FileIOResponse{};
-            fileio_resp.request_id = fileio_req.request_id;
-            fileio_resp.result = OperationResult::FAILURE;
+            // Allocate the response on the heap and hand it over by pointer: the
+            // queue copies its item by memcpy, which would shallow-copy the
+            // psram_string member and double-free it. The consumer owns and
+            // deletes the pointer.
+            FileIOResponse* fileio_resp = new FileIOResponse();
+            fileio_resp->request_id = fileio_req.request_id;
+            fileio_resp->result = OperationResult::FAILURE;
 
-            bool success = processFileIORequest(fileio_req, fileio_resp);
+            bool success = processFileIORequest(fileio_req, *fileio_resp);
 
             // Send response
             if (xQueueSend(fileio_response_queue_, &fileio_resp, pdMS_TO_TICKS(100)) != pdTRUE) {
+                delete fileio_resp;
                 LOG_ERRORF(TAG, "Failed to send file I/O response for request %u", fileio_req.request_id);
             }
 
@@ -1569,22 +1571,24 @@ bool FilesystemTaskDelegate::readFileSync(const std::string& file_path, psram_st
     }
 
     // Wait for response
-    FileIOResponse response;
     TickType_t start_ticks = xTaskGetTickCount();
     TickType_t timeout_ticks = pdMS_TO_TICKS(timeout_ms);
 
     while ((xTaskGetTickCount() - start_ticks) < timeout_ticks) {
-        if (xQueueReceive(fileio_response_queue_, &response, pdMS_TO_TICKS(100)) == pdTRUE) {
-            if (response.request_id == request.request_id) {
-                if (response.result == OperationResult::SUCCESS) {
-                    content = response.psram_content;
-                    //log_deBUGF(TAG, "File read successful id=%u size=%zu", response.request_id, content.size());
+        FileIOResponse* response = nullptr;
+        if (xQueueReceive(fileio_response_queue_, &response, pdMS_TO_TICKS(100)) == pdTRUE && response) {
+            if (response->request_id == request.request_id) {
+                if (response->result == OperationResult::SUCCESS) {
+                    content = std::move(response->psram_content);
+                    delete response;
                     return true;
                 } else {
-                    LOG_ERRORF(TAG, "File read failed id=%u result=%d", response.request_id, static_cast<int>(response.result));
+                    LOG_ERRORF(TAG, "File read failed id=%u result=%d", response->request_id, static_cast<int>(response->result));
+                    delete response;
                     return false;
                 }
             }
+            delete response;
         }
     }
 
@@ -1614,21 +1618,23 @@ bool FilesystemTaskDelegate::writeFileSync(const std::string& file_path, const p
     }
 
     // Wait for response
-    FileIOResponse response;
     TickType_t start_ticks = xTaskGetTickCount();
     TickType_t timeout_ticks = pdMS_TO_TICKS(timeout_ms);
 
     while ((xTaskGetTickCount() - start_ticks) < timeout_ticks) {
-        if (xQueueReceive(fileio_response_queue_, &response, pdMS_TO_TICKS(100)) == pdTRUE) {
-            if (response.request_id == request.request_id) {
-                if (response.result == OperationResult::SUCCESS) {
-                    //log_deBUGF(TAG, "File write successful id=%u", response.request_id);
+        FileIOResponse* response = nullptr;
+        if (xQueueReceive(fileio_response_queue_, &response, pdMS_TO_TICKS(100)) == pdTRUE && response) {
+            if (response->request_id == request.request_id) {
+                if (response->result == OperationResult::SUCCESS) {
+                    delete response;
                     return true;
                 } else {
-                    LOG_ERRORF(TAG, "File write failed id=%u result=%d", response.request_id, static_cast<int>(response.result));
+                    LOG_ERRORF(TAG, "File write failed id=%u result=%d", response->request_id, static_cast<int>(response->result));
+                    delete response;
                     return false;
                 }
             }
+            delete response;
         }
     }
 

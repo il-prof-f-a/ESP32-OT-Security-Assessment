@@ -299,7 +299,7 @@ class BuildIntegrationTests(unittest.TestCase):
         self.assertNotIn(
             "memset(&fileio_resp, 0, sizeof(fileio_resp))", filesystem_delegate
         )
-        self.assertIn("fileio_resp = FileIOResponse{};", filesystem_delegate)
+        self.assertIn("sizeof(FileIOResponse*)", filesystem_delegate)
 
 
 if __name__ == "__main__":
