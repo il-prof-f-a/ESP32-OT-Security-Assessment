@@ -113,7 +113,7 @@ private:
             size_t used_vs_largest = (free_internal > largest_block) ? (free_internal - largest_block) : 0;
             frag_pct = (unsigned)((used_vs_largest * 100U) / free_internal);
         }
-        LOG_INFOF("PSRAMAllocator", "ð %s - PSRAM: %u KB, DRAM: %u bytes, Largest: %u bytes, Frag: %u%%",
+        LOG_INFOF("PSRAMAllocator", "💾 %s - PSRAM: %u KB, DRAM: %u bytes, Largest: %u bytes, Frag: %u%%",
                  context, (unsigned)(free_psram/1024), (unsigned)free_internal,
                  (unsigned)largest_block, (unsigned)frag_pct);
     }
@@ -316,20 +316,20 @@ namespace PSRAMUtils {
             size_t used_vs_largest2 = (free_internal > largest_block) ? (free_internal - largest_block) : 0;
             frag_pct2 = (unsigned)((used_vs_largest2 * 100U) / free_internal);
         }
-        LOG_INFOF("PSRAMUtils", "ð %s - PSRAM: %u KB, DRAM: %u bytes, Largest: %u bytes, Frag: %u%%",
+        LOG_INFOF("PSRAMUtils", "💾 %s - PSRAM: %u KB, DRAM: %u bytes, Largest: %u bytes, Frag: %u%%",
                  context, (unsigned)(free_psram/1024), (unsigned)free_internal,
                  (unsigned)largest_block, (unsigned)frag_pct2);
 
         if (free_internal < 10000) {  // Less than 10KB DRAM
-            LOG_WARNING("PSRAMUtils", "ð´ CRITICAL: DRAM below 10KB threshold!");
+            LOG_WARNING("PSRAMUtils", "💾 CRITICAL: DRAM below 10KB threshold!");
         } else if (free_internal < 30000) {  // Less than 50KB DRAM
-            LOG_WARNING("PSRAMUtils", "â ï¸  WARNING: DRAM below 30KB threshold");
+            LOG_WARNING("PSRAMUtils", "💾  WARNING: DRAM below 30KB threshold");
         }
     }
 
     // Emergency memory cleanup - force garbage collection
     inline void emergencyCleanup(const char* caller ) {
-        LOG_WARNINGF("PSRAMUtils", "ð¨ Emergency memory cleanup triggered by %s", caller);
+        LOG_WARNINGF("PSRAMUtils", "💾 Emergency memory cleanup triggered by %s", caller);
 
         // Log current state
         logMemoryStatus("Before Emergency Cleanup");

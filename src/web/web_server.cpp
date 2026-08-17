@@ -421,16 +421,16 @@ static bool ensure_psram_buf(const char* name, void* ptr, size_t size_bytes) {
 // Helper: verifica che un puntatore NON sia in PSRAM e sia DMA-capable (necessario per socket TX e vari driver)
 static bool ensure_internal_dma_buf(const char* name, void* ptr, size_t size_bytes) {
     if (!ptr) {
-        LOG_ERRORF(TAG_WEB, "ðŸ”´ CRITICO: allocazione %s fallita (%u bytes)", name, (unsigned)size_bytes);
+        LOG_ERRORF(TAG_WEB, "💾 CRITICO: allocazione %s fallita (%u bytes)", name, (unsigned)size_bytes);
         return false;
     }
     if (esp_ptr_external_ram(ptr)) {
-        LOG_ERRORF(TAG_WEB, "ðŸ”´ CRITICO: %s in PSRAM ma serve INTERNAL/DMA (ptr=%p, size=%u)",
+        LOG_ERRORF(TAG_WEB, "💾 CRITICO: %s in PSRAM ma serve INTERNAL/DMA (ptr=%p, size=%u)",
                    name, ptr, (unsigned)size_bytes);
         return false;
     }
     if (!esp_ptr_dma_capable(ptr)) {
-        LOG_ERRORF(TAG_WEB, "ðŸ”´ CRITICO: %s NON DMA-capable (ptr=%p, size=%u)", name, ptr, (unsigned)size_bytes);
+        LOG_ERRORF(TAG_WEB, "💾 CRITICO: %s NON DMA-capable (ptr=%p, size=%u)", name, ptr, (unsigned)size_bytes);
         return false;
     }
     return true;
@@ -2648,7 +2648,7 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
                                  ? retry_count
                                  : (int)(sizeof(kProfiles) / sizeof(kProfiles[0])) - 1;
         const HttpsStartProfile& prof = kProfiles[prof_idx];
-        LOG_WARNINGF(TAG_WEB, "ðŸ” HTTPS start profile: %s keep_alive=%s stack=%u max_sockets=%u backlog=%u",
+        LOG_WARNINGF(TAG_WEB, "💾 HTTPS start profile: %s keep_alive=%s stack=%u max_sockets=%u backlog=%u",
                      prof.name,
                      prof.keep_alive ? "true" : "false",
                      (unsigned)prof.stack_size,
