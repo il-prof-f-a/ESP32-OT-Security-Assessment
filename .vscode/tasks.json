@@ -1,0 +1,49 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Upload & Monitor (correct flash)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+        "${workspaceFolder}/scripts/build_flash.ps1",
+        "-Target", "${input:target}",
+        "-Port", "${input:port}",
+        "-Upload", "-Monitor"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "Upload only (correct flash)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+        "${workspaceFolder}/scripts/build_flash.ps1",
+        "-Target", "${input:target}",
+        "-Port", "${input:port}",
+        "-Upload"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "target",
+      "type": "pickString",
+      "options": ["t-poe-pro", "esp32-s3-eth", "waveshare-esp32p4-eth"],
+      "description": "Board target",
+      "default": "waveshare-esp32p4-eth"
+    },
+    {
+      "id": "port",
+      "type": "promptString",
+      "description": "Serial port (e.g. COM12)",
+      "default": "COM12"
+    }
+  ]
+}

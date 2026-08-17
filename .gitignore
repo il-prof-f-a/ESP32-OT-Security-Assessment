@@ -10,7 +10,8 @@ sdkconfig.*
 !sdkconfig.*.defaults
 
 # Editor and Python caches
-.vscode/
+.vscode/*
+!.vscode/tasks.json
 .venv/
 __pycache__/
 *.py[cod]

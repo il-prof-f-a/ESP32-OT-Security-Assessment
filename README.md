@@ -324,6 +324,14 @@ Use `--no-build` (or `-NoBuild`) only when the selected build artifacts already
 exist. The wrapper does not guess a port and refuses upload/monitor operations
 without one.
 
+A committed `.vscode/tasks.json` also exposes **Upload & Monitor (correct flash)**
+and **Upload only (correct flash)** tasks (Terminal → Run Task…, or
+Ctrl+Shift+B for the default build task). They prompt for the board target and
+serial port, then invoke `build_flash.ps1`, so the ESP32-P4 is always flashed at
+the correct offsets. On Windows hosts whose checkout path contains spaces,
+prefer these tasks or the wrappers below over `pio run -t upload`, which can fail
+while PlatformIO re-installs the platform.
+
 ### Explicit esptool workflow
 
 The Python helper builds the selected PlatformIO environment and then invokes
@@ -345,7 +353,7 @@ The helper uses the target-specific esptool chip (`esp32`, `esp32s3`, or
 
 | Image | Flash offset |
 |---|---:|
-| Bootloader | `0x1000` |
+| Bootloader | `0x1000` (`0x2000` on ESP32-P4) |
 | Partition table | `0x8000` |
 | Factory application (`firmware.bin`) | `0x200000` |
 
