@@ -76,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--major", action="store_true", help="bump the major version")
     parser.add_argument("--minor", action="store_true", help="bump the minor version")
     parser.add_argument("--version", help="set an explicit version, e.g. 0.2.0")
+    parser.add_argument("--current", action="store_true", help="tag the current version without bumping (first release)")
     parser.add_argument("--yes", action="store_true", help="skip the interactive confirmation")
     parser.add_argument("--no-push", action="store_true", help="commit and tag locally, do not push")
     parser.add_argument("--skip-tests", action="store_true", help="skip the host test suite")
@@ -84,7 +85,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     current = current_version()
-    if args.version:
+    if args.current:
+        target = current
+    elif args.version:
         target = args.version.strip()
     else:
         part = "major" if args.major else ("minor" if args.minor else "patch")
@@ -92,8 +95,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if not SEMVER.fullmatch(target):
         fail(f"'{target}' is not a valid semantic version")
-    if target == current:
-        fail(f"target version '{target}' equals the current version")
+    if target == current and not args.current:
+        fail(f"target version '{target}' equals the current version (use --current to tag it)")
 
     print(f"current version : {current}")
     print(f"target version  : {target}")
@@ -116,15 +119,19 @@ def main(argv: list[str] | None = None) -> int:
         print("running host tests...")
         run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"])
 
-    print(f"writing VERSION = {target}")
-    VERSION_FILE.write_text(target + "\n", encoding="utf-8")
-    run(["git", "add", "VERSION"])
+    if target == current:
+        print(f"no version bump ({target} is already the current version)")
+    else:
+        print(f"writing VERSION = {target}")
+        VERSION_FILE.write_text(target + "\n", encoding="utf-8")
+        run(["git", "add", "VERSION"])
 
-    if not args.skip_changelog:
-        if generate_changelog(f"v{target}"):
-            run(["git", "add", "CHANGELOG.md"])
+        if not args.skip_changelog:
+            if generate_changelog(f"v{target}"):
+                run(["git", "add", "CHANGELOG.md"])
 
-    run(["git", "commit", "-m", f"chore: release v{target}"])
+        run(["git", "commit", "-m", f"chore: release v{target}"])
+
     if not args.no_push:
         run(["git", "push"])
     run(["git", "tag", "-a", f"v{target}", "-m", f"Release v{target}"])
