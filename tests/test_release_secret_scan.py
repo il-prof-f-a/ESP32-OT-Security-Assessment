@@ -26,7 +26,7 @@ class ReleaseSecretScanTests(unittest.TestCase):
     def test_detects_synthetic_secrets_in_binary_and_zip_without_exposing_value(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            secret = b"-----BEGIN PRIVATE KEY-----\nDUMMY-TEST-MATERIAL\n"
+            secret = b"-----BEGIN PRIVATE KEY-----\nDUMMYTESTMATERIAL\n-----END PRIVATE KEY-----\n"
             firmware = root / "firmware.bin"
             firmware.write_bytes(b"prefix\0" + secret)
             bundle = root / "bundle.zip"
@@ -36,7 +36,7 @@ class ReleaseSecretScanTests(unittest.TestCase):
             rendered = "\n".join(finding.safe_description() for finding in findings)
             self.assertIn("private-key-pem", rendered)
             self.assertIn("nonempty-admin-password", rendered)
-            self.assertNotIn("DUMMY-TEST-MATERIAL", rendered)
+            self.assertNotIn("DUMMYTESTMATERIAL", rendered)
             self.assertNotIn("dummy-secret", rendered)
 
     def test_private_denylist_is_applied_as_bytes(self):

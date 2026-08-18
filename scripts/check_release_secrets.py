@@ -20,7 +20,11 @@ class Finding(NamedTuple):
 
 
 RULES = (
-    ("private-key-pem", re.compile(br"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----")),
+    ("private-key-pem", re.compile(
+        br"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----[\r\n]+"
+        br"[A-Za-z0-9+/=\r\n]{1,4096}?"
+        br"-----END (?:[A-Z0-9 ]+ )?PRIVATE KEY-----"
+    )),
     ("removed-generated-symbol", re.compile(
         br"kProvisioningApPassword|kServerPrivateKeyPem|ESP32_OT_CREDENTIALS_DIR"
     )),
