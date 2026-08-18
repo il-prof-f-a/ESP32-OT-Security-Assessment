@@ -20,6 +20,10 @@ tokens, keys, internal addresses, identifiers and proprietary OT traffic.
 - Five invalid token attempts per minute trigger a 60-second lockout.
 - S3/P4 create a per-device self-signed ECDSA certificate. Verify its UART SHA-256 fingerprint
   before sending setup data; a self-signed warning alone does not prove identity.
+- The per-device TLS private key is stored on the LittleFS partition without flash encryption
+  (Secure Boot and Flash Encryption are not enabled yet). An attacker with physical access to the
+  flash can extract it and impersonate the device or decrypt captured HTTPS traffic. Protect the
+  hardware and re-provision after any suspected physical compromise.
 - T-POE Pro management is currently unencrypted HTTP. Passwords and sessions can be observed or
   modified by an attacker on that management network. Use an isolated, trusted lab network.
 - The provisioning completion marker is committed last. Interrupted setup remains fail-closed and
