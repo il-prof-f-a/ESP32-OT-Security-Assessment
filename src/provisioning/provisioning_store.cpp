@@ -7,6 +7,7 @@
 #include "../core/async_storage_engine.h"
 #include "../core/psram_json_parser.h"
 #include "../security/password_hasher.h"
+#include "esp32_ot_build_assets.h"
 
 extern "C" {
 #include "cJSON.h"
@@ -245,6 +246,13 @@ bool ProvisioningStore::commit(const ProvisioningSubmission& submission,
     if (error == ESP_OK) error = nvs_commit(handle);
     nvs_close(handle);
     return error == ESP_OK;
+}
+
+bool ProvisioningStore::commitEmbedded(ConfigurationManager& config) {
+    const char* hash = esp32_ot_build::kEmbeddedAdminPasswordHash;
+    if (!hash || hash[0] == '\0') return false;
+    ProvisioningSubmission submission;
+    return commit(submission, PSRAMUtils::createPSRAMString(hash), config);
 }
 
 bool ProvisioningStore::clearCompletionMarker() {

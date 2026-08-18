@@ -117,5 +117,10 @@ bool ProvisioningCoordinator::continueOperationalBoot(ConfigurationManager& conf
         std::fflush(stdout);
         return true;
     }
+    if (store.commitEmbedded(config)) {
+        std::printf("BOOT_MODE=OPERATIONAL\n");
+        std::fflush(stdout);
+        return true;
+    }
     provisioningLoop(config, store);
 }

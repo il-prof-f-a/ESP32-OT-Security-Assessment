@@ -1,11 +1,22 @@
-"""Generate deterministic, secret-free firmware build assets."""
+"""Generate deterministic, secret-free firmware build assets.
+
+When the environment variable ESP32_OT_EMBEDDED_CREDENTIALS=1, an administrator
+password is read from (or generated into) the gitignored credentials.json and its
+PBKDF2 hash is embedded so the device self-provisions at first boot, skipping the
+setup portal. Release/CI builds leave the variable unset, so published firmware
+always uses the interactive provisioning flow.
+"""
 
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
+import secrets
 import tempfile
 
 
@@ -121,7 +132,48 @@ def _public_defaults() -> dict:
     }
 
 
-def _header_bytes() -> bytes:
+def _generate_password() -> str:
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(20))
+
+
+def _pbkdf2_hash(password: str) -> str:
+    """Match the firmware PasswordHasher format: pbkdf2:<salt_b64>:100000:<hash_b64>."""
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000, dklen=32)
+    return (
+        "pbkdf2:"
+        + base64.b64encode(salt).decode("ascii")
+        + ":100000:"
+        + base64.b64encode(digest).decode("ascii")
+    )
+
+
+def _embedded_admin_hash(project_dir: Path) -> str:
+    """Return the embedded admin PBKDF2 hash, or "" when the feature is disabled."""
+    if os.environ.get("ESP32_OT_EMBEDDED_CREDENTIALS", "0") != "1":
+        return ""
+    credentials_path = Path(project_dir).resolve() / "credentials.json"
+    if credentials_path.is_file():
+        try:
+            data = json.loads(credentials_path.read_text(encoding="utf-8"))
+            password = data.get("admin_password", "")
+        except (json.JSONDecodeError, OSError) as error:
+            raise ValueError(f"invalid credentials.json: {error}") from error
+    else:
+        password = _generate_password()
+        credentials_path.write_text(
+            json.dumps({"admin_password": password}, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    if not isinstance(password, str) or not password:
+        raise ValueError("credentials.json must contain a non-empty admin_password")
+    if len(password) < 16 or len(password) > 128:
+        raise ValueError("admin_password must be 16-128 bytes")
+    return _pbkdf2_hash(password)
+
+
+def _header_bytes(embedded_admin_hash: str) -> bytes:
     config = json.dumps(
         _public_defaults(), ensure_ascii=True, separators=(",", ":"), sort_keys=True
     )
@@ -131,6 +183,8 @@ def _header_bytes() -> bytes:
         "namespace esp32_ot_build {\n"
         "static constexpr char kEmbeddedPublicConfigJson[] = "
         f'R"ESP32CFG({config})ESP32CFG";\n'
+        'static constexpr char kEmbeddedAdminPasswordHash[] = "'
+        f'{embedded_admin_hash}";\n'
         "}  // namespace esp32_ot_build\n"
     )
     return header.encode("utf-8")
@@ -149,17 +203,18 @@ def _atomic_write(path: Path, content: bytes) -> None:
 def generate_build_assets(
     project_dir: Path | str, build_dir: Path | str, board: str | None = None
 ) -> BuildAssetsResult:
-    """Generate public assets; ``board`` is accepted for a stable build interface."""
+    """Generate public assets; board is accepted for a stable build interface."""
 
     Path(project_dir).resolve(strict=True)
     Path(build_dir).resolve().mkdir(parents=True, exist_ok=True)
     if board is not None and not isinstance(board, str):
         raise TypeError("board must be a string or None")
+    embedded_admin_hash = _embedded_admin_hash(project_dir)
     header_path = Path(build_dir).resolve() / "generated" / "esp32_ot_build_assets.h"
     legacy_header = header_path.parent / "esp32_ot_generated_credentials.h"
     if legacy_header.exists():
         legacy_header.unlink()
-    _atomic_write(header_path, _header_bytes())
+    _atomic_write(header_path, _header_bytes(embedded_admin_hash))
     return BuildAssetsResult(header_path=header_path)
 
 

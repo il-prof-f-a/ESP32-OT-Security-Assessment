@@ -20,6 +20,7 @@ public:
     bool commit(const ProvisioningSubmission& submission,
                 const psram_string& admin_hash,
                 ConfigurationManager& config);
+    bool commitEmbedded(ConfigurationManager& config);
     bool clearCompletionMarker();
     bool factoryReset();
     void setFaultPointForTesting(FaultPoint point) { fault_point_ = point; }

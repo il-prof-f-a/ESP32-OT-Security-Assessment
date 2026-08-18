@@ -181,6 +181,29 @@ AP password and HTTPS fingerprint are displayed.
 There is no shared default password and no universal recovery credential. A new clone does not
 create a local credential file; secrets are generated independently on each physical device.
 
+### Embedded credentials (optional, internal builds only)
+
+For a small batch of devices whose administrator password must be fixed and printed in a manual,
+the firmware can skip the setup portal and self-provision at first boot with a build-time password.
+
+- Enable by building with ESP32_OT_EMBEDDED_CREDENTIALS=1 in the environment:
+
+      $env:ESP32_OT_EMBEDDED_CREDENTIALS = "1"
+      pio run -e t-poe-pro
+
+- On the first enabled build, the helper creates a gitignored credentials.json in the repository
+  root containing a random administrator password. Edit the file to set your own password (at least
+  16 bytes); the firmware embeds only the PBKDF2 hash of that password, never the plaintext.
+- At first boot the device writes the hash, persists the default configuration, marks provisioning
+  complete and starts directly in operational mode: no setup AP, token or portal is shown.
+- To change the password later, edit credentials.json and rebuild, then factory-reset the device so
+  it re-provisions with the new hash.
+
+> Security: this mode bakes a fixed credential into the firmware image, so anyone who extracts the
+> binary can recover the hash and attempt offline cracking. It is intended only for internal or lab
+> devices whose password must be documented. CI and the release workflow always build with this flag
+> set to 0, so downloadable firmware always uses interactive provisioning.
+
 ## Recovery and updates
 
 The authenticated `POST /api/config/reset` operation performs a factory reset: it clears the

@@ -19,6 +19,7 @@ __pycache__/
 # Locally generated credentials and TLS material
 .credentials/
 credentials/
+/credentials.json
 *.key
 *.pem
 *.crt
