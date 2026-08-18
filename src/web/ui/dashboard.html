@@ -34,7 +34,7 @@ small{color:#666}
 .warn{color:#b33}
 </style>
 <div class="nav">
-<h1>🏭 ESP32 OT Security Dashboard</h1>
+<h1>🏭 ESP32 OT Security Dashboard <span id="fw-version" style="font-size:.55em;opacity:.75"></span></h1>
 <div class="nav-buttons">
 <a href="/protocols" class="nav-btn">🔌 Protocol Configuration</a>
 <a href="/scanner" class="nav-btn">🔍 Protocol Discovery</a>
@@ -593,6 +593,8 @@ async function updateNetworkInfo(statusObj, overrideWifi){
 
 async function refresh(overrideStatus, overrideConfig, overrideWifi){
   const st = overrideStatus || await fetch('/api/status').then(r=>r.json());
+  const fv = document.getElementById('fw-version');
+  if (fv) fv.textContent = 'v' + (st.version || '?');
   const kv = document.getElementById('status');
   const net = st.network || {};
   const eth = net.eth || {};

@@ -4,6 +4,7 @@
 #include "esp_timer.h"
 #include "esp_random.h"
 #include "esp_heap_caps.h"
+#include "esp_app_desc.h"
 #include "../security/security_manager.h"
 #include "web_server.h"
 #include "access_logger.h"
@@ -737,6 +738,9 @@ static bool build_status_json(StaticJsonBuffer& cache) {
         if (!json_append_char(cache, len, '{')) { attempt++; required += 2048; continue; }
         if (!json_append_cstr(cache, len, "\"uptime_s\":")) { attempt++; required += 2048; continue; }
         if (!json_append_uint64(cache, len, static_cast<uint64_t>(uptime_sec))) { attempt++; required += 2048; continue; }
+        if (!json_append_char(cache, len, ',')) { attempt++; required += 2048; continue; }
+        if (!json_append_cstr(cache, len, "\"version\":")) { attempt++; required += 2048; continue; }
+        if (!json_append_escaped(cache, len, esp_app_get_description()->version, true)) { attempt++; required += 2048; continue; }
         if (!json_append_char(cache, len, ',')) { attempt++; required += 2048; continue; }
         if (!json_append_cstr(cache, len, "\"network\":{\"eth\":{\"ip\":")) { attempt++; required += 2048; continue; }
         if (!json_append_escaped(cache, len, eth_ip, true)) { attempt++; required += 2048; continue; }
