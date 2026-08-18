@@ -68,7 +68,7 @@ class RuntimeProvisioningContractTests(unittest.TestCase):
         self.assertIn('"schema_u16"', implementation)
         self.assertIn('"complete_u8"', implementation)
         self.assertIn('"config_crc_u32"', implementation)
-        self.assertIn('"completed_at_u64"', implementation)
+        self.assertIn('"completed_at"', implementation)
         self.assertLess(
             implementation.rindex('nvs_set_u32(handle, "config_crc_u32"'),
             implementation.rindex('nvs_set_u8(handle, "complete_u8", 1)'),
