@@ -170,8 +170,16 @@ def _generate_password() -> str:
 
 
 def _pbkdf2_hash(password: str) -> str:
-    """Match the firmware PasswordHasher format: pbkdf2:<salt_b64>:100000:<hash_b64>."""
-    salt = secrets.token_bytes(16)
+    """Match the firmware PasswordHasher format: pbkdf2:<salt_b64>:100000:<hash_b64>.
+
+    The salt is derived deterministically from the password so clean builds stay
+    byte-for-byte reproducible. A per-build random salt adds no real entropy here:
+    the salt is embedded in the firmware next to the hash, so it is public to anyone
+    who extracts the image anyway.
+    """
+    salt = hashlib.sha256(
+        b"esp32-ot:embedded-config:v1:" + password.encode("utf-8")
+    ).digest()[:16]
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000, dklen=32)
     return (
         "pbkdf2:"
