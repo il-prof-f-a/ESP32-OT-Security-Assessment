@@ -6,6 +6,7 @@
 #include "../core/async_storage_engine.h"
 
 extern "C" {
+#include "bootloader_random.h"
 #include "esp_mac.h"
 #include "esp_heap_caps.h"
 #include "mbedtls/ctr_drbg.h"
@@ -96,6 +97,7 @@ bool RuntimeTlsCredentials::generateAndStore() {
     mbedtls_x509write_cert certificate;
     mbedtls_pk_init(&key);
     mbedtls_x509write_crt_init(&certificate);
+    bootloader_random_enable();
     const bool rng_ready = initializeDrbg(entropy, drbg);
 
     unsigned char* certificate_buffer = static_cast<unsigned char*>(
@@ -170,6 +172,7 @@ bool RuntimeTlsCredentials::generateAndStore() {
     mbedtls_pk_free(&key);
     mbedtls_ctr_drbg_free(&drbg);
     mbedtls_entropy_free(&entropy);
+    bootloader_random_disable();
     return success;
 #endif
 }

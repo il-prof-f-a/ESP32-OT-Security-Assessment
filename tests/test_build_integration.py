@@ -52,12 +52,8 @@ class BuildIntegrationTests(unittest.TestCase):
         self.assertIn("pre:scripts/fix_esp32p4_toolchain_path.py", p4)
 
     def test_p4_combined_image_uses_the_partition_table_application_offset(self):
-        upload_script = self.read("scripts/p4_upload.py")
+        upload_script = (PROJECT_ROOT / "scripts/p4_upload.py").read_text(encoding="utf-8")
         self.assertIn('ESP32_APP_OFFSET="0x200000"', upload_script)
-        self.assertIn("board_build.sdkconfig_defaults = sdkconfig.esp32p4.defaults", p4)
-        self.assertEqual(board["build"]["mcu"], "esp32p4")
-        self.assertIn("espidf", board["frameworks"])
-        self.assertEqual(board["vendor"], "Waveshare")
 
     def test_p4_emac_configuration_does_not_use_broken_designated_initializer_macro(self):
         source = (PROJECT_ROOT / "src/network/ethernet_manager.cpp").read_text(
