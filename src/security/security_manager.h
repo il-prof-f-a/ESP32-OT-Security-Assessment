@@ -143,7 +143,7 @@ public:
     bool acknowledgeSecurityEvent(const psram_string& event_id,
                                   const psram_string& actor,
                                   bool acknowledged);
-    bool isTemporaryAdminCredentialActive() const { return temporary_admin_active_.load(); }
+    bool isTemporaryAdminCredentialActive() const { return false; }
     void setAlertPolicy(const SecurityAlertPolicy& policy);
     void getAlertPolicy(SecurityAlertPolicy& out_policy) const;
     void getSecurityConfigSnapshot(SecurityConfig& out_cfg) const;
@@ -151,7 +151,6 @@ public:
 private:
     // Helper methods
     psram_string generateSecureToken() const;
-    psram_string generateTemporaryPassword(size_t length) const;
     psram_string computeSHA256(const psram_string& data) const;
     bool constantTimeCompare(const psram_string& a, const psram_string& b) const;
     bool loadApiKeysFromNVS();
@@ -159,9 +158,7 @@ private:
     psram_string generateUUID() const;
     bool loadAdminPasswordHash(psram_string& hash_out);
     bool storeAdminPasswordHash(const psram_string& hash);
-    psram_string hashAdminPassword(const psram_string& password) const;
     void raiseSecurityFault(const char* feature, const char* recommendation);
-    void publishTemporaryAdminCredential(const psram_string& password) const;
     void emitApiKeySecurityEvent(const ApiKeyEntry& entry,
                                  const char* event_type,
                                  uint64_t age_ms,
@@ -179,18 +176,6 @@ private:
                                const char* severity,
                                uint64_t timestamp_ms,
                                const SecurityAlertPolicy& policy);
-
-    // PBKDF2 password hashing helpers
-    psram_string generateRandomSalt(size_t salt_size) const;
-    psram_string computePBKDF2(const psram_string& password,
-                               const uint8_t* salt,
-                               size_t salt_len,
-                               uint32_t iterations) const;
-    bool parsePasswordHash(const psram_string& stored_hash,
-                          psram_string& out_algorithm,
-                          psram_string& out_salt_b64,
-                          uint32_t& out_iterations,
-                          psram_string& out_hash_b64) const;
 
     bool fuzzing_allowed_ = false;
 
@@ -216,7 +201,6 @@ private:
     psram_vector<SecurityEventLog> security_events_;
     mutable std::mutex security_events_mutex_;
     mutable std::mutex alert_policy_mutex_;
-    mutable std::atomic<bool> temporary_admin_active_{false};
     uint64_t last_email_alert_ms_ = 0;
     uint64_t last_webhook_alert_ms_ = 0;
 };

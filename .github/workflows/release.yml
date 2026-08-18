@@ -1,0 +1,92 @@
+name: Release firmware
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Package ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [t-poe-pro, esp32-s3-eth, waveshare-esp32p4-eth]
+    env:
+      USERPROFILE: /home/runner
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate tag and repository version
+        shell: bash
+        run: |
+          VERSION="$(tr -d '\r\n' < VERSION)"
+          if [[ "${{ github.event_name }}" == "push" && "${GITHUB_REF_NAME}" != "v${VERSION}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match VERSION v${VERSION}" >&2
+            exit 1
+          fi
+      - name: Install pinned build tools
+        run: python -m pip install platformio==6.1.18 esptool==4.9.0
+      - name: Build and package
+        shell: bash
+        run: |
+          pio run -e "${{ matrix.environment }}"
+          pio run -e "${{ matrix.environment }}" -t buildfs
+          BD="$USERPROFILE/.platformio/build/ESP32-OT-Security-Assessment/${{ matrix.environment }}"
+          python scripts/package_release.py \
+            --environment "${{ matrix.environment }}" \
+            --build-dir "$BD" \
+            --version "$(tr -d '\r\n' < VERSION)" \
+            --output-dir dist
+          python scripts/check_release_secrets.py --path dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.environment }}
+          if-no-files-found: error
+          path: dist/*
+
+  release:
+    name: Verify and publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Generate sorted checksums and rescan
+        shell: bash
+        run: |
+          cd release-assets
+          find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS.txt
+          cd ..
+          python scripts/check_release_secrets.py --path release-assets
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release-assets/*
+      - name: Publish prerelease
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
+          prerelease: true

@@ -6,7 +6,6 @@
 #include "esp_heap_caps.h"
 #include "../security/security_manager.h"
 #include "web_server.h"
-#include "esp32_ot_generated_credentials.h"
 #include "access_logger.h"
 #include "template_engine.h"
 #include "../assessment/discovery_manager.h"
@@ -34,6 +33,7 @@
 #include "security_api.h"
 #include "rate_limiter.h"
 #include "../security/api_key_rotation_manager.h"
+#include "../provisioning/provisioning_store.h"
 #include "../assessment/vulnerability_scanner.h"
 #include "../assessment/fuzzing_engine.h"
 #include "../assessment/intrusion_detection_general.h"
@@ -65,9 +65,6 @@
 #ifndef ESP32_OT_WEB_HTTP_ONLY
 #define ESP32_OT_WEB_HTTP_ONLY 0
 #endif
-
-static const char* server_cert_pem = esp32_ot_generated::kServerCertificatePem;
-static const char* server_key_pem = esp32_ot_generated::kServerPrivateKeyPem;
 
 static const char* httpd_method_to_str(httpd_method_t m) {
     switch (m) {
@@ -2392,6 +2389,12 @@ bool WebServer::start(uint16_t port) {
 bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     if (!WebServer::self_) WebServer::self_ = this;
     if (http_ || https_server_) { LOG_WARNING(TAG_WEB, "start(): server already running"); return false; }
+#if !ESP32_OT_WEB_HTTP_ONLY
+    if (!tls_credentials_.ensurePresent()) {
+        LOG_ERROR(TAG_WEB, "Unable to load or generate the runtime TLS identity");
+        return false;
+    }
+#endif
 
     initCronSchedulerIfReady();
 
@@ -2659,15 +2662,12 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
         httpd_ssl_config_t https_conf = HTTPD_SSL_CONFIG_DEFAULT();
         https_conf.httpd = cfg;  // Copy HTTP config to HTTPS config
 
-        //https_conf.cacert_pem = (const uint8_t*)server_cert_pem;
-        //https_conf.cacert_len = strlen(server_cert_pem) + 1;
-        //https_conf.prvtkey_pem = (const uint8_t*)server_key_pem;
-        //https_conf.prvtkey_len = strlen(server_key_pem) + 1;
-
-        https_conf.servercert = (const uint8_t*)server_cert_pem;
-        https_conf.servercert_len = strlen(server_cert_pem) + 1;
-        https_conf.prvtkey_pem = (const uint8_t*)server_key_pem;
-        https_conf.prvtkey_len = strlen(server_key_pem) + 1;
+        https_conf.servercert = reinterpret_cast<const uint8_t*>(
+            tls_credentials_.certificatePem());
+        https_conf.servercert_len = tls_credentials_.certificateLength() + 1;
+        https_conf.prvtkey_pem = reinterpret_cast<const uint8_t*>(
+            tls_credentials_.privateKeyPem());
+        https_conf.prvtkey_len = tls_credentials_.privateKeyLength() + 1;
 
         https_conf.httpd.server_port = 443;  // HTTPS port
         https_conf.httpd.keep_alive_enable = prof.keep_alive;
@@ -3346,11 +3346,16 @@ bool WebServer::startHTTPS(uint16_t port) {
     https_conf.httpd.max_resp_headers = 10;
     https_conf.httpd.max_uri_handlers = 256;
 
-    // TLS configuration
-    https_conf.cacert_pem = (const uint8_t*)server_cert_pem;
-    https_conf.cacert_len = strlen(server_cert_pem) + 1;
-    https_conf.prvtkey_pem = (const uint8_t*)server_key_pem;
-    https_conf.prvtkey_len = strlen(server_key_pem) + 1;
+    if (!tls_credentials_.ensurePresent()) {
+        LOG_ERROR(TAG_WEB, "Unable to load or generate the runtime TLS identity");
+        return false;
+    }
+    https_conf.servercert = reinterpret_cast<const uint8_t*>(
+        tls_credentials_.certificatePem());
+    https_conf.servercert_len = tls_credentials_.certificateLength() + 1;
+    https_conf.prvtkey_pem = reinterpret_cast<const uint8_t*>(
+        tls_credentials_.privateKeyPem());
+    https_conf.prvtkey_len = tls_credentials_.privateKeyLength() + 1;
 
     LOG_INFOF(TAG_WEB, "Starting HTTPS server on port %u", port);
 
@@ -3977,12 +3982,21 @@ esp_err_t WebServer::h_config_reset_post(httpd_req_t* req) {
     if (!check_api_auth(req)) return httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "auth");
     if (!self_ || !self_->cfg_) return httpd_resp_send_500(req);
 
-    if (self_->cfg_->resetToEmbeddedConfig()) {
-        httpd_resp_set_type(req, "text/plain");
-        return httpd_resp_sendstr(req, "Configuration reset to embedded defaults");
+    ProvisioningStore provisioning;
+    const bool provisioning_cleared = provisioning.factoryReset();
+    const bool tls_cleared = self_->tls_credentials_.clear();
+    if (provisioning_cleared && tls_cleared) {
+        logConfigChange(req, "factory_reset", "Provisioning, security, configuration and TLS state erased");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_hdr(req, "Connection", "close");
+        const esp_err_t response = httpd_resp_sendstr(
+            req, "{\"success\":true,\"rebooting\":true}");
+        vTaskDelay(pdMS_TO_TICKS(250));
+        esp_restart();
+        return response;
     }
 
-    return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to reset configuration");
+    return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Factory reset failed");
 }
 
 
@@ -7373,7 +7387,7 @@ esp_err_t WebServer::h_wifi_disconnect(httpd_req_t* req) {
         }
     }
 
-    LOG_INFO("WIFI_DISCONNECT", "Disconnecting WiFi and starting AP mode");
+    LOG_INFO("WIFI_DISCONNECT", "Disconnecting WiFi STA");
 
     // Log WiFi disconnect attempt to network.log
     // MEMORY FIX: Use buffer-based version to avoid std::string temporary allocation
@@ -7395,18 +7409,6 @@ esp_err_t WebServer::h_wifi_disconnect(httpd_req_t* req) {
         snprintf(event_data, sizeof(event_data),
                  "{\"action\":\"wifi_disconnected\",\"success\":%s,\"interface\":\"STA\"}",
                  disconnect_success ? "true" : "false");
-        report_event_ps(g_reporting, "network", event_data);
-    }
-
-    // Start AP mode for reconfiguration
-    self_->wifi_->startAP(esp32_ot_generated::kProvisioningApSsid, esp32_ot_generated::kProvisioningApPassword);
-    bool ap_success = true; // startAP is void, assume success
-
-    // Log AP mode start to network.log
-    if (g_reporting) {
-        char event_data[512];
-        snprintf(event_data, sizeof(event_data),
-                 "{\"action\":\"ap_mode_started\",\"ssid\":\"ESP32-Security-Setup\",\"reason\":\"manual_disconnect\"}");
         report_event_ps(g_reporting, "network", event_data);
     }
 
@@ -7453,10 +7455,9 @@ esp_err_t WebServer::h_wifi_disconnect(httpd_req_t* req) {
 
     cJSON* response = cJSON_CreateObject();
     cJSON_AddBoolToObject(response, "disconnect_success", disconnect_success);
-    cJSON_AddBoolToObject(response, "ap_started", ap_success);
-    if (disconnect_success && ap_success) {
-        cJSON_AddStringToObject(response, "message", "WiFi disconnected, AP mode activated");
-        cJSON_AddStringToObject(response, "ap_ssid", "ESP32-Security-Setup");
+    cJSON_AddBoolToObject(response, "ap_started", false);
+    if (disconnect_success) {
+        cJSON_AddStringToObject(response, "message", "WiFi disconnected");
     } else {
         cJSON_AddStringToObject(response, "message", "WiFi disconnect operation completed with issues");
     }
@@ -8210,10 +8211,10 @@ bool WebServer::startHTTPS(uint16_t port) {
     conf.httpd.max_resp_headers = 8;   // CRITICAL MEMORY REDUCTION: Same as HTTP (was 16)
 
     // Set certificate and private key
-    conf.servercert = (const uint8_t*)server_cert_pem;
-    conf.servercert_len = strlen(server_cert_pem) + 1;
-    conf.prvtkey_pem = (const uint8_t*)server_key_pem;
-    conf.prvtkey_len = strlen(server_key_pem) + 1;
+    conf.servercert = reinterpret_cast<const uint8_t*>(tls_credentials_.certificatePem());
+    conf.servercert_len = tls_credentials_.certificateLength() + 1;
+    conf.prvtkey_pem = reinterpret_cast<const uint8_t*>(tls_credentials_.privateKeyPem());
+    conf.prvtkey_len = tls_credentials_.privateKeyLength() + 1;
 
     LOG_INFOF("HTTPS", "Certificate length: %zu, Key length: %zu", conf.servercert_len, conf.prvtkey_len);
     LOG_INFOF("HTTPS", "Starting HTTPS server on port %d", port);

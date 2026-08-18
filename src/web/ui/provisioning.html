@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ESP32 OT Security — First-time setup</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#17202a;background:#eef2f5}body{margin:0;padding:2rem}
+    main{max-width:42rem;margin:auto;background:#fff;padding:2rem;border-radius:1rem;box-shadow:0 .5rem 2rem #0002}
+    label{display:block;margin-top:1rem;font-weight:600}input[type=password],input[type=text]{width:100%;box-sizing:border-box;padding:.7rem;margin-top:.35rem}
+    button{margin-top:1.5rem;padding:.8rem 1.2rem;border:0;border-radius:.5rem;background:#075985;color:#fff;font-weight:700}
+    .note{padding:.8rem;background:#e0f2fe;border-left:.25rem solid #0284c7}#result{white-space:pre-wrap;margin-top:1rem}
+  </style>
+</head>
+<body>
+<main>
+  <h1>First-time device setup</h1>
+  <p class="note">Keep the serial terminal private. Enter the one-time setup token printed there. It expires after 15 minutes.</p>
+  <form id="setup">
+    <label>One-time setup token<input id="token" type="password" required autocomplete="off"></label>
+    <label>Administrator password<input id="password" type="password" minlength="16" maxlength="128" required autocomplete="new-password"></label>
+    <label>Confirm administrator password<input id="confirmation" type="password" minlength="16" maxlength="128" required autocomplete="new-password"></label>
+    <label><input id="wifi-enabled" type="checkbox"> Configure a Wi-Fi management network</label>
+    <label>Wi-Fi SSID<input id="ssid" type="text" maxlength="32"></label>
+    <label>Wi-Fi password<input id="wifi-password" type="password" minlength="8" maxlength="63" autocomplete="new-password"></label>
+    <label><input id="ethernet-dhcp" type="checkbox" checked> Use Ethernet DHCP</label>
+    <button type="submit">Complete setup</button>
+  </form>
+  <div id="result" role="status" aria-live="polite"></div>
+</main>
+<script>
+const form=document.getElementById('setup'),result=document.getElementById('result');
+form.addEventListener('submit',async event=>{event.preventDefault();result.textContent='Saving configuration…';
+const value=id=>document.getElementById(id).value,checked=id=>document.getElementById(id).checked;
+const body={admin_password:value('password'),admin_password_confirmation:value('confirmation'),network:{wifi_enabled:checked('wifi-enabled'),wifi_ssid:value('ssid'),wifi_password:value('wifi-password'),ethernet_dhcp:checked('ethernet-dhcp')}};
+try{const response=await fetch('/api/provisioning/complete',{method:'POST',headers:{'Content-Type':'application/json','X-Setup-Token':value('token')},body:JSON.stringify(body)});result.textContent=await response.text();if(response.ok)form.reset()}catch(error){result.textContent='Setup request failed: '+error.message}});
+</script>
+</body>
+</html>

@@ -51,6 +51,7 @@ extern "C" {
 #include "protocols/ethernetip_plugin.h"
 #include "protocols/opcua_plugin.h"
 #include "assessment/vulnerability_scanner.h"
+#include "provisioning/provisioning_coordinator.h"
 
 // Network additions
 #include "core/network_engine.h"
@@ -437,6 +438,10 @@ extern "C" void app_main(void) {
         }
     }
     MemoryMonitor::logDelta("ConfigurationManager::initialize", mem_before_cfg);
+
+    if (!ProvisioningCoordinator::continueOperationalBoot(cfg)) {
+        return;
+    }
 
     // WATCHDOG CONFIGURATION - Now that config is loaded, configure watchdog
     WatchdogConfig wdt_cfg = cfg.getWatchdogConfig();

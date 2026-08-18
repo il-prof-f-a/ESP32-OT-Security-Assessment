@@ -30,3 +30,6 @@ src/web/ui/gen/
 # Local test output
 reports/
 test-results/
+
+# Local secret-scan denylist (contains private marker values)
+.release-secret-denylist

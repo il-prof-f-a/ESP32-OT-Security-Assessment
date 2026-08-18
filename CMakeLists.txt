@@ -39,16 +39,14 @@ set(EXTRA_COMPONENT_DIRS "${CMAKE_SOURCE_DIR}/src")
 
 get_filename_component(configName "${CMAKE_BINARY_DIR}" NAME)
 
-# Provision credentials for native ESP-IDF builds as well as PlatformIO builds.
-# The operation is idempotent: existing credentials are reused, never printed.
+# Generate deterministic public assets for native ESP-IDF and PlatformIO builds.
 if(NOT DEFINED PYTHON OR "${PYTHON}" STREQUAL "")
-  message(FATAL_ERROR "ESP-IDF did not provide a Python interpreter for credential provisioning")
+  message(FATAL_ERROR "ESP-IDF did not provide a Python interpreter for build-asset generation")
 endif()
 
 set(ESP32_OT_GENERATED_INCLUDE_DIR "${CMAKE_BINARY_DIR}/generated")
 
-# Resolve a board key for per-board configuration, mirroring the PlatformIO
-# environment name so both build paths share the same config file.
+# Resolve a stable board key for the build-asset interface.
 if(NOT "${_PIO_ENV}" STREQUAL "")
   set(_BOARD "${_PIO_ENV}")
 elseif("${_IDF_TGT}" STREQUAL "esp32")
@@ -63,7 +61,7 @@ endif()
 
 execute_process(
   COMMAND "${PYTHON}"
-          "${CMAKE_SOURCE_DIR}/scripts/credential_provisioning.py"
+          "${CMAKE_SOURCE_DIR}/scripts/build_assets.py"
           --project-dir "${CMAKE_SOURCE_DIR}"
           --build-dir "${CMAKE_BINARY_DIR}"
           --board "${_BOARD}"
@@ -74,11 +72,14 @@ execute_process(
   ERROR_STRIP_TRAILING_WHITESPACE
 )
 if(NOT _ESP32_OT_PROVISION_RESULT EQUAL 0)
-  message(FATAL_ERROR "Credential provisioning failed: ${_ESP32_OT_PROVISION_ERROR}")
+  message(FATAL_ERROR "Build-asset generation failed: ${_ESP32_OT_PROVISION_ERROR}")
 endif()
 message(STATUS "${_ESP32_OT_PROVISION_OUTPUT}")
 
-set(PROJECT_VER "0.1.0-experimental")
+file(STRINGS "${CMAKE_SOURCE_DIR}/VERSION" PROJECT_VER LIMIT_COUNT 1)
+if("${PROJECT_VER}" STREQUAL "")
+  message(FATAL_ERROR "VERSION must contain a semantic project version")
+endif()
 project(esp32_ot_security_assessment)
 
 # Define FD_SETSIZE for lwIP socket offset calculation after project().

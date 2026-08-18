@@ -1,4 +1,5 @@
 from importlib.util import module_from_spec, spec_from_file_location
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -41,28 +42,95 @@ class FirmwareToolTests(unittest.TestCase):
     def test_flash_command_contains_bootloader_partitions_and_application(self):
         with tempfile.TemporaryDirectory() as directory:
             build = Path(directory)
-            for name in ("bootloader.bin", "partitions.bin", "firmware.bin"):
-                (build / name).write_bytes(b"artifact")
+            (build / "bootloader").mkdir()
+            (build / "partition_table").mkdir()
+            (build / "bootloader" / "bootloader.bin").write_bytes(b"bootloader")
+            (build / "partition_table" / "partition-table.bin").write_bytes(b"partitions")
+            (build / "esp32_ot_security_assessment.bin").write_bytes(b"application")
+            (build / "storage.bin").write_bytes(b"filesystem")
+            (build / "flasher_args.json").write_text(
+                json.dumps(
+                    {
+                        "flash_settings": {
+                            "flash_mode": "qio",
+                            "flash_size": "32MB",
+                            "flash_freq": "80m",
+                        },
+                        "flash_files": {
+                            "0x2000": "bootloader/bootloader.bin",
+                            "0x8000": "partition_table/partition-table.bin",
+                            "0x200000": "esp32_ot_security_assessment.bin",
+                            "0x690000": "storage.bin",
+                        },
+                        "extra_esptool_args": {"chip": "esp32p4"},
+                    }
+                ),
+                encoding="utf-8",
+            )
 
             command = self.flash.build_flash_command(
-                target="t-poe-pro",
+                target="waveshare-esp32p4-eth",
                 port="COM10",
                 build_dir=build,
                 esptool_command=["python", "-m", "esptool"],
             )
 
             self.assertIn("--chip", command)
-            self.assertIn("esp32", command)
+            self.assertIn("esp32p4", command)
             self.assertIn("--port", command)
             self.assertIn("COM10", command)
-            self.assertIn("0x1000", command)
+            self.assertIn("qio", command)
+            self.assertIn("32MB", command)
+            self.assertIn("80m", command)
+            self.assertIn("0x2000", command)
             self.assertIn("0x8000", command)
             self.assertIn("0x200000", command)
-            self.assertIn(str(build / "firmware.bin"), command)
+            self.assertIn("0x690000", command)
+            self.assertIn(str(build / "esp32_ot_security_assessment.bin"), command)
+
+    def test_flash_command_rejects_manifest_for_a_different_chip(self):
+        with tempfile.TemporaryDirectory() as directory:
+            build = Path(directory)
+            (build / "flasher_args.json").write_text(
+                json.dumps(
+                    {
+                        "flash_settings": {
+                            "flash_mode": "dio",
+                            "flash_size": "16MB",
+                            "flash_freq": "40m",
+                        },
+                        "flash_files": {"0x1000": "bootloader.bin"},
+                        "extra_esptool_args": {"chip": "esp32"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (build / "bootloader.bin").write_bytes(b"bootloader")
+
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                self.flash.build_flash_command(
+                    target="waveshare-esp32p4-eth",
+                    port="COM10",
+                    build_dir=build,
+                    esptool_command=["python", "-m", "esptool"],
+                )
 
     def test_unknown_target_is_rejected(self):
         with self.assertRaises(ValueError):
             self.flash.target_config("unknown-board")
+
+    def test_factory_reset_erases_only_nvs_and_littlefs_regions(self):
+        commands = self.flash.build_factory_reset_commands(
+            target="t-poe-pro",
+            port="COM10",
+            partitions_path=PROJECT_ROOT / "partitions.csv",
+            esptool_command=["python", "-m", "esptool"],
+        )
+        rendered = [" ".join(command) for command in commands]
+        self.assertEqual(len(rendered), 2)
+        self.assertIn("erase-region 0x9000 0x1f6000", rendered[0].lower())
+        self.assertIn("erase-region 0x690000 0x970000", rendered[1].lower())
+        self.assertTrue(all("erase-flash" not in command for command in rendered))
 
 
 if __name__ == "__main__":

@@ -398,6 +398,7 @@ namespace Global {
     esp_err_t writeFileRaw(const std::string& path, const void* data, size_t size);
     esp_err_t appendFileRaw(const std::string& path, const void* data, size_t size);
     esp_err_t deleteFile(const std::string& path);
+    esp_err_t fileRename(const std::string& old_path, const std::string& new_path);
     esp_err_t createDir(const std::string& path);
     esp_err_t fileExists(const std::string& path, bool& exists);
     esp_err_t fileSize(const std::string& path, size_t& size);

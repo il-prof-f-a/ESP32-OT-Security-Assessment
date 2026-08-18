@@ -1840,6 +1840,10 @@ esp_err_t deleteFile(const std::string& path) {
     return Engine::getInstance().fileDelete(path);
 }
 
+esp_err_t fileRename(const std::string& old_path, const std::string& new_path) {
+    return Engine::getInstance().fileRename(old_path, new_path);
+}
+
 esp_err_t createDir(const std::string& path) {
     return Engine::getInstance().createDirectory(path);
 }

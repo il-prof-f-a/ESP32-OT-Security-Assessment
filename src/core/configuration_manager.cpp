@@ -3,7 +3,7 @@
 #include "async_storage_engine.h"
 #include "psram_json_parser.h"
 #include "psram_json_parser.h"
-#include "esp32_ot_generated_credentials.h"
+#include "esp32_ot_build_assets.h"
 #include <sys/stat.h>
 #include <fstream>
 #include <stdint.h>
@@ -1265,12 +1265,12 @@ void ConfigurationManager::mergeDefaultProtocolFields() {
 
 
 static inline size_t config_json_len_bytes(void) {
-    return sizeof(esp32_ot_generated::kEmbeddedConfigJson) - 1;
+    return sizeof(esp32_ot_build::kEmbeddedPublicConfigJson) - 1;
 }
 
 // as C-string (null-terminated)
 static inline const char* config_json_cstr(void) {
-    return esp32_ot_generated::kEmbeddedConfigJson;
+    return esp32_ot_build::kEmbeddedPublicConfigJson;
 }
 
 bool ConfigurationManager::loadDevConfigFromSource() {

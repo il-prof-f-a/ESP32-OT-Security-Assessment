@@ -17,17 +17,19 @@ class BuildIntegrationTests(unittest.TestCase):
     def test_project_version_does_not_depend_on_git_history(self):
         cmake = (PROJECT_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
 
-        version_index = cmake.index('set(PROJECT_VER "0.1.0-experimental")')
+        version_index = cmake.index('file(STRINGS "${CMAKE_SOURCE_DIR}/VERSION" PROJECT_VER')
         project_index = cmake.index("\nproject(")
         self.assertLess(version_index, project_index)
         self.assertIn("project(esp32_ot_security_assessment)", cmake)
+        self.assertEqual((PROJECT_ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.1.0")
 
-    def test_every_platformio_environment_runs_provisioning_first(self):
+    def test_every_platformio_environment_generates_public_build_assets_first(self):
         platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
         sections = re.split(r"(?=^\[env:)", platformio, flags=re.MULTILINE)[1:]
         self.assertEqual(len(sections), 3)
         for section in sections:
-            self.assertIn("pre:scripts/platformio_provision.py", section)
+            self.assertIn("pre:scripts/platformio_build_assets.py", section)
+            self.assertNotIn("platformio_provision.py", section)
 
         self.assertIn("[env:waveshare-esp32p4-eth]", platformio)
 
@@ -48,6 +50,10 @@ class BuildIntegrationTests(unittest.TestCase):
             p4,
         )
         self.assertIn("pre:scripts/fix_esp32p4_toolchain_path.py", p4)
+
+    def test_p4_combined_image_uses_the_partition_table_application_offset(self):
+        upload_script = self.read("scripts/p4_upload.py")
+        self.assertIn('ESP32_APP_OFFSET="0x200000"', upload_script)
         self.assertIn("board_build.sdkconfig_defaults = sdkconfig.esp32p4.defaults", p4)
         self.assertEqual(board["build"]["mcu"], "esp32p4")
         self.assertIn("espidf", board["frameworks"])
@@ -232,13 +238,14 @@ class BuildIntegrationTests(unittest.TestCase):
         self.assertTrue((PROJECT_ROOT / "data/.gitkeep").is_file())
         self.assertIn("littlefs_create_partition_image(storage data FLASH_IN_PROJECT)", cmake)
 
-    def test_firmware_uses_only_the_generated_secret_header(self):
+    def test_firmware_uses_only_the_generated_public_header(self):
         configuration = (PROJECT_ROOT / "src/core/configuration_manager.cpp").read_text(encoding="utf-8")
         wifi = (PROJECT_ROOT / "src/network/wifi_manager.cpp").read_text(encoding="utf-8")
         web = (PROJECT_ROOT / "src/web/web_server.cpp").read_text(encoding="utf-8")
 
+        self.assertIn('#include "esp32_ot_build_assets.h"', configuration)
         for source in (configuration, wifi, web):
-            self.assertIn('#include "esp32_ot_generated_credentials.h"', source)
+            self.assertNotIn('#include "esp32_ot_generated_credentials.h"', source)
         self.assertNotIn('#include "tls_cert.h"', web)
         self.assertNotIn("_binary_config_json_start", configuration)
         self.assertNotRegex(wifi, r'startAP\(\s*"[^"]+"\s*,\s*"[^"]+"\s*\)')
@@ -261,13 +268,13 @@ class BuildIntegrationTests(unittest.TestCase):
         self.assertFalse((PROJECT_ROOT / "scripts/convert_txt_in.S.py").exists())
 
     def test_platformio_wrapper_adds_generated_include_directory(self):
-        wrapper = (PROJECT_ROOT / "scripts/platformio_provision.py").read_text(encoding="utf-8")
+        wrapper = (PROJECT_ROOT / "scripts/platformio_build_assets.py").read_text(encoding="utf-8")
 
-        self.assertIn("provision(", wrapper)
+        self.assertIn("generate_build_assets(", wrapper)
         self.assertIn("CPPPATH", wrapper)
         self.assertNotIn("password", wrapper.lower())
 
-    def test_native_idf_build_provisions_credentials_and_adds_generated_include(self):
+    def test_native_idf_build_generates_public_assets_and_adds_generated_include(self):
         root_cmake = (PROJECT_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
         component_cmake = (PROJECT_ROOT / "src/CMakeLists.txt").read_text(encoding="utf-8")
         psram_allocator = (PROJECT_ROOT / "src/core/psram_allocator.h").read_text(encoding="utf-8")
@@ -279,7 +286,8 @@ class BuildIntegrationTests(unittest.TestCase):
             root_cmake.index('set(SDKCONFIG "${CMAKE_BINARY_DIR}/sdkconfig")'),
             root_cmake.index("include($ENV{IDF_PATH}/tools/cmake/project.cmake)"),
         )
-        self.assertIn("scripts/credential_provisioning.py", root_cmake)
+        self.assertIn("scripts/build_assets.py", root_cmake)
+        self.assertNotIn("credential_provisioning.py", root_cmake)
         self.assertIn("--build-dir", root_cmake)
         self.assertIn("ESP32_OT_GENERATED_INCLUDE_DIR", root_cmake)
         self.assertIn("${ESP32_OT_GENERATED_INCLUDE_DIR}", component_cmake)

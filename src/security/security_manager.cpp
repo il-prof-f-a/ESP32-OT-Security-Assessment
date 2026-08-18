@@ -7,6 +7,7 @@
 #include "../core/psram_json_parser.h"
 #include "../core/types.h"
 #include "api_key_rotation_manager.h"
+#include "password_hasher.h"
 #include <algorithm>
 #include <cstring>
 #include <cctype>
@@ -21,8 +22,6 @@ extern "C" {
     #include "nvs.h"
     #include "nvs_flash.h"
     #include "mbedtls/sha256.h"
-    #include "mbedtls/pkcs5.h"
-    #include "mbedtls/base64.h"
     #include "esp_random.h"
 }
 
@@ -31,11 +30,6 @@ extern ReportingEngine* g_reporting;
 
 static constexpr uint64_t kApiKeyRotationMs = 90ULL * 24ULL * 60ULL * 60ULL * 1000ULL;
 static constexpr uint64_t kApiKeyDisableMs = 120ULL * 24ULL * 60ULL * 60ULL * 1000ULL;
-
-// PBKDF2 constants
-static constexpr size_t PBKDF2_SALT_SIZE = 16;        // 16 bytes = 128 bits
-static constexpr size_t PBKDF2_HASH_SIZE = 32;        // 32 bytes = 256 bits (SHA-256)
-static constexpr uint32_t DEFAULT_PBKDF2_ITERATIONS = 100000;  // OWASP recommended minimum
 
 static inline bool is_hex_char(char c) {
     return (c >= '0' && c <= '9') ||
@@ -53,11 +47,6 @@ static bool is_sha256_hex(const psram_string& value) {
         }
     }
     return true;
-}
-
-static bool is_pbkdf2_hash(const psram_string& value) {
-    const psram_string prefix = PSRAMUtils::createPSRAMString("pbkdf2:");
-    return value.size() > prefix.size() && value.substr(0, prefix.size()) == prefix;
 }
 
 static void zeroize_psram_string(psram_string& value) {
@@ -170,7 +159,6 @@ bool SecurityManager::initialize(const SecurityConfig& cfg) {
     setAlertPolicy(cfg.alert_policy);
     last_email_alert_ms_ = 0;
     last_webhook_alert_ms_ = 0;
-    temporary_admin_active_.store(false, std::memory_order_relaxed);
 
     // Log current hardware security state
     LOG_INFOF(TAG_SEC, "Secure Boot (efuse): %d", (int)isSecureBootEnabled());
@@ -212,70 +200,24 @@ bool SecurityManager::initialize(const SecurityConfig& cfg) {
         heap_caps_free(master_key_buf);
     }
 
-    // Hardening: ensure the admin password is stored in hashed form
+    // Operational mode accepts only a hash persisted by provisioning or legacy migration.
     psram_string persisted_hash;
-    if (loadAdminPasswordHash(persisted_hash) && is_sha256_hex(persisted_hash)) {
+    if (loadAdminPasswordHash(persisted_hash) &&
+        PasswordHasher::isSupportedHash(persisted_hash)) {
         admin_password_hash_ = persisted_hash;
         cfg_.admin_password = admin_password_hash_;
-        temporary_admin_active_.store(false, std::memory_order_relaxed);
         LOG_INFO(TAG_SEC, "Admin password hash loaded from NVS");
     } else {
-        psram_string candidate = cfg_.admin_password;
-        bool derived_from_plaintext = false;
-        bool generated_temp_password = false;
-        psram_string temporary_password;
-
-        if (candidate.empty()) {
-            temporary_password = generateTemporaryPassword(16);
-            if (!temporary_password.empty()) {
-                LOG_WARNINGF(TAG_SEC,
-                             "Admin password missing in configuration. Generated temporary credential: %s (rotate immediately)",
-                             temporary_password.c_str());
-                publishTemporaryAdminCredential(temporary_password);
-                candidate = temporary_password;
-                derived_from_plaintext = true;
-                generated_temp_password = true;
-            } else {
-                LOG_ERROR(TAG_SEC, "Unable to generate temporary admin password");
-            }
-        } else if (!is_sha256_hex(candidate)) {
-            derived_from_plaintext = true;
-        }
-
-        psram_string derived_hash;
-        if (!candidate.empty() && is_sha256_hex(candidate)) {
-            derived_hash = candidate;
-        } else if (!candidate.empty()) {
-            derived_hash = hashAdminPassword(candidate);
-        }
-
-        if (derived_from_plaintext) {
-            zeroize_psram_string(candidate);
-        }
-
-        if (!derived_hash.empty() && (is_sha256_hex(derived_hash) || is_pbkdf2_hash(derived_hash))) {
-            if (derived_from_plaintext && !cfg_.admin_password.empty()) {
-                zeroize_psram_string(cfg_.admin_password);
-            }
-            admin_password_hash_ = derived_hash;
+        if (PasswordHasher::isSupportedHash(cfg_.admin_password)) {
+            admin_password_hash_ = cfg_.admin_password;
             cfg_.admin_password = admin_password_hash_;
             if (!storeAdminPasswordHash(admin_password_hash_)) {
-                LOG_WARNING(TAG_SEC, "Failed to persist admin password hash in NVS");
-            } else {
-                LOG_INFO(TAG_SEC, "Admin password hash stored in NVS");
-            }
-            if (generated_temp_password) {
-                LOG_WARNING(TAG_SEC, "Temporary admin password active; update security.admin_password_hash as soon as possible.");
-                temporary_admin_active_.store(true, std::memory_order_relaxed);
-                zeroize_psram_string(temporary_password);
-            } else {
-                temporary_admin_active_.store(false, std::memory_order_relaxed);
-            }
-            if (derived_from_plaintext) {
-                admin_hash_dirty_ = true;
+                LOG_ERROR(TAG_SEC, "Failed to persist administrator password hash");
+                return false;
             }
         } else {
-            LOG_ERROR(TAG_SEC, "Failed to derive admin password hash");
+            LOG_ERROR(TAG_SEC, "Missing or unsupported administrator password hash");
+            return false;
         }
     }
 
@@ -622,51 +564,10 @@ bool SecurityManager::verifyAdminPassword(const psram_string& password) const {
         return false;
     }
 
-    // Check if stored hash is PBKDF2 format
     if (admin_password_hash_.size() > 7 &&
         admin_password_hash_.substr(0, 7) == PSRAMUtils::createPSRAMString("pbkdf2:")) {
-
-        // Parse PBKDF2 hash
-        psram_string algorithm, salt_b64, hash_b64;
-        uint32_t iterations = 0;
-
-        if (!parsePasswordHash(admin_password_hash_, algorithm, salt_b64, iterations, hash_b64)) {
-            LOG_ERROR(TAG_SEC, "Failed to parse PBKDF2 hash");
-            return false;
-        }
-
-        // Decode salt from base64
-        size_t salt_len = 0;
-        mbedtls_base64_decode(nullptr, 0, &salt_len,
-                             (const unsigned char*)salt_b64.c_str(), salt_b64.size());
-
-        uint8_t* salt = (uint8_t*)heap_caps_malloc(salt_len, MALLOC_CAP_SPIRAM);
-        if (!salt) {
-            LOG_ERROR(TAG_SEC, "Failed to allocate PSRAM for salt");
-            return false;
-        }
-
-        size_t actual_len = 0;
-        int ret = mbedtls_base64_decode(salt, salt_len, &actual_len,
-                                       (const unsigned char*)salt_b64.c_str(), salt_b64.size());
-        if (ret != 0) {
-            heap_caps_free(salt);
-            LOG_ERRORF(TAG_SEC, "Failed to decode salt: %d", ret);
-            return false;
-        }
-
-        // Compute PBKDF2 with provided password
-        psram_string computed_hash_b64 = computePBKDF2(password, salt, actual_len, iterations);
-        heap_caps_free(salt);
-
-        if (computed_hash_b64.empty()) {
-            LOG_ERROR(TAG_SEC, "Failed to compute PBKDF2 for verification");
-            return false;
-        }
-
-        // Compare hashes in constant time
-        bool valid = constantTimeCompare(computed_hash_b64, hash_b64);
-        zeroize_psram_string(computed_hash_b64);
+        const bool valid = PasswordHasher::verify(
+            password.c_str(), password.size(), admin_password_hash_);
 
         if (valid) {
             LOG_INFO(TAG_SEC, "Admin password verified successfully (PBKDF2)");
@@ -1034,28 +935,6 @@ bool SecurityManager::saveToConfig(ConfigurationManager* cfg) {
 
 // ========================= SECURE API KEY IMPLEMENTATION =========================
 
-psram_string SecurityManager::generateTemporaryPassword(size_t length) const {
-    static const char alphabet[] = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-    if (length == 0) {
-        return PSRAMUtils::createPSRAMString("");
-    }
-
-    char* buffer = (char*)heap_caps_malloc(length + 1, MALLOC_CAP_SPIRAM);
-    if (!buffer) {
-        LOG_ERROR(TAG_SEC, "Failed to allocate PSRAM for temporary password");
-        return PSRAMUtils::createPSRAMString("");
-    }
-
-    for (size_t i = 0; i < length; ++i) {
-        buffer[i] = alphabet[esp_random() % (sizeof(alphabet) - 1)];
-    }
-    buffer[length] = '\0';
-
-    psram_string result = PSRAMUtils::createPSRAMString(buffer);
-    heap_caps_free(buffer);
-    return result;
-}
-
 psram_string SecurityManager::generateSecureToken() const {
     // Generate 256-bit (32 bytes) random token
     const size_t TOKEN_BYTES = 32;
@@ -1130,154 +1009,6 @@ psram_string SecurityManager::computeSHA256(const psram_string& data) const {
     heap_caps_free(hex_hash);
 
     return result;
-}
-
-psram_string SecurityManager::generateRandomSalt(size_t salt_size) const {
-    // Generate cryptographically secure random salt
-    uint8_t* salt = (uint8_t*)heap_caps_malloc(salt_size, MALLOC_CAP_SPIRAM);
-    if (!salt) {
-        LOG_ERROR(TAG_SEC, "Failed to allocate PSRAM for salt");
-        return PSRAMUtils::createPSRAMString("");
-    }
-
-    // Use ESP32 hardware RNG
-    esp_fill_random(salt, salt_size);
-
-    // Encode to base64
-    size_t b64_len = 0;
-    mbedtls_base64_encode(nullptr, 0, &b64_len, salt, salt_size);
-
-    char* b64_salt = (char*)heap_caps_malloc(b64_len + 1, MALLOC_CAP_SPIRAM);
-    if (!b64_salt) {
-        heap_caps_free(salt);
-        LOG_ERROR(TAG_SEC, "Failed to allocate PSRAM for base64 salt");
-        return PSRAMUtils::createPSRAMString("");
-    }
-
-    size_t actual_len = 0;
-    int ret = mbedtls_base64_encode((unsigned char*)b64_salt, b64_len, &actual_len, salt, salt_size);
-    if (ret != 0) {
-        heap_caps_free(salt);
-        heap_caps_free(b64_salt);
-        LOG_ERRORF(TAG_SEC, "Base64 encoding failed: %d", ret);
-        return PSRAMUtils::createPSRAMString("");
-    }
-
-    b64_salt[actual_len] = '\0';
-    psram_string result = PSRAMUtils::createPSRAMString(b64_salt);
-
-    heap_caps_free(salt);
-    heap_caps_free(b64_salt);
-
-    return result;
-}
-
-psram_string SecurityManager::computePBKDF2(const psram_string& password,
-                                            const uint8_t* salt,
-                                            size_t salt_len,
-                                            uint32_t iterations) const {
-    if (password.empty() || !salt || salt_len == 0) {
-        LOG_WARNING(TAG_SEC, "Invalid PBKDF2 input");
-        return PSRAMUtils::createPSRAMString("");
-    }
-
-    // Allocate output buffer for hash
-    uint8_t* output = (uint8_t*)heap_caps_malloc(PBKDF2_HASH_SIZE, MALLOC_CAP_SPIRAM);
-    if (!output) {
-        LOG_ERROR(TAG_SEC, "Failed to allocate PSRAM for PBKDF2 output");
-        return PSRAMUtils::createPSRAMString("");
-    }
-
-    // Compute PBKDF2-HMAC-SHA256
-    int ret = mbedtls_pkcs5_pbkdf2_hmac_ext(MBEDTLS_MD_SHA256,
-                                            (const unsigned char*)password.c_str(),
-                                            password.size(),
-                                            salt,
-                                            salt_len,
-                                            iterations,
-                                            PBKDF2_HASH_SIZE,
-                                            output);
-
-    if (ret != 0) {
-        heap_caps_free(output);
-        LOG_ERRORF(TAG_SEC, "PBKDF2 computation failed: %d", ret);
-        return PSRAMUtils::createPSRAMString("");
-    }
-
-    // Encode to base64
-    size_t b64_len = 0;
-    mbedtls_base64_encode(nullptr, 0, &b64_len, output, PBKDF2_HASH_SIZE);
-
-    char* b64_hash = (char*)heap_caps_malloc(b64_len + 1, MALLOC_CAP_SPIRAM);
-    if (!b64_hash) {
-        heap_caps_free(output);
-        LOG_ERROR(TAG_SEC, "Failed to allocate PSRAM for base64 hash");
-        return PSRAMUtils::createPSRAMString("");
-    }
-
-    size_t actual_len = 0;
-    ret = mbedtls_base64_encode((unsigned char*)b64_hash, b64_len, &actual_len, output, PBKDF2_HASH_SIZE);
-
-    heap_caps_free(output);
-
-    if (ret != 0) {
-        heap_caps_free(b64_hash);
-        LOG_ERRORF(TAG_SEC, "Base64 encoding failed: %d", ret);
-        return PSRAMUtils::createPSRAMString("");
-    }
-
-    b64_hash[actual_len] = '\0';
-    psram_string result = PSRAMUtils::createPSRAMString(b64_hash);
-    heap_caps_free(b64_hash);
-
-    return result;
-}
-
-bool SecurityManager::parsePasswordHash(const psram_string& stored_hash,
-                                       psram_string& out_algorithm,
-                                       psram_string& out_salt_b64,
-                                       uint32_t& out_iterations,
-                                       psram_string& out_hash_b64) const {
-    // Expected format: "pbkdf2:salt_b64:iterations:hash_b64"
-    if (stored_hash.empty()) {
-        return false;
-    }
-
-    // Find delimiters
-    size_t first_colon = stored_hash.find(':');
-    if (first_colon == psram_string::npos) {
-        return false;
-    }
-
-    size_t second_colon = stored_hash.find(':', first_colon + 1);
-    if (second_colon == psram_string::npos) {
-        return false;
-    }
-
-    size_t third_colon = stored_hash.find(':', second_colon + 1);
-    if (third_colon == psram_string::npos) {
-        return false;
-    }
-
-    // Parse algorithm
-    out_algorithm = PSRAMUtils::createPSRAMString(stored_hash.substr(0, first_colon).c_str());
-
-    // Parse salt
-    out_salt_b64 = PSRAMUtils::createPSRAMString(
-        stored_hash.substr(first_colon + 1, second_colon - first_colon - 1).c_str()
-    );
-
-    // Parse iterations
-    psram_string iter_str = PSRAMUtils::createPSRAMString(
-        stored_hash.substr(second_colon + 1, third_colon - second_colon - 1).c_str()
-    );
-    out_iterations = (uint32_t)atoi(iter_str.c_str());
-
-    // Parse hash
-    out_hash_b64 = PSRAMUtils::createPSRAMString(stored_hash.substr(third_colon + 1).c_str());
-
-    return !out_algorithm.empty() && !out_salt_b64.empty() &&
-           out_iterations > 0 && !out_hash_b64.empty();
 }
 
 bool SecurityManager::constantTimeCompare(const psram_string& a, const psram_string& b) const {
@@ -1542,36 +1273,6 @@ void SecurityManager::raiseSecurityFault(const char* feature, const char* recomm
     }
 }
 
-void SecurityManager::publishTemporaryAdminCredential(const psram_string& password) const {
-    if (password.empty()) {
-        return;
-    }
-
-    cJSON* root = cJSON_CreateObject();
-    if (!root) {
-        return;
-    }
-
-    cJSON_AddStringToObject(root, "type", "security.admin.temp_password");
-    cJSON_AddStringToObject(root, "username", "admin");
-    cJSON_AddStringToObject(root, "credential", password.c_str());
-    cJSON_AddStringToObject(root, "action", "rotate_immediately");
-
-    char* json = cJSON_PrintUnformatted(root);
-    if (json) {
-        psram_string detail = PSRAMUtils::createPSRAMString(json);
-        psram_string summary = PSRAMUtils::createPSRAMString("Temporary admin password generated");
-        const_cast<SecurityManager*>(this)->recordSecurityEvent(
-            "security.admin.temp_password",
-            "critical",
-            summary,
-            detail);
-        const_cast<SecurityManager*>(this)->temporary_admin_active_.store(true, std::memory_order_relaxed);
-        free(json);
-    }
-    cJSON_Delete(root);
-}
-
 void SecurityManager::emitApiKeySecurityEvent(const ApiKeyEntry& entry,
                                               const char* event_type,
                                               uint64_t age_ms,
@@ -1751,62 +1452,6 @@ void SecurityManager::getAlertPolicy(SecurityAlertPolicy& out_policy) const {
 void SecurityManager::getSecurityConfigSnapshot(SecurityConfig& out_cfg) const {
     std::lock_guard<std::mutex> lock(alert_policy_mutex_);
     out_cfg = cfg_;
-}
-
-psram_string SecurityManager::hashAdminPassword(const psram_string& password) const {
-    if (password.empty()) {
-        return PSRAMUtils::createPSRAMString("");
-    }
-
-    // Generate random salt
-    psram_string salt_b64 = generateRandomSalt(PBKDF2_SALT_SIZE);
-    if (salt_b64.empty()) {
-        LOG_ERROR(TAG_SEC, "Failed to generate salt for PBKDF2");
-        return PSRAMUtils::createPSRAMString("");
-    }
-
-    // Decode salt from base64
-    size_t salt_len = 0;
-    mbedtls_base64_decode(nullptr, 0, &salt_len,
-                         (const unsigned char*)salt_b64.c_str(), salt_b64.size());
-
-    uint8_t* salt = (uint8_t*)heap_caps_malloc(salt_len, MALLOC_CAP_SPIRAM);
-    if (!salt) {
-        LOG_ERROR(TAG_SEC, "Failed to allocate PSRAM for decoded salt");
-        return PSRAMUtils::createPSRAMString("");
-    }
-
-    size_t actual_len = 0;
-    int ret = mbedtls_base64_decode(salt, salt_len, &actual_len,
-                                    (const unsigned char*)salt_b64.c_str(), salt_b64.size());
-    if (ret != 0) {
-        heap_caps_free(salt);
-        LOG_ERRORF(TAG_SEC, "Failed to decode salt: %d", ret);
-        return PSRAMUtils::createPSRAMString("");
-    }
-
-    // Compute PBKDF2
-    psram_string hash_b64 = computePBKDF2(password, salt, actual_len, DEFAULT_PBKDF2_ITERATIONS);
-    heap_caps_free(salt);
-
-    if (hash_b64.empty()) {
-        LOG_ERROR(TAG_SEC, "Failed to compute PBKDF2");
-        return PSRAMUtils::createPSRAMString("");
-    }
-
-    // Format: "pbkdf2:salt_b64:iterations:hash_b64"
-    char iter_buf[16];
-    snprintf(iter_buf, sizeof(iter_buf), "%u", (unsigned int)DEFAULT_PBKDF2_ITERATIONS);
-
-    psram_string result = PSRAMUtils::createPSRAMString("pbkdf2:");
-    result.append(salt_b64);
-    result.append(":");
-    result.append(iter_buf);
-    result.append(":");
-    result.append(hash_b64);
-
-    LOG_INFO(TAG_SEC, "Generated PBKDF2 password hash with 100000 iterations");
-    return result;
 }
 
 bool SecurityManager::loadAdminPasswordHash(psram_string& hash_out) {

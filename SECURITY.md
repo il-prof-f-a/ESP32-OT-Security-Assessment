@@ -2,16 +2,46 @@
 
 ## Experimental status
 
-ESP32 OT Security Assessment is research software under active development. It has not received a complete independent security audit and must not be treated as a production security boundary.
+This research firmware is under active development, has not received a complete independent
+audit, and must not be treated as a production security boundary. Use active assessment features
+only on systems you own or are explicitly authorized to test.
 
 ## Reporting a vulnerability
 
-Please report vulnerabilities privately through [GitHub's private vulnerability reporting form](https://github.com/il-prof-f-a/ESP32-OT-Security-Assessment/security/advisories/new). Do not publish exploit details in a regular issue before a fix is available.
+Use [GitHub private vulnerability reporting](https://github.com/il-prof-f-a/ESP32-OT-Security-Assessment/security/advisories/new).
+Include the affected version, target board, impact and a minimal reproducer. Redact passwords,
+tokens, keys, internal addresses, identifiers and proprietary OT traffic.
 
-Include the affected commit or version, target board, build environment, impact, and the smallest reproducible example you can provide. Redact all passwords, API keys, private keys, certificates containing private information, internal addresses, device identifiers, and proprietary OT traffic.
+## Provisioning threat model
 
-If a credential may have been exposed, rotate it immediately. Deleting the local generated credential set and rebuilding will create a new set, but deployed devices must then be updated accordingly.
+- Fresh and factory-reset devices are intentionally reachable through a minimal setup server.
+- The one-time setup token and temporary AP password are printed only on UART, expire after 15
+  minutes, are rate-limited and must be protected from physical observers.
+- Five invalid token attempts per minute trigger a 60-second lockout.
+- S3/P4 create a per-device self-signed ECDSA certificate. Verify its UART SHA-256 fingerprint
+  before sending setup data; a self-signed warning alone does not prove identity.
+- T-POE Pro management is currently unencrypted HTTP. Passwords and sessions can be observed or
+  modified by an attacker on that management network. Use an isolated, trusted lab network.
+- The provisioning completion marker is committed last. Interrupted setup remains fail-closed and
+  does not start operational capture, scanning, fuzzing or the full web application.
 
-## Authorized testing only
+There are no universal credentials and no shared default administrator password. Password hashes,
+setup values and private TLS keys are created on the device, not embedded in release firmware.
 
-Security reports are welcome when research is performed against equipment and networks you own or are explicitly authorized to test. Do not disrupt third-party systems or production OT environments.
+## Recovery and credential loss
+
+An authenticated administrator can call `POST /api/config/reset`. It clears the completion marker
+before deleting configuration, security state and TLS identity, then reboots to setup mode.
+
+A forgotten administrator password requires physical serial access:
+
+```bash
+python scripts/flash_esptool.py --target t-poe-pro --port COM10 --factory-reset
+```
+
+The command erases only the NVS and LittleFS regions after explicit confirmation. `--erase-all`
+is a separate full-chip operation. Factory reset destroys local configuration and identities; it
+cannot recover the old password.
+
+If any credential or private key may have been exposed, factory-reset the affected device and
+provision it again on a trusted network.

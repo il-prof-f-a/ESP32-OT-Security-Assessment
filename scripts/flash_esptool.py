@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import shutil
 import subprocess
@@ -65,6 +66,52 @@ def parse_application_offset(partitions_path: Path) -> int:
         raise ValueError(f"Invalid partition offset {row[3]!r} in row {row!r}") from exc
 
 
+def parse_recovery_regions(partitions_path: Path) -> list[tuple[str, int, int]]:
+    """Return the exact NVS and LittleFS regions used for physical recovery."""
+    regions: list[tuple[str, int, int]] = []
+    with Path(partitions_path).open("r", encoding="utf-8", newline="") as stream:
+        for row in csv.reader(stream):
+            if not row or not row[0].strip() or row[0].lstrip().startswith("#"):
+                continue
+            if len(row) < 5:
+                continue
+            name = row[0].strip().lower()
+            subtype = row[2].strip().lower()
+            if name == "nvs" or subtype == "littlefs":
+                try:
+                    regions.append((name, int(row[3].strip(), 0), int(row[4].strip(), 0)))
+                except ValueError as exc:
+                    raise ValueError(f"Invalid recovery region in row {row!r}") from exc
+    if {name for name, _, _ in regions} != {"nvs", "storage"}:
+        raise ValueError(f"Expected nvs and storage recovery regions in {partitions_path}")
+    return regions
+
+
+def build_factory_reset_commands(
+    *,
+    target: str,
+    port: str,
+    partitions_path: Path,
+    esptool_command: Iterable[str] | None = None,
+) -> list[list[str]]:
+    """Build narrowly scoped erase commands for NVS and LittleFS."""
+    config = target_config(target)
+    prefix = list(esptool_command or [_python_command(), "-m", "esptool"])
+    return [
+        [
+            *prefix,
+            "--chip",
+            config.chip,
+            "--port",
+            port,
+            "erase-region",
+            hex(offset),
+            hex(size),
+        ]
+        for _, offset, size in parse_recovery_regions(partitions_path)
+    ]
+
+
 def _artifact(build_dir: Path, name: str) -> Path:
     path = Path(build_dir) / name
     if not path.is_file():
@@ -72,6 +119,44 @@ def _artifact(build_dir: Path, name: str) -> Path:
             f"Missing {name} in {build_dir}. Run the PlatformIO build first."
         )
     return path
+
+
+def _resolve_flash_file(build_dir: Path, configured: str) -> Path:
+    direct = build_dir / configured
+    if direct.is_file():
+        return direct
+    basename = Path(configured).name
+    aliases = {
+        "bootloader.bin": "bootloader.bin",
+        "partition-table.bin": "partitions.bin",
+        "esp32_ot_security_assessment.bin": "firmware.bin",
+        "storage.bin": "littlefs.bin",
+    }
+    return _artifact(build_dir, aliases.get(basename, basename))
+
+
+def _load_flash_manifest(build_dir: Path) -> tuple[str, str, str, str, list[tuple[int, Path]]]:
+    manifest_path = build_dir / "flasher_args.json"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(
+            f"Missing {manifest_path}. Run both the firmware and filesystem builds first."
+        )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    settings = manifest.get("flash_settings", {})
+    chip = manifest.get("extra_esptool_args", {}).get("chip")
+    mode = settings.get("flash_mode")
+    size = settings.get("flash_size")
+    frequency = settings.get("flash_freq")
+    flash_files = manifest.get("flash_files")
+    if not chip or not mode or not size or not frequency or not isinstance(flash_files, dict):
+        raise ValueError("flasher_args.json is missing chip, flash settings or flash_files")
+    entries = sorted(
+        (int(offset, 0), _resolve_flash_file(build_dir, configured))
+        for offset, configured in flash_files.items()
+    )
+    if not entries:
+        raise ValueError("flasher_args.json contains no flash files")
+    return chip, mode, size, frequency, entries
 
 
 def build_flash_command(
@@ -88,34 +173,31 @@ def build_flash_command(
     if not port.strip():
         raise ValueError("A serial port is required (for example COM10 or /dev/ttyUSB0)")
     build_dir = Path(build_dir)
-    bootloader = _artifact(build_dir, "bootloader.bin")
-    partitions = _artifact(build_dir, "partitions.bin")
-    firmware = _artifact(build_dir, "firmware.bin")
-    app_offset = parse_application_offset(partitions_path or DEFAULT_PARTITIONS)
+    chip, mode, size, frequency, entries = _load_flash_manifest(build_dir)
+    if chip != config.chip:
+        raise ValueError(
+            f"Build manifest chip {chip!r} does not match target chip {config.chip!r}"
+        )
     command = list(esptool_command or [_python_command(), "-m", "esptool"])
-    bootloader_offset = "0x2000" if config.chip == "esp32p4" else "0x1000"
-    return [
+    result = [
         *command,
         "--chip",
-        config.chip,
+        chip,
         "--port",
         port,
         "--baud",
         str(baud),
         "write-flash",
         "--flash-mode",
-        "dio",
+        mode,
         "--flash-freq",
-        "40m",
+        frequency,
         "--flash-size",
-        "detect",
-        bootloader_offset,
-        str(bootloader),
-        "0x8000",
-        str(partitions),
-        hex(app_offset),
-        str(firmware),
+        size,
     ]
+    for offset, artifact in entries:
+        result.extend((hex(offset), str(artifact)))
+    return result
 
 
 def _venv_python() -> Path | None:
@@ -172,7 +254,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--project-dir", type=Path, default=PROJECT_ROOT)
     parser.add_argument("--build-dir", type=Path)
     parser.add_argument("--no-build", action="store_true", help="Flash existing artifacts")
-    parser.add_argument("--erase-flash", action="store_true")
+    parser.add_argument(
+        "--erase-flash",
+        action="store_true",
+        help="Erase the complete chip before installing the built firmware",
+    )
+    recovery = parser.add_mutually_exclusive_group()
+    recovery.add_argument(
+        "--factory-reset",
+        action="store_true",
+        help="Erase only NVS and LittleFS; firmware is preserved",
+    )
+    recovery.add_argument(
+        "--erase-all",
+        action="store_true",
+        help="Erase the complete chip without installing firmware",
+    )
+    parser.add_argument("--yes", action="store_true", help="Confirm a destructive erase")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -180,24 +278,66 @@ def main(argv: Sequence[str] | None = None) -> int:
     build_dir = (args.build_dir or default_build_dir(project_dir, args.target)).resolve()
     config = target_config(args.target)
     commands: list[list[str]] = []
-    if not args.no_build:
+    recovery_only = args.factory_reset or args.erase_all
+    if recovery_only and args.erase_flash:
+        parser.error("--erase-flash cannot be combined with a recovery-only operation")
+    if not args.no_build and not recovery_only:
         commands.append([*_platformio_command(), "run", "-e", config.environment])
-    if args.erase_flash:
+        commands.append(
+            [*_platformio_command(), "run", "-e", config.environment, "-t", "buildfs"]
+        )
+    if args.factory_reset:
+        regions = parse_recovery_regions(project_dir / "partitions.csv")
+        print(f"Physical factory reset: chip={config.chip}, port={args.port}")
+        for name, offset, size in regions:
+            print(f"  {name}: offset={hex(offset)}, size={hex(size)}")
+        if not args.dry_run and not args.yes:
+            confirmation = input("Type RESET to erase NVS and LittleFS: ").strip()
+            if confirmation != "RESET":
+                print("Factory reset cancelled.")
+                return 2
+        commands.extend(
+            build_factory_reset_commands(
+                target=args.target,
+                port=args.port,
+                partitions_path=project_dir / "partitions.csv",
+            )
+        )
+    elif args.erase_all:
+        print(f"Full-chip erase: chip={config.chip}, port={args.port}")
+        if not args.dry_run and not args.yes:
+            confirmation = input("Type ERASE-ALL to erase the complete chip: ").strip()
+            if confirmation != "ERASE-ALL":
+                print("Full erase cancelled.")
+                return 2
         commands.append(
             [
                 _python_command(), "-m", "esptool", "--chip", config.chip,
                 "--port", args.port, "erase-flash",
             ]
         )
-    commands.append(
-        build_flash_command(
-            target=args.target,
-            port=args.port,
-            build_dir=build_dir,
-            baud=args.baud,
-            partitions_path=project_dir / "partitions.csv",
+    else:
+        if args.erase_flash:
+            if not args.dry_run and not args.yes:
+                confirmation = input("Type INSTALL to erase the chip and install firmware: ").strip()
+                if confirmation != "INSTALL":
+                    print("Factory installation cancelled.")
+                    return 2
+            commands.append(
+                [
+                    _python_command(), "-m", "esptool", "--chip", config.chip,
+                    "--port", args.port, "erase-flash",
+                ]
+            )
+        commands.append(
+            build_flash_command(
+                target=args.target,
+                port=args.port,
+                build_dir=build_dir,
+                baud=args.baud,
+                partitions_path=project_dir / "partitions.csv",
+            )
         )
-    )
     for command in commands:
         if args.dry_run:
             print("$ " + " ".join(str(part) for part in command))

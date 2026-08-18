@@ -18,6 +18,7 @@ extern "C" {
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "../core/psram_allocator.h"
+#include "../provisioning/runtime_tls_credentials.h"
 
 class ConfigurationManager;
 class ReportingEngine;
@@ -426,6 +427,7 @@ private:
 
     httpd_handle_t https_server_ = nullptr;  // HTTPS server handle
     httpd_handle_t active_server_ = nullptr; // Active HTTP or HTTPS route target
+    RuntimeTlsCredentials tls_credentials_;
 
     // HTTPS helper methods
     void registerHTTPSHandlers();

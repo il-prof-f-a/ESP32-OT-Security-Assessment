@@ -1,22 +1,38 @@
 # Contributing
 
-Thank you for helping improve ESP32 OT Security Assessment. The project is experimental and changes should preserve safe, reproducible laboratory use across the supported targets.
+Thank you for helping improve ESP32 OT Security Assessment. The firmware is experimental, and
+changes must preserve safe, reproducible laboratory use on all supported targets.
 
 ## Before opening a pull request
 
 1. Discuss substantial behavior or architecture changes in a GitHub issue first.
-2. Never commit credentials, generated certificates, private network captures, customer data, or proprietary device information.
-3. Add or update host-side tests for code and build-integration changes.
-4. Run `python -m unittest discover -s tests -p "test_*.py" -v`.
-5. Build the affected PlatformIO environment and state which physical hardware, if any, you tested.
-6. Keep public documentation, diagrams, issue text, and user-facing build messages in English.
+2. Never commit passwords, setup tokens, private keys, private captures, customer information,
+   internal addresses or proprietary device data.
+3. Add or update host tests for firmware, tooling and build-integration changes.
+4. Run:
 
-## Pull request notes
+   ```bash
+   python -m unittest discover -s tests -p "test_*.py" -v
+   python scripts/check_release_secrets.py --repository .
+   ```
 
-Describe the problem, the chosen approach, safety implications, tests performed, target-board impact, and known limitations. Hardware validation claims must identify the exact board and network arrangement used.
+5. Firmware or build changes must compile all three environments:
 
-Security-sensitive reports should follow [SECURITY.md](SECURITY.md), not a public issue or pull request.
+   ```bash
+   pio run -e t-poe-pro
+   pio run -e esp32-s3-eth
+   pio run -e waveshare-esp32p4-eth
+   ```
+
+6. Keep public documentation, diagrams, issue text and user-facing build messages in English.
+
+Describe the problem, approach, security implications, tests, board impact and known limitations
+in the pull request. Hardware validation claims must identify the board and network arrangement.
+Report security-sensitive findings through the private process in [SECURITY.md](SECURITY.md).
 
 ## License
 
-Unless explicitly agreed otherwise, contributions are provided under the repository's [PolyForm Noncommercial License 1.0.0](LICENSE.md) and must preserve its required notice.
+Contributions are provided under the repository's
+[PolyForm Noncommercial License 1.0.0](LICENSE.md) unless the owner agrees otherwise. This project
+is source-available and is not OSI-approved open-source software. Contributions must preserve the
+required copyright notice.

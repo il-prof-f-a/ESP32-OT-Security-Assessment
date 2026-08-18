@@ -1,450 +1,253 @@
 # ESP32 OT Security Assessment
 
-Experimental, ESP-IDF-based firmware for observing and assessing industrial Operational Technology (OT) networks from an ESP32-class edge device. The project combines Ethernet capture and discovery, protocol-aware analysis, anomaly and signature detection, controlled active-assessment modules, reporting, and an embedded web interface.
+[![CI](https://github.com/il-prof-f-a/ESP32-OT-Security-Assessment/actions/workflows/host-tests.yml/badge.svg)](https://github.com/il-prof-f-a/ESP32-OT-Security-Assessment/actions/workflows/host-tests.yml)
+[![Release](https://github.com/il-prof-f-a/ESP32-OT-Security-Assessment/actions/workflows/release.yml/badge.svg)](https://github.com/il-prof-f-a/ESP32-OT-Security-Assessment/actions/workflows/release.yml)
 
-> [!IMPORTANT]
-> This is research software under active test. All three listed boards have been exercised on physical hardware, but complete or production-grade functionality is **not** yet guaranteed. Use it only in an isolated laboratory or on systems for which you have explicit authorization. Do not expose the management interface to an untrusted network.
+Experimental ESP32 firmware for passive observation and authorized security assessment of
+operational-technology protocols. The project combines Ethernet/Wi-Fi connectivity, a management
+web interface, protocol discovery, passive IDS functions, controlled vulnerability checks and
+reporting for Modbus TCP, S7, PROFINET, OPC UA and EtherNet/IP.
 
-## Project scope
+> This project is still under test. Full intended functionality is not yet guaranteed. Use it only
+> in laboratories or on systems you own or are explicitly authorized to assess. Never connect
+> active assessment functions to a production OT network without a reviewed test plan.
 
-The firmware is designed to explore whether a small embedded device can provide a practical security-assessment point near an OT segment. Current modules include:
+## Hardware tested and important limitations
 
-- Ethernet and Wi-Fi network management, where the target hardware supports them;
-- passive discovery, network-presence tracking, packet and flow processing;
-- experimental protocol modules for Modbus/TCP, Siemens S7, EtherNet/IP, PROFINET, and OPC UA;
-- baselining, anomaly detection, signature detection, and event correlation;
-- vulnerability-scanning and fuzzing workflows protected by policy and transmission guards;
-- an embedded web UI and API;
-- serial, GPIO, MQTT, and webhook reporting paths;
-- NVS/LittleFS persistence and PSRAM-aware data structures.
-
-Individual protocol and assessment features have different maturity levels. A successful build does not mean that every module is complete or validated against every PLC, network layout, or protocol implementation.
-
-```mermaid
-flowchart LR
-    OT["Isolated OT test network"] --> ETH["Ethernet capture and discovery"]
-    ETH --> PLUGINS["Industrial protocol modules"]
-    PLUGINS --> DETECT["Baseline, signatures, anomaly detection, correlation"]
-    DETECT --> REPORT["Web UI, API, logs, MQTT, webhook, GPIO"]
-    MGMT["Management client"] --> WIFI["Wi-Fi management plane, when available"]
-    WIFI --> REPORT
-    REPORT --> ACTIVE["Authorized active assessment"]
-    ACTIVE --> GUARD["Sandbox policy and Ethernet TX guard"]
-    GUARD --> OT
-```
-
-## Tested hardware
-
-The following status describes observations from this project, not a general limitation of the manufacturers' hardware.
-
-| Device | Project status | Web transport | Network separation | Important limitations observed in this project |
-|---|---|---|---|---|
-| LILYGO T-POE Pro | Works in current tests | **HTTP only** | Wi-Fi can provide a separate management path | HTTPS has not worked reliably in this firmware; HTTP exposes management traffic in cleartext. |
-| Waveshare ESP32-S3-ETH | Works on a limited set of tested networks | HTTPS with a generated self-signed certificate | Wi-Fi and Ethernet are available | Network compatibility is currently limited; there is no native 24 V input and no GPIO screw-terminal block. |
-| Waveshare ESP32-P4-ETH | Best current functional result | HTTPS with a generated self-signed certificate | **Not achieved** with this board alone | ESP32-P4 has no native Wi-Fi, so the web server shares the OT Ethernet subnet and the required management/OT separation is lost. |
+| Device | Current result | Management transport | Important limitation |
+| --- | --- | --- | --- |
+| LILYGO T-POE Pro | Firmware starts and operates in current tests | **HTTP only** | HTTPS currently causes instability, so credentials and management traffic are not encrypted. |
+| Waveshare ESP32-S3-ETH | Functional on a limited set of tested networks | HTTPS with a per-device self-signed certificate | Network compatibility is limited; there is no native 24 V input and no GPIO screw-terminal block. |
+| Waveshare ESP32-P4-ETH | Best current functional result | HTTPS with a per-device self-signed certificate | No Wi-Fi: management is exposed on the same Ethernet subnet as the OT network, so management/OT separation is not achieved. |
 
 ### LILYGO T-POE Pro
 
-<p align="center">
-  <img src="docs/assets/hardware/lilygo-t-poe-pro-photo.jpg" alt="LILYGO T-POE Pro board" width="420">
+<p>
+  <img src="docs/assets/hardware/lilygo-t-poe-pro-photo.jpg" alt="LILYGO T-POE Pro" width="390">
 </p>
 
-The T-POE Pro uses an ESP32-WROVER-E, LAN8720 Ethernet PHY, 16 MB flash, 8 MB PSRAM, onboard PoE, a 7-24 V input, and screw terminals. The firmware profile uses PHY address `0`, reset on GPIO `5`, MDC on GPIO `23`, MDIO on GPIO `18`, and the RMII reference clock on GPIO `0`.
+The profile uses the LAN8720 RMII PHY (address `0`), reset GPIO `5`, MDC GPIO `23`, MDIO GPIO
+`18`, and GPIO `0` as the RMII clock output. The board supports PoE, but the current management
+server is deliberately HTTP-only until the HTTPS boot/runtime problem is resolved.
 
-In this project the board currently runs the web server over plain HTTP on port 80. Treat that profile as the least secure option: use an isolated, trusted management network and never send reusable credentials across an untrusted segment.
-
-<p align="center">
+<p>
   <img src="docs/assets/hardware/lilygo-t-poe-pro-pinout.jpg" alt="LILYGO T-POE Pro pinout" width="620">
 </p>
 
-- [Manufacturer product page and official store](https://lilygo.cc/products/t-poe-pro)
-- [Manufacturer source, pin maps, and schematics](https://github.com/Xinyuan-LilyGO/LilyGO-T-ETH-Series)
+- [Manufacturer product page and official purchase link](https://lilygo.cc/products/t-poe-pro)
+- [Official pin maps and schematics](https://github.com/Xinyuan-LilyGO/LilyGO-T-ETH-Series)
 
 ### Waveshare ESP32-S3-ETH
 
-<p align="center">
+<p>
   <img src="docs/assets/hardware/waveshare-esp32-s3-eth-photo.jpg" alt="Waveshare ESP32-S3-ETH board" width="360">
 </p>
 
-This board combines an ESP32-S3R8 with 16 MB flash, 8 MB PSRAM, 2.4 GHz Wi-Fi, and a W5500 10/100 Ethernet controller. The W5500 SPI mapping used by the firmware is SCLK GPIO `13`, MOSI GPIO `11`, MISO GPIO `12`, CS GPIO `14`, interrupt GPIO `10`, and reset GPIO `9`.
+This target combines ESP32-S3 Wi-Fi with a W5500 SPI Ethernet controller. The firmware profile
+uses CS GPIO `14`, interrupt GPIO `10`, reset GPIO `9`, SCLK GPIO `13`, MOSI GPIO `11`, and MISO
+GPIO `12`. It provides management/OT separation in principle, but current network testing is
+limited and the hardware has no native 24 V supply input or screw-terminal GPIO.
 
-It can maintain a Wi-Fi management path separate from wired OT traffic, but the project has so far worked only on a limited set of test networks. Power is via USB/5 V or an optional PoE accessory; the board does not provide the project's desired native 24 V input or field-oriented GPIO screw terminals.
-
-<p align="center">
+<p>
   <img src="docs/assets/hardware/waveshare-esp32-s3-eth-pinout.png" alt="Waveshare ESP32-S3-ETH pinout" width="620">
 </p>
 
 - [Official hardware documentation](https://www.waveshare.com/wiki/ESP32-S3-ETH)
-- [Manufacturer product page and official store](https://www.waveshare.com/esp32-s3-eth.htm)
+- [Manufacturer product page and official purchase link](https://www.waveshare.com/esp32-s3-eth.htm)
 
 ### Waveshare ESP32-P4-ETH
 
-<p align="center">
+<p>
   <img src="docs/assets/hardware/waveshare-esp32-p4-eth-photo.jpg" alt="Waveshare ESP32-P4-ETH board" width="420">
 </p>
 
-The ESP32-P4-ETH uses the ESP32-P4 and an IP101GRI 10/100 Ethernet PHY. The firmware profile uses PHY address `1`, reset on GPIO `51`, MDC on GPIO `31`, MDIO on GPIO `52`, and the external RMII clock on GPIO `50`.
+The ESP32-P4 target uses the IP101GRI RMII PHY at address `1`, reset GPIO `51`, MDC GPIO `31`,
+MDIO GPIO `52`, and external clock GPIO `50`. It currently gives the strongest functional result,
+but ESP32-P4 has no integrated Wi-Fi. The setup and operational web servers therefore share the
+same Ethernet subnet being assessed.
 
-This is the strongest-performing target in current functional tests. Its architectural limitation is decisive, however: ESP32-P4 has no integrated Wi-Fi. With the board alone, the management web server must be reachable over the same Ethernet subnet being assessed, which violates the project's intended separation between management and OT networks.
-
-<p align="center">
+<p>
   <img src="docs/assets/hardware/waveshare-esp32-p4-eth-pinout.jpg" alt="Waveshare ESP32-P4-ETH pinout" width="620">
 </p>
 
 - [Official hardware documentation](https://www.waveshare.com/wiki/ESP32-P4-ETH)
-- [Manufacturer product page and official store](https://www.waveshare.com/esp32-p4-eth.htm)
+- [Manufacturer product page and official purchase link](https://www.waveshare.com/esp32-p4-eth.htm)
+- [Hardware image attribution](docs/assets/hardware/SOURCES.md)
 
-Image provenance and attribution are recorded in [docs/assets/hardware/SOURCES.md](docs/assets/hardware/SOURCES.md).
+## Quick installation
 
-## Build prerequisites
-
-- Git with submodule support;
-- Python 3.10 or newer;
-- the repository setup script, which creates a local `.venv` and installs PlatformIO Core plus esptool;
-- the [PlatformIO extension for Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=platformio.platformio-ide) for the graphical workflow;
-- [ESP-IDF 5.5](https://docs.espressif.com/projects/esp-idf/en/v5.5/esp32p4/get-started/index.html) is also supported for the ESP32-P4 native build path;
-- a USB data cable and the appropriate serial driver for the selected board.
-
-Clone recursively because `esp_littlefs` contains its own LittleFS submodule:
+Requirements are Git, Python 3.10 or newer, and either Visual Studio Code with the
+[PlatformIO extension](https://marketplace.visualstudio.com/items?itemName=platformio.platformio-ide)
+or a terminal. Clone recursively because the project contains required submodules:
 
 ```bash
 git clone --recurse-submodules https://github.com/il-prof-f-a/ESP32-OT-Security-Assessment.git
 cd ESP32-OT-Security-Assessment
 ```
 
-If the repository was cloned without submodules, repair it with:
-
-```bash
-git submodule update --init --recursive
-```
-
-## Quick installation
-
-The setup scripts install all project-local host dependencies into `.venv`,
-initialize the `esp_littlefs` submodule, and leave the system Python packages
-untouched. Python and Git themselves must already be installed. PlatformIO
-downloads the Espressif frameworks and toolchains during the first build, so
-that build can take several minutes.
-
-On Windows PowerShell:
+The setup helpers create a local Python environment and install the pinned build tools:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\scripts\setup_platformio.ps1
-# Optional: install the VS Code PlatformIO extension as well.
-.\scripts\setup_platformio.ps1 -InstallVsCodeExtension
+powershell -ExecutionPolicy Bypass -File scripts/setup_platformio.ps1
 ```
 
-On Linux or macOS:
-
 ```bash
-chmod +x scripts/*.sh
 ./scripts/setup_platformio.sh
-# Optional VS Code extension installation.
-INSTALL_VSCODE_EXTENSION=1 ./scripts/setup_platformio.sh
 ```
 
-For command-line work, activate the local environment (or call its Python
-executable explicitly):
+Open this repository folder in VS Code after setup. PlatformIO should show these environments:
+`t-poe-pro`, `esp32-s3-eth`, and `waveshare-esp32p4-eth`.
+
+## Build, upload and monitor
+
+Build any target from the PlatformIO sidebar or a terminal:
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-```bash
-source .venv/bin/activate
-```
-
-Open the `ESP32-OT-Security-Assessment` folder in VS Code after setup. Select
-the local `.venv` interpreter if prompted, then use **PlatformIO: Build**,
-**PlatformIO: Upload**, and **PlatformIO: Monitor**. The PlatformIO task tree
-shows `t-poe-pro`, `esp32-s3-eth`, and `waveshare-esp32p4-eth`; no serial port is
-hard-coded in the repository, so select the connected COM/TTY port in the
-PlatformIO device picker.
-
-## Automatic credential provisioning
-
-The first build automatically creates cryptographically random local credentials and a new RSA-2048 self-signed TLS certificate. Provisioning runs from both the PlatformIO and native ESP-IDF build paths. No default password, private key, certificate, or populated runtime configuration is committed to this repository.
-
-The credential directory is selected in this order:
-
-1. `ESP32_OT_CREDENTIALS_DIR`, when explicitly set;
-2. an existing `credentials` directory next to this repository;
-3. `.credentials` inside this repository for a standalone clone.
-
-The generated directory contains:
-
-- `credentials.json` — generated administrator and provisioning-AP credentials;
-- `config.<board>.json` — per-board reference configuration, with `config.json` as the shared fallback;
-- `server.crt` — self-signed server certificate;
-- `server.key` — matching private key.
-
-These paths are ignored by Git. Back them up securely if the deployed device must keep the same identity. Deleting them intentionally causes the next build to create a new credential set. Do not paste their contents into issues, logs, screenshots, or commits.
-
-### Reference configuration
-
-Each board has its own reference configuration. At build time the configuration
-embedded into the firmware is resolved in this order:
-
-1. `credentials/config.<board>.json` — the board-specific file, used verbatim
-   when present;
-2. `credentials/config.json` — the shared fallback;
-3. neither — a conservative default (all external integrations disabled, DHCP
-   enabled on Ethernet) is generated into the board-specific file.
-
-| Board | Config file |
-| --- | --- |
-| LILYGO T-POE Pro | `credentials/config.t-poe-pro.json` |
-| Waveshare ESP32-S3-ETH | `credentials/config.esp32-s3-eth.json` |
-| Waveshare ESP32-P4-ETH | `credentials/config.waveshare-esp32p4-eth.json` |
-
-The board key is the PlatformIO environment name (`t-poe-pro`, `esp32-s3-eth`,
-`waveshare-esp32p4-eth`); the native `idf.py` path maps the ESP-IDF target to
-the same name, so both build paths share one file per board. A file is read
-**verbatim** on every later build, so manual edits survive rebuilds. Use it to
-set the network profile without the web UI:
-
-```json
-{
-  "network": {
-    "ethernet": {
-      "enabled": true,
-      "dhcp": false,
-      "ip": "192.168.1.50",
-      "gateway": "192.168.1.1",
-      "netmask": "255.255.255.0"
-    }
-  }
-}
-```
-
-The administrator password lives in `credentials.json` and is injected into the
-config when it is generated, or into an existing config that has no
-administrator credential. The config is compiled into the firmware as the
-embedded default via the generated header `esp32_ot_generated_credentials.h`.
-
-At runtime the effective configuration is resolved in this priority order:
-
-1. `/data/config/config.json` on the device filesystem (web UI writes go here);
-2. the embedded default (the board-specific file above);
-3. the backup copy `/data/config/config.json.bak`.
-
-The firmware validates only a small boot-critical subset (debug level, security
-boot flags, and Ethernet/Wi-Fi `enabled` and `dhcp`). Missing optional fields
-fall back to compiled-in defaults, and missing protocol fields are re-injected
-and persisted automatically, so a partial hand-edited config remains usable.
-
-To keep credentials outside the checkout:
-
-```powershell
-$env:ESP32_OT_CREDENTIALS_DIR = 'D:\secure\esp32-ot-credentials'
-pio run -e esp32-s3-eth
-```
-
-```bash
-export ESP32_OT_CREDENTIALS_DIR="$HOME/.config/esp32-ot-security-assessment"
-pio run -e esp32-s3-eth
-```
-
-## Build and flash
-
-Use PlatformIO for all three boards:
-
-```bash
-# LILYGO T-POE Pro (HTTP-only management in the current firmware)
 pio run -e t-poe-pro
-
-# Waveshare ESP32-S3-ETH
 pio run -e esp32-s3-eth
-
-# Waveshare ESP32-P4-ETH
 pio run -e waveshare-esp32p4-eth
 ```
 
-The P4 environment pins the `pioarduino/platform-espressif32` fork to the
-hardware-tested revision and uses the local board definition plus the
-RISC-V toolchain compatibility script in `scripts/fix_esp32p4_toolchain_path.py`.
-The stock `espressif32@6.12.0` platform must not be substituted: it selects an
-Xtensa toolchain for `esp32p4`. A native ESP-IDF 5.5 build remains available as
-an alternative. This forked PlatformIO path is experimental and pinned to keep
-the build inputs reproducible while upstream ESP32-P4 support evolves:
+Example upload and serial monitor on Windows:
 
-The Waveshare ESP32-P4-ETH profile explicitly selects the board's pre-v3
-ESP32-P4 silicon family (`CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y`). Do not reuse
-this profile for a v3.x ESP32-P4 board; choose the matching ESP-IDF revision
-overlay instead. If you change the revision profile locally, remove the
-generated `sdkconfig.waveshare-esp32p4-eth` file before rebuilding so PlatformIO
-can regenerate it from the selected defaults.
-
-```bash
-# Run this from an activated ESP-IDF 5.5 shell.
-idf.py -B build-esp32p4 -D IDF_TARGET=esp32p4 build
-```
-
-The CMake configuration selects `sdkconfig.esp32p4.defaults`, provisions credentials automatically, enables HTTPS, and applies the Waveshare IP101GRI/RMII pin mapping. To flash the P4 after a successful build:
-
-```bash
-idf.py -B build-esp32p4 -p SERIAL_PORT flash
-```
-
-See PlatformIO's [open ESP32-P4 support request](https://github.com/platformio/platform-espressif32/issues/1570) for the upstream status.
-
-Connect the board, then let PlatformIO detect the serial port or provide it explicitly:
-
-```bash
+```powershell
 pio run -e t-poe-pro -t upload --upload-port COM10
-pio run -e esp32-s3-eth -t upload --upload-port COM10
 pio device monitor --port COM10 --baud 115200
 ```
 
-On Linux, a port typically resembles `/dev/ttyUSB0` or `/dev/ttyACM0`.
-
-### One-command build, flash, and monitor wrappers
-
-The wrappers use `.venv` automatically when it exists and accept the target and
-serial port explicitly. Build only:
+The wrappers combine build, upload and monitor while accepting a target and serial port:
 
 ```powershell
-.\scripts\build_flash.ps1 -Target t-poe-pro
+scripts/build_flash.ps1 -Target t-poe-pro -Port COM10
 ```
-
-Build, flash, and then attach the serial monitor on Windows:
-
-```powershell
-.\scripts\build_flash.ps1 -Target t-poe-pro -Port COM10 -Upload -Monitor
-```
-
-The equivalent POSIX command is:
 
 ```bash
-./scripts/build_flash.sh --target t-poe-pro --port /dev/ttyUSB0 --upload --monitor
+./scripts/build_flash.sh t-poe-pro /dev/ttyUSB0
 ```
 
-Use `--no-build` (or `-NoBuild`) only when the selected build artifacts already
-exist. The wrapper does not guess a port and refuses upload/monitor operations
-without one.
-
-A committed `.vscode/tasks.json` also exposes **Upload & Monitor (correct flash)**
-and **Upload only (correct flash)** tasks (Terminal → Run Task…, or
-Ctrl+Shift+B for the default build task). They prompt for the board target and
-serial port, then invoke `build_flash.ps1`, which flashes the ESP32-P4 at the
-correct offsets (`0x2000`/`0x8000`/`0x200000`).
-
-> **Important — do not use the PlatformIO "Upload" / "Upload and Monitor" buttons
-> for `waveshare-esp32p4-eth`.** This environment uses the
-> `pioarduino/platform-espressif32` git fork (required to build the RISC-V
-> ESP32-P4). On Windows hosts whose checkout path contains spaces, `pio run
-> -t upload` re-checks/re-installs that git platform and hangs at "Processing
-> …". Use `Ctrl+Shift+B` or `build_flash.ps1` instead. The `t-poe-pro` and
-> `esp32-s3-eth` environments use the stock `espressif32` platform, so their
-> native upload buttons work normally.
+If automatic reset fails, hold the board's BOOT button, start upload, release BOOT when esptool
+connects, and then reset the device. This is the board's bootloader mode.
 
 ### Explicit esptool workflow
 
-The Python helper builds the selected PlatformIO environment and then invokes
-esptool. This is useful in CI or when the PlatformIO graphical upload task is
-not available:
+The helper builds the firmware and LittleFS, then writes every entry listed in the target's
+generated `flasher_args.json` with the correct chip and flash settings:
 
-```bash
+```powershell
 python scripts/flash_esptool.py --target t-poe-pro --port COM10
 ```
 
-To flash artifacts from a build that has already completed:
+The current ESP32 layout uses bootloader `0x1000`, partition table `0x8000`, and application
+`0x200000`; ESP32-P4 uses a different bootloader offset. Do not copy offsets or flash-mode values
+between boards. `flasher_args.json` and each release manifest are authoritative.
 
-```bash
-python scripts/flash_esptool.py --target t-poe-pro --port COM10 --no-build
+### ESP32-P4 build paths
+
+The VS Code/PlatformIO environment is fully supported by this repository:
+
+```powershell
+pio run -e waveshare-esp32p4-eth
 ```
 
-The helper uses the target-specific esptool chip (`esp32`, `esp32s3`, or
-`esp32p4`) and the partition table in `partitions.csv`. The current layout is:
-
-| Image | Flash offset |
-|---|---:|
-| Bootloader | `0x1000` (`0x2000` on ESP32-P4) |
-| Partition table | `0x8000` |
-| Factory application (`firmware.bin`) | `0x200000` |
-
-For a fully explicit command, first build the target and replace `BUILD_DIR`
-with the resulting PlatformIO directory:
+It pins the tested `pioarduino/platform-espressif32` revision because stock PlatformIO does not
+yet provide the required ESP32-P4 toolchain mapping. A native ESP-IDF 5.5 build remains available:
 
 ```bash
-python -m esptool --chip esp32 --port COM10 --baud 921600 write-flash \
-  --flash-mode dio --flash-freq 40m --flash-size detect \
-  0x1000 "BUILD_DIR/bootloader.bin" \
-  0x8000 "BUILD_DIR/partitions.bin" \
-  0x200000 "BUILD_DIR/firmware.bin"
+IDF_TARGET=esp32p4 idf.py -B build/waveshare-esp32p4-eth build
 ```
 
-On Windows the default build directory is usually
-`%USERPROFILE%\\.platformio\\build\\ESP32-OT-Security-Assessment\\t-poe-pro`;
-on Linux/macOS it is normally
-`~/.platformio/build/ESP32-OT-Security-Assessment/t-poe-pro`. Use `esp32s3`
-for `esp32-s3-eth` and `esp32p4` for `waveshare-esp32p4-eth`.
+The supplied P4 configuration targets pre-v3 ESP32-P4 silicon. Verify the chip revision before
+using it on newer hardware.
 
-If the board does not appear, use a USB **data** cable and enter bootloader mode
-(hold **BOOT**, press and release **RESET**, then release **BOOT**) before
-retrying. Install the board's USB/UART driver if no COM/TTY device is visible.
-The default esptool reset sequence returns the board to the application after a
-successful write; do not interrupt power while the flash is in progress.
+## First-boot provisioning
+
+Builds are deterministic and contain no administrator password, setup password, private key or
+machine-specific path. Every erased device creates its own one-time setup session at first boot.
+Keep the serial console private: it is the only place where the temporary setup token, temporary
+AP password and HTTPS fingerprint are displayed.
+
+- T-POE Pro and ESP32-S3-ETH start a WPA2 setup AP named from the device MAC. Connect one client,
+  open the address printed on UART, and enter the setup token in the page. T-POE uses HTTP; S3
+  uses HTTPS.
+- ESP32-P4-ETH starts Ethernet with DHCP. Find the HTTPS address and certificate fingerprint on
+  UART and connect from the same Ethernet subnet.
+- Set a unique administrator password of at least 16 bytes and select the network settings. Five
+  invalid token attempts in one minute lock setup for 60 seconds. The session expires after 15
+  minutes.
+- For S3/P4, compare the browser certificate's SHA-256 fingerprint with UART before submitting.
+- A successful submission stores only a PBKDF2-HMAC-SHA-256 password hash, persists the config and
+  per-device TLS identity, marks provisioning complete last, and reboots into operational mode.
+
+There is no shared default password and no universal recovery credential. A new clone does not
+create a local credential file; secrets are generated independently on each physical device.
+
+## Recovery and updates
+
+The authenticated `POST /api/config/reset` operation performs a factory reset: it clears the
+completion marker first, removes configuration, administrator/security state and TLS material,
+then reboots into a new setup session.
+
+If the administrator password is lost, use physical serial recovery. The command displays the
+chip, port and exact NVS/LittleFS regions and requires typing `RESET`:
+
+```powershell
+python scripts/flash_esptool.py --target t-poe-pro --port COM10 --factory-reset
+```
+
+To erase the complete chip without installing firmware, use the separate `--erase-all` option.
+For a complete factory installation, `--erase-flash` erases the chip before writing firmware.
+
+An app-only release image updates the application and preserves NVS, LittleFS configuration and
+the TLS identity. A factory image is for clean installation, requires a full erase, and contains
+all flash entries from the build manifest.
+
+## Downloading verified releases
+
+Each prerelease contains four assets per target:
+
+- `esp32-ot-security-<target>-v<version>-factory.bin`
+- `esp32-ot-security-<target>-v<version>-app.bin`
+- `esp32-ot-security-<target>-v<version>-flash-bundle.zip`
+- `esp32-ot-security-<target>-v<version>-manifest.json`
+
+It also contains `SHA256SUMS.txt` and GitHub build-provenance attestations. Verify downloads before
+flashing:
+
+```bash
+sha256sum -c SHA256SUMS.txt
+```
+
+The manifest records the target chip, flash mode/size, every offset and every SHA-256 digest. The
+ZIP contains the individual flash files and manifest for advanced esptool use.
 
 ## Testing
 
-Run the host-side provisioning and build-integration tests without hardware:
+Run host-side tests and the release secret gate:
 
-```bash
-python -m unittest discover -s tests -p "test_*.py"
+```powershell
+python -m unittest discover -s tests -p "test_*.py" -v
+python scripts/check_release_secrets.py --repository .
 ```
 
-The remaining scripts under `tests/` exercise a live device, including API security, rate limiting, IDS behavior, memory telemetry, OPC UA, and EtherNet/IP soak validation. Read [tests/README.md](tests/README.md) before running them. Some scripts intentionally generate hostile or high-rate traffic and must be used only in an authorized lab.
+Firmware/build changes must compile all three PlatformIO environments. Hardware claims must state
+the exact board, network topology and firmware revision used.
 
 ## Repository layout
 
 ```text
-boards/                 Custom PlatformIO board metadata
-components/esp_littlefs LittleFS ESP-IDF component and nested submodule
-docs/assets/hardware/   Hardware images and source attribution
-scripts/                Build-time UI and credential generation
-src/assessment/         Detection, baselining, scanning, and correlation
-src/core/               Configuration, storage, scheduling, logging
-src/network/            Ethernet, Wi-Fi, packet, and flow handling
-src/protocols/          Industrial protocol modules
-src/reporters/          Serial, GPIO, MQTT, and webhook outputs
-src/sandbox/            Active-assessment policy and transmission guards
-src/security/           Authentication and security controls
-src/web/                Embedded HTTP/HTTPS server, API, and web UI
-tests/                  Host-side and live-device validation tools
+.github/                    CI, release automation and issue templates
+boards/                     Custom PlatformIO board definitions
+components/                 ESP-IDF components and submodules
+data/                       Seed content for the LittleFS image
+docs/assets/hardware/       Board photos, pinouts and attribution
+scripts/                    Setup, build, flashing, packaging and security tools
+src/                        Firmware source and embedded web UI
+tests/                      Offline host-side tests
 ```
 
-## Known limitations and roadmap
+## Security and licensing
 
-The main engineering limitations are tracked in [GitHub Issues](https://github.com/il-prof-f-a/ESP32-OT-Security-Assessment/issues). In particular, the project still needs a secure web transport on T-POE Pro, broader ESP32-S3 network validation, a management/OT separation strategy for ESP32-P4, repeatable multi-target CI, and further lifecycle and memory hardening.
-
-Security-sensitive findings that would enable exploitation may be handled privately until a fix is available. For a vulnerability report, do not open a public issue containing exploit details, credentials, private network data, or device logs with sensitive content.
-
-### Secure Boot and Flash Encryption
-
-Secure Boot and Flash Encryption (the device memory encryption) are supported but
-**not enabled**. The Security Manager reads the eFuses at boot and, when the
-configuration requires them, reports that the hardware protection is missing:
-
-    [Security] Secure Boot (efuse): 0
-    [Security] Flash Encryption (efuse): 0
-    [Security] Security hardening requirement not met: secure_boot -> Enable eFuse secure boot before deployment
-    [Security] Security hardening requirement not met: flash_encryption -> Enable flash encryption in eFuse
-
-These are one-time, eFuse-backed hardware protections, not runtime settings. They
-are intentionally left off during development and will be enabled only when the
-project reaches a mature, deployment-ready phase, because programming the eFuses
-is permanent (in release mode the flash cannot be re-read or re-flashed without
-the keys), the ESP32-P4 path uses the immature `pioarduino` fork for this feature
-(prefer the native `idf.py` build), and the keys must be backed up securely.
-
-When the time comes: enable `CONFIG_SECURE_FLASH_ENC_ENABLED=y` (and optionally
-`CONFIG_SECURE_BOOT=y`), flash with `idf.py encrypted-flash`, and store the flash
-encryption and secure boot keys.
-
-## License
-
-This project is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). It permits the noncommercial uses described in the license; it is not an OSI-approved open-source license. Contact the copyright holder before any commercial use.
-
-Third-party components and hardware images remain subject to their own licenses and rights.
+Read [SECURITY.md](SECURITY.md) before reporting a vulnerability and
+[CONTRIBUTING.md](CONTRIBUTING.md) before proposing a change. This is source-available research
+software under the [PolyForm Noncommercial License 1.0.0](LICENSE.md), not OSI-approved open-source
+software. Third-party components and hardware images retain their respective rights and licenses.

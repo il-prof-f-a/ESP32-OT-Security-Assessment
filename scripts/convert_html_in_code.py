@@ -29,6 +29,7 @@ PROJECT_ROOT = detect_project_root()
 IN_DIR = PROJECT_ROOT / "src" / "web" / "ui"
 OUT_DIR = IN_DIR / "gen"
 EXT_KIND = {".html": "HTML", ".js": "JS", ".css": "CSS"}
+REQUIRED_PUBLIC_ASSETS = {"provisioning.html"}
 
 
 def sym_from_file(path: Path, kind: str) -> str:
@@ -47,6 +48,12 @@ def run() -> None:
     if not IN_DIR.exists():
         OUT_DIR.mkdir(parents=True, exist_ok=True)
         sys.exit("[webui] Missing src/web/ui")
+
+    missing_required = [
+        name for name in sorted(REQUIRED_PUBLIC_ASSETS) if not (IN_DIR / name).is_file()
+    ]
+    if missing_required:
+        sys.exit(f"[webui] Missing required public assets: {', '.join(missing_required)}")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 

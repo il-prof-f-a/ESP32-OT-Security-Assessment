@@ -2,7 +2,6 @@
 #include "wifi_manager.h"
 #include "../core/logging_system.h"
 #include "../core/configuration_manager.h"
-#include "esp32_ot_generated_credentials.h"
 #include <cstring>
 extern "C" {
 #include "lwip/inet.h"
@@ -143,8 +142,7 @@ bool WiFiManager::initializeFromConfig() {
               enabled ? "true" : "false", ssid.c_str());
 
     if (!enabled || ssid.empty()) {
-        LOG_INFO(TAG, "WiFi STA not configured, starting fallback AP");
-        startAP(esp32_ot_generated::kProvisioningApSsid, esp32_ot_generated::kProvisioningApPassword);
+        LOG_INFO(TAG, "WiFi STA is disabled or not configured");
         return true;
     }
 
@@ -178,8 +176,7 @@ bool WiFiManager::initializeFromConfig() {
 
         return true;
     } else {
-        LOG_WARNING(TAG, "WiFi STA connection failed, starting fallback AP");
-        startAP(esp32_ot_generated::kProvisioningApSsid, esp32_ot_generated::kProvisioningApPassword);
+        LOG_WARNING(TAG, "WiFi STA connection failed");
         return false;
     }
 }
@@ -930,8 +927,8 @@ void WiFiManager::startAP(const char* ssid, const char* pw){
     strncpy((char*)apcfg.ap.ssid, ssid ? ssid : "", sizeof(apcfg.ap.ssid)-1);
     strncpy((char*)apcfg.ap.password, pw ? pw : "", sizeof(apcfg.ap.password)-1);
     apcfg.ap.ssid_len = ssid ? strlen(ssid) : 0;
-    apcfg.ap.authmode = WIFI_AUTH_WPA_WPA2_PSK;
-    apcfg.ap.max_connection = 4;
+    apcfg.ap.authmode = WIFI_AUTH_WPA2_PSK;
+    apcfg.ap.max_connection = 1;
     esp_wifi_set_config(WIFI_IF_AP, &apcfg);
     esp_wifi_start();
 
