@@ -161,8 +161,9 @@ using it on newer hardware.
 
 ## First-boot provisioning
 
-Builds are deterministic and contain no administrator password, setup password, private key or
-machine-specific path. Every erased device creates its own one-time setup session at first boot.
+Release builds are deterministic and contain no administrator password, setup password, private
+key or machine-specific path. Every erased device running a release image creates its own one-time
+setup session at first boot (see "Embedded credentials" below for the local-build alternative).
 Keep the serial console private: it is the only place where the temporary setup token, temporary
 AP password and HTTPS fingerprint are displayed.
 
@@ -181,28 +182,31 @@ AP password and HTTPS fingerprint are displayed.
 There is no shared default password and no universal recovery credential. A new clone does not
 create a local credential file; secrets are generated independently on each physical device.
 
-### Embedded credentials (optional, internal builds only)
+### Embedded credentials (local builds)
 
-For a small batch of devices whose administrator password must be fixed and printed in a manual,
-the firmware can skip the setup portal and self-provision at first boot with a build-time password.
+Local VSCode/PlatformIO builds self-provision with a fixed administrator password instead of the
+setup portal: platformio.ini carries -DESP32_OT_EMBEDDED_CREDENTIALS=1 in every environment.
 
-- Enable by building with ESP32_OT_EMBEDDED_CREDENTIALS=1 in the environment:
+- The first build with the flag enabled creates a gitignored credentials.json in the repository root
+  with a random administrator password. Edit that file to set your own password (at least 16 bytes);
+  the firmware embeds only the PBKDF2 hash, never the plaintext.
+- At first boot the device writes the hash, persists the default configuration, marks provisioning
+  complete and starts directly in operational mode (no setup AP, token or portal).
+- To build the interactive-provisioning firmware locally instead, remove the
+  -DESP32_OT_EMBEDDED_CREDENTIALS=1 flag from the environment, or set the environment variable to 0:
 
-      $env:ESP32_OT_EMBEDDED_CREDENTIALS = "1"
+      $env:ESP32_OT_EMBEDDED_CREDENTIALS = "0"
       pio run -e t-poe-pro
 
-- On the first enabled build, the helper creates a gitignored credentials.json in the repository
-  root containing a random administrator password. Edit the file to set your own password (at least
-  16 bytes); the firmware embeds only the PBKDF2 hash of that password, never the plaintext.
-- At first boot the device writes the hash, persists the default configuration, marks provisioning
-  complete and starts directly in operational mode: no setup AP, token or portal is shown.
-- To change the password later, edit credentials.json and rebuild, then factory-reset the device so
-  it re-provisions with the new hash.
+- To change an embedded password later, edit credentials.json, rebuild, then factory-reset the
+  device so it re-provisions with the new hash.
 
-> Security: this mode bakes a fixed credential into the firmware image, so anyone who extracts the
-> binary can recover the hash and attempt offline cracking. It is intended only for internal or lab
-> devices whose password must be documented. CI and the release workflow always build with this flag
-> set to 0, so downloadable firmware always uses interactive provisioning.
+Release/CI builds always use interactive provisioning: the workflow forces the flag to 0, so
+downloadable firmware never contains an embedded password.
+
+> Security: embedded credentials bake a fixed credential into the firmware image, so anyone who
+> extracts the binary can recover the hash and attempt offline cracking. Use this mode only for
+> internal or lab devices whose password must be documented.
 
 ## Recovery and updates
 
