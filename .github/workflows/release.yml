@@ -74,8 +74,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      id-token: write
-      attestations: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -92,10 +90,6 @@ jobs:
           find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS.txt
           cd ..
           python scripts/check_release_secrets.py --path release-assets
-      - name: Attest release assets
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: release-assets/*
       - name: Publish prerelease
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
