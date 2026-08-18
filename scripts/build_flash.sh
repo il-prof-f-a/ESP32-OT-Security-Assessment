@@ -30,6 +30,9 @@ if [[ "${UPLOAD}" == 1 || "${MONITOR}" == 1 ]] && [[ -z "${PORT}" ]]; then
 fi
 
 cd "${PROJECT_ROOT}"
-if [[ "${NO_BUILD}" == 0 ]]; then "${PYTHON}" -m platformio run -e "${TARGET}"; fi
+if [[ "${NO_BUILD}" == 0 ]]; then
+  "${PYTHON}" -m platformio run -e "${TARGET}"
+  "${PYTHON}" -m platformio run -e "${TARGET}" -t buildfs
+fi
 if [[ "${UPLOAD}" == 1 ]]; then "${PYTHON}" scripts/flash_esptool.py --target "${TARGET}" --port "${PORT}" --no-build; fi
 if [[ "${MONITOR}" == 1 ]]; then "${PYTHON}" -m platformio device monitor --port "${PORT}" --baud "${BAUD}"; fi

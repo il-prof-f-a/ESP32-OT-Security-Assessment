@@ -29,7 +29,10 @@ if (-not (Test-Path $Python)) { $Python = "python" }
 
 Push-Location $ProjectRoot
 try {
-    if (-not $NoBuild) { & $Pio run -e $Target; if ($LASTEXITCODE -ne 0) { throw "PlatformIO build failed" } }
+    if (-not $NoBuild) {
+        & $Pio run -e $Target; if ($LASTEXITCODE -ne 0) { throw "PlatformIO build failed" }
+        & $Pio run -e $Target -t buildfs; if ($LASTEXITCODE -ne 0) { throw "PlatformIO filesystem build failed" }
+    }
     if ($Upload) { & $Python scripts/flash_esptool.py --target $Target --port $Port --no-build; if ($LASTEXITCODE -ne 0) { throw "Flash failed" } }
     if ($Monitor) { & $Pio device monitor --port $Port --baud $Baud }
 } finally {
