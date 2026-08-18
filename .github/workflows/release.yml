@@ -37,7 +37,7 @@ jobs:
             exit 1
           fi
       - name: Install pinned build tools
-        run: python -m pip install platformio==6.1.18 esptool==4.9.0
+        run: python -m pip install platformio==6.1.19 esptool==4.9.0
       - name: Build and package
         shell: bash
         run: |
