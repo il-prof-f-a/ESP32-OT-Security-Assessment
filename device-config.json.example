@@ -1,0 +1,305 @@
+{
+  "_comment": "Rename this file to device-config.json (gitignored) and edit. Used only when ESP32_OT_EMBEDDED_CONFIG=1. Any key present replaces the default; absent keys keep the default (see CONFIG.md).",
+  "network": {
+    "ethernet": {
+      "dhcp": false,
+      "ip": "192.168.1.100",
+      "gateway": "192.168.1.1",
+      "netmask": "255.255.255.0"
+    },
+    "wifi": {
+      "enabled": true,
+      "ssid": "",
+      "password": "",
+      "scan_on_fail": false,
+      "connect_timeout_sec": 20,
+      "dhcp": true,
+      "ip": "",
+      "netmask": "",
+      "gateway": "",
+      "dns": "",
+      "time_sync": "ntp"
+      "ntp": "pool.ntp.org",
+      "http_time_sync": "",
+    }
+  },
+  "audit": {
+    "enabled": true,
+    "logging": {
+      "log_config_changes": true,
+      "log_denied": true,
+      "log_ratelimits": true,
+      "log_security_events": true,
+      "log_system_events": true,
+      "log_timeouts": true
+    },
+    "rate_limiting": {
+      "max_events_per_second": 100
+    }
+  },
+  "debug": {
+    "color": true,
+    "level": 2
+  },
+  "ids": {
+    "anomaly": {
+      "flooding_pps_threshold": 1000.0,
+      "malformed_packets_normalizer": 1.0,
+      "reactive_fuzzing_cooldown_ms": 60000,
+      "reactive_fuzzing_retention_ms": 300000,
+      "request_response_high_ratio": 10.0,
+      "request_response_low_ratio": 0.1,
+      "requests_per_second_threshold": 100.0
+    },
+    "general": {
+      "enabled": true,
+      "max_per_sec_enip": 100,
+      "max_per_sec_modbus": 100,
+      "max_per_sec_opcua": 100,
+      "max_per_sec_pn": 100,
+      "max_per_sec_s7": 100,
+      "replay_window_ms": 5000
+    },
+    "network_presence": {
+      "activation_delay_minutes": 5,
+      "alert_unauthorized_writes": true,
+      "cleanup_interval_ms": 60000,
+      "continuity_weight": 0.4,
+      "diversity_weight": 0.3,
+      "enable_persistent_learning": true,
+      "enabled": true,
+      "frequency_weight": 0.3,
+      "inactive_device_timeout_ms": 3600000,
+      "learning_mode": true,
+      "min_observation_period_hours": 24.0,
+      "retention_days": 30,
+      "storage_sync_interval_ms": 300000,
+      "track_all_traffic": true,
+      "trust_threshold_score": 0.75,
+      "whitelisted_devices": []
+    },
+    "protocol_specific": {
+      "modbus": {
+        "alert_broadcast_write": true
+      },
+      "profinet": {
+        "detect_config_changes": true,
+        "detect_dcp_spoofing": true,
+        "detect_topology_changes": true,
+        "max_devices_per_sec": 50
+      }
+    }
+  },
+  "ip_whitelist": {
+    "action": "alert",
+    "enabled": false,
+    "ip": [],
+    "mac": [],
+    "per_protocol": {
+      "MODBUS_TCP": {
+        "ip": [],
+        "mac": []
+      },
+      "ethernetip": {
+        "ip": [],
+        "mac": []
+      },
+      "opcua": {
+        "ip": [],
+        "mac": []
+      },
+      "profinet": {
+        "ip": [],
+        "mac": []
+      },
+      "s7": {
+        "ip": [],
+        "mac": []
+      }
+    }
+  },
+  "plugins": {
+    "ethernetip": {
+      "allowed_writers": "",
+      "connect_timeout_ms": 2000,
+      "enable_cip_discovery": true,
+      "enabled": true,
+      "tcp_port": 44818,
+      "udp_port": 44818
+    },
+    "modbus": {
+      "allowed_writers": "",
+      "connect_timeout_ms": 1000,
+      "default_unit_id": 1,
+      "discovery_connect_retries": 1,
+      "discovery_connect_timeout_ms": 500,
+      "discovery_io_timeout_ms": 500,
+      "discovery_prescan_enabled": false,
+      "discovery_prescan_timeout_ms": 500,
+      "discovery_probe_coils_max": 16,
+      "discovery_request_retries": 1,
+      "discovery_unit_ids": "1-10",
+      "enabled": true,
+      "io_timeout_ms": 1000,
+      "unit_id": 1
+    },
+    "opcua": {
+      "allowed_writers": "",
+      "connect_timeout_ms": 2000,
+      "enable_discovery": true,
+      "enabled": true,
+      "port": 4840,
+      "session_timeout_ms": 5000
+    },
+    "profinet": {
+      "allowed_writers": "",
+      "dcp_multicast": "01:0E:CF:00:00:00",
+      "discovery_timeout_ms": 2000,
+      "enable_topology_discovery": true,
+      "enabled": true,
+      "security_assessment": {
+        "check_default_names": true,
+        "check_security_class": true,
+        "check_unencrypted_comm": true,
+        "default_name_patterns": [
+          "plc",
+          "device",
+          "station",
+          "pnio"
+        ]
+      }
+    },
+    "s7": {
+      "allowed_writers": "",
+      "connect_timeout_ms": 2000,
+      "enable_plc_control": false,
+      "enabled": true,
+      "pdu_size": 480,
+      "port": 102
+    }
+  },
+  "reporting": {
+    "email": {
+      "configuration": {
+        "from_address": "",
+        "password": "",
+        "retry_attempts": 1,
+        "smtp_port": 465,
+        "smtp_server": "",
+        "subject_prefix": "[ESP32 OT]",
+        "timeout_ms": 5000,
+        "to_addresses": [],
+        "use_ssl": true,
+        "use_tls": true,
+        "username": ""
+      },
+      "enabled": false,
+      "filters": {
+        "enabled": false
+      },
+      "format": "json",
+      "verbosity": "info"
+    },
+    "file": {
+      "enabled": true,
+      "files": {},
+      "format": "json",
+      "verbosity": "info"
+    },
+    "gpio": {
+      "configuration": {
+        "behavior": {},
+        "pins": {}
+      },
+      "enabled": false,
+      "filters": {
+        "enabled": false
+      },
+      "format": "json",
+      "verbosity": "info"
+    },
+    "mqtt": {
+      "configuration": {
+        "broker": "",
+        "client_id": "esp32-ot-security",
+        "password": "",
+        "port": 8883,
+        "qos": 1,
+        "reconnect_interval_ms": 10000,
+        "retain": false,
+        "timeout_ms": 5000,
+        "topic_prefix": "esp32-ot",
+        "username": ""
+      },
+      "enabled": false,
+      "filters": {
+        "enabled": false
+      },
+      "format": "json",
+      "verbosity": "info"
+    },
+    "serial": {
+      "configuration": {},
+      "enabled": true,
+      "filters": {
+        "enabled": false
+      },
+      "format": "json",
+      "verbosity": "info"
+    },
+    "webhook": {
+      "configuration": {
+        "headers": {},
+        "timeout_ms": 5000,
+        "url": ""
+      },
+      "enabled": false,
+      "format": "json",
+      "verbosity": "info"
+    }
+  },
+  "scanner": {
+    "default_timeout_ms": 2000,
+    "enabled": false,
+    "jobs": [],
+    "max_parallel": 1,
+    "rate_limit_per_min": 30,
+    "scheduling": {
+      "enabled": false
+    }
+  },
+  "security": {
+    "alert_policy": {
+      "email": {
+        "enabled": false,
+        "recipients": [],
+        "subject": "ICS security alert",
+        "throttle_minutes": 5
+      },
+      "gpio": {
+        "buzzer_pin": -1,
+        "critical_pin": -1,
+        "enabled": false,
+        "warning_pin": -1
+      },
+      "webhook": {
+        "enabled": false,
+        "token": "",
+        "url": ""
+      }
+    },
+    "certificate_validation": true,
+    "flash_encryption": false,
+    "opcua_enforce_security": true,
+    "policy": {
+      "block_s7_plc_stop": true
+    },
+    "secure_boot": false
+  },
+  "watchdog": {
+    "enabled": true,
+    "monitor_idle_cores": false,
+    "panic_on_timeout": false,
+    "timeout_seconds": 30
+  }
+}

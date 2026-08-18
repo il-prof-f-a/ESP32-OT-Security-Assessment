@@ -141,7 +141,7 @@ bool writeMetadata(uint32_t config_crc, uint64_t completed_at, bool complete) {
     esp_err_t error = nvs_set_u8(handle, "complete_u8", 0);
     if (error == ESP_OK) error = nvs_set_u16(handle, "schema_u16", kSchemaVersion);
     if (error == ESP_OK) error = nvs_set_u32(handle, "config_crc_u32", config_crc);
-    if (error == ESP_OK) error = nvs_set_u64(handle, "completed_at_u64", completed_at);
+    if (error == ESP_OK) error = nvs_set_u32(handle, "completed_at", static_cast<uint32_t>(completed_at));
     if (error == ESP_OK) error = nvs_commit(handle);
     if (error == ESP_OK && complete) {
         error = nvs_set_u8(handle, "complete_u8", 1);
@@ -252,6 +252,7 @@ bool ProvisioningStore::commitEmbedded(ConfigurationManager& config) {
     const char* hash = esp32_ot_build::kEmbeddedAdminPasswordHash;
     if (!hash || hash[0] == '\0') return false;
     ProvisioningSubmission submission;
+    submission.ethernet_dhcp = esp32_ot_build::kEmbeddedEthernetDhcp;
     return commit(submission, PSRAMUtils::createPSRAMString(hash), config);
 }
 

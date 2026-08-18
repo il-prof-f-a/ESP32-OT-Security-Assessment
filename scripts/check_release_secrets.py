@@ -21,7 +21,7 @@ class Finding(NamedTuple):
 
 RULES = (
     ("private-key-pem", re.compile(br"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----")),
-    ("credentials-json-reference", re.compile(br"credentials\.json", re.IGNORECASE)),
+    ("device-config-json-reference", re.compile(br"device-config\.json", re.IGNORECASE)),
     ("removed-generated-symbol", re.compile(
         br"kProvisioningApPassword|kServerPrivateKeyPem|ESP32_OT_CREDENTIALS_DIR"
     )),
@@ -73,7 +73,7 @@ def _iter_files(paths: Iterable[Path]) -> Iterable[Path]:
 def scan_paths(paths: Iterable[Path], denylist: Sequence[bytes] = ()) -> list[Finding]:
     findings: list[Finding] = []
     for path in _iter_files(paths):
-        if path.name.lower() in {"credentials.json", "server.key"}:
+        if path.name.lower() in {"device-config.json", "server.key"}:
             findings.append(Finding(str(path), "secret-filename", 0))
         try:
             content = path.read_bytes()
@@ -87,7 +87,7 @@ def scan_paths(paths: Iterable[Path], denylist: Sequence[bytes] = ()) -> list[Fi
                         if member.is_dir():
                             continue
                         member_path = f"{path}!{member.filename}"
-                        if Path(member.filename).name.lower() in {"credentials.json", "server.key"}:
+                        if Path(member.filename).name.lower() in {"device-config.json", "server.key"}:
                             findings.append(Finding(member_path, "secret-filename", 0))
                         findings.extend(_scan_bytes(member_path, archive.read(member), denylist))
             except zipfile.BadZipFile as exc:

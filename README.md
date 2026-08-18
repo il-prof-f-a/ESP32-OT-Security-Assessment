@@ -163,7 +163,7 @@ using it on newer hardware.
 
 Release builds are deterministic and contain no administrator password, setup password, private
 key or machine-specific path. Every erased device running a release image creates its own one-time
-setup session at first boot (see "Embedded credentials" below for the local-build alternative).
+setup session at first boot (see "Embedded config" below for the local-build alternative).
 Keep the serial console private: it is the only place where the temporary setup token, temporary
 AP password and HTTPS fingerprint are displayed.
 
@@ -182,29 +182,56 @@ AP password and HTTPS fingerprint are displayed.
 There is no shared default password and no universal recovery credential. A new clone does not
 create a local credential file; secrets are generated independently on each physical device.
 
-### Embedded credentials (local builds)
+### Embedded config (local builds)
 
 Local VSCode/PlatformIO builds self-provision with a fixed administrator password instead of the
-setup portal: platformio.ini carries -DESP32_OT_EMBEDDED_CREDENTIALS=1 in every environment.
+setup portal: platformio.ini carries -DESP32_OT_EMBEDDED_CONFIG=1 in every environment.
 
-- The first build with the flag enabled creates a gitignored credentials.json in the repository root
-  with a random administrator password. Edit that file to set your own password (at least 16 bytes);
-  the firmware embeds only the PBKDF2 hash, never the plaintext.
-- At first boot the device writes the hash, persists the default configuration, marks provisioning
-  complete and starts directly in operational mode (no setup AP, token or portal).
+- The first build with the flag enabled creates a gitignored device-config.json in the repository
+  root with a random administrator password. Edit that file to set your own password (at least 16
+  bytes); the firmware embeds only the PBKDF2 hash, never the plaintext.
+- Optionally override any setting (static Ethernet IP, IDS thresholds, plugin options, ...): the
+  file is deep-merged over the defaults, so a present key replaces the default and an absent key
+  keeps it. Example device-config.json for a static address (useful for the Ethernet-only P4):
+
+      {
+        "admin_password": "your-fixed-password-here",
+        "network": {
+          "ethernet": {
+            "dhcp": false,
+            "ip": "192.168.1.253",
+            "gateway": "192.168.1.1",
+            "netmask": "255.255.255.0"
+          }
+        }
+      }
+
+  See CONFIG.md for the full schema and default values, and device-config.json.example.
+- At first boot the device writes the hash and this configuration, marks provisioning complete and
+  starts directly in operational mode (no setup AP, token or portal).
 - To build the interactive-provisioning firmware locally instead, remove the
-  -DESP32_OT_EMBEDDED_CREDENTIALS=1 flag from the environment, or set the environment variable to 0:
+  -DESP32_OT_EMBEDDED_CONFIG=1 flag from the environment, or set the environment variable to 0:
 
-      $env:ESP32_OT_EMBEDDED_CREDENTIALS = "0"
+      $env:ESP32_OT_EMBEDDED_CONFIG = "0"
       pio run -e t-poe-pro
 
-- To change an embedded password later, edit credentials.json, rebuild, then factory-reset the
-  device so it re-provisions with the new hash.
+- To change an embedded password or network later, edit device-config.json, rebuild, then
+  factory-reset the device so it re-provisions with the new values.
+
+#### TLS certificates (optional, internal builds only)
+
+By default S3/P4 generate a unique self-signed certificate at first boot and store it on the device
+(LittleFS, at /data/certs/server.crt and /data/certs/server.key). For a single lab device you can
+instead seed a fixed certificate so the browser stops warning: create data/certs/server.crt and
+data/certs/server.key in the repository (they are gitignored via *.crt and *.key). pio run -t
+buildfs (included in the build scripts) flashes them to /data/certs, and the firmware uses them
+instead of generating a new pair. The key must match the certificate; an invalid pair is discarded
+and regenerated.
 
 Release/CI builds always use interactive provisioning: the workflow forces the flag to 0, so
 downloadable firmware never contains an embedded password.
 
-> Security: embedded credentials bake a fixed credential into the firmware image, so anyone who
+> Security: embedded config bake a fixed credential into the firmware image, so anyone who
 > extracts the binary can recover the hash and attempt offline cracking. Use this mode only for
 > internal or lab devices whose password must be documented.
 

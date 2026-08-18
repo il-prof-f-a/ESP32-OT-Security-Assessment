@@ -1,10 +1,11 @@
 """Generate deterministic, secret-free firmware build assets.
 
-When the environment variable ESP32_OT_EMBEDDED_CREDENTIALS=1, an administrator
-password is read from (or generated into) the gitignored credentials.json and its
-PBKDF2 hash is embedded so the device self-provisions at first boot, skipping the
-setup portal. Release/CI builds leave the variable unset, so published firmware
-always uses the interactive provisioning flow.
+When the environment variable ESP32_OT_EMBEDDED_CONFIG=1, an administrator
+password and optional overrides are read from (or generated into) the gitignored
+device-config.json, deep-merged into the public defaults, and the PBKDF2
+hash is embedded so the device self-provisions at first boot, skipping the setup
+portal. Release/CI builds leave the variable unset, so published firmware always
+uses the interactive provisioning flow.
 """
 
 from __future__ import annotations
@@ -132,6 +133,37 @@ def _public_defaults() -> dict:
     }
 
 
+def _deep_merge(default: dict, override: dict) -> dict:
+    """Recursively merge override into default.
+
+    Nested dictionaries merge key by key; a scalar or array in override replaces the
+    default value. This is the documented rule: a present key replaces, an absent key
+    keeps the default. Keys starting with "_" (e.g. "_comment") are ignored.
+    """
+    result = dict(default)
+    for key, value in override.items():
+        if key.startswith("_"):
+            continue
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def _strip_admin_password(value):
+    """Recursively drop admin_password so plaintext never reaches the config."""
+    if isinstance(value, dict):
+        return {
+            key: _strip_admin_password(item)
+            for key, item in value.items()
+            if key != "admin_password"
+        }
+    if isinstance(value, list):
+        return [_strip_admin_password(item) for item in value]
+    return value
+
+
 def _generate_password() -> str:
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
     return "".join(secrets.choice(alphabet) for _ in range(20))
@@ -149,14 +181,31 @@ def _pbkdf2_hash(password: str) -> str:
     )
 
 
-def _embedded_requested(project_dir: Path, board: str) -> bool:
-    """Return True when embedded credentials should be generated.
+def _device_config_path(project_dir: Path) -> Path:
+    return Path(project_dir).resolve() / "device-config.json"
 
-    An explicitly set ESP32_OT_EMBEDDED_CREDENTIALS environment variable wins
+
+def _load_device_config(project_dir: Path) -> dict:
+    """Return device-config.json (creating it with a generated password if missing)."""
+    path = _device_config_path(project_dir)
+    if path.is_file():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as error:
+            raise ValueError(f"invalid device-config.json: {error}") from error
+    data = {"admin_password": _generate_password()}
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return data
+
+
+def _embedded_requested(project_dir: Path, board: str) -> bool:
+    """Return True when embedded config should be generated.
+
+    An explicitly set ESP32_OT_EMBEDDED_CONFIG environment variable wins
     (CI forces "0" so releases use provisioning); otherwise the per-environment
-    -DESP32_OT_EMBEDDED_CREDENTIALS=1 flag in platformio.ini is used.
+    -DESP32_OT_EMBEDDED_CONFIG=1 flag in platformio.ini is used.
     """
-    explicit = os.environ.get("ESP32_OT_EMBEDDED_CREDENTIALS")
+    explicit = os.environ.get("ESP32_OT_EMBEDDED_CONFIG")
     if explicit is not None:
         return explicit == "1"
     if not board:
@@ -171,45 +220,33 @@ def _embedded_requested(project_dir: Path, board: str) -> bool:
         return False
     end = content.find("\n[env:", start + 1)
     block = content[start:] if end < 0 else content[start:end]
-    return "-DESP32_OT_EMBEDDED_CREDENTIALS=1" in block
+    return "-DESP32_OT_EMBEDDED_CONFIG=1" in block
 
 
-def _embedded_admin_hash(project_dir: Path, board: str) -> str:
-    """Return the embedded admin PBKDF2 hash, or "" when the feature is disabled."""
-    if not _embedded_requested(project_dir, board):
-        return ""
-    credentials_path = Path(project_dir).resolve() / "credentials.json"
-    if credentials_path.is_file():
-        try:
-            data = json.loads(credentials_path.read_text(encoding="utf-8"))
-            password = data.get("admin_password", "")
-        except (json.JSONDecodeError, OSError) as error:
-            raise ValueError(f"invalid credentials.json: {error}") from error
-    else:
-        password = _generate_password()
-        credentials_path.write_text(
-            json.dumps({"admin_password": password}, indent=2) + "\n",
-            encoding="utf-8",
-        )
+def _embedded_admin_hash(config: dict) -> str:
+    """Return the PBKDF2 hash of the configured admin password."""
+    password = config.get("admin_password", "")
     if not isinstance(password, str) or not password:
-        raise ValueError("credentials.json must contain a non-empty admin_password")
+        raise ValueError("device-config.json must contain a non-empty admin_password")
     if len(password) < 16 or len(password) > 128:
         raise ValueError("admin_password must be 16-128 bytes")
     return _pbkdf2_hash(password)
 
 
-def _header_bytes(embedded_admin_hash: str) -> bytes:
-    config = json.dumps(
-        _public_defaults(), ensure_ascii=True, separators=(",", ":"), sort_keys=True
+def _header_bytes(config: dict, admin_hash: str, ethernet_dhcp: bool) -> bytes:
+    rendered = json.dumps(
+        config, ensure_ascii=True, separators=(",", ":"), sort_keys=True
     )
+    dhcp = "true" if ethernet_dhcp else "false"
     header = (
         "// Generated by scripts/build_assets.py. Do not edit.\n"
         "#pragma once\n\n"
         "namespace esp32_ot_build {\n"
         "static constexpr char kEmbeddedPublicConfigJson[] = "
-        f'R"ESP32CFG({config})ESP32CFG";\n'
+        f'R"ESP32CFG({rendered})ESP32CFG";\n'
         'static constexpr char kEmbeddedAdminPasswordHash[] = "'
-        f'{embedded_admin_hash}";\n'
+        f'{admin_hash}";\n'
+        f"static constexpr bool kEmbeddedEthernetDhcp = {dhcp};\n"
         "}  // namespace esp32_ot_build\n"
     )
     return header.encode("utf-8")
@@ -234,12 +271,26 @@ def generate_build_assets(
     Path(build_dir).resolve().mkdir(parents=True, exist_ok=True)
     if board is not None and not isinstance(board, str):
         raise TypeError("board must be a string or None")
-    embedded_admin_hash = _embedded_admin_hash(project_dir, board or "")
+
+    admin_hash = ""
+    ethernet_dhcp = True
+    config = _public_defaults()
+    if _embedded_requested(project_dir, board or ""):
+        device_config = _load_device_config(project_dir)
+        admin_hash = _embedded_admin_hash(device_config)
+        overrides = {
+            key: _strip_admin_password(value)
+            for key, value in device_config.items()
+            if key not in ("admin_password", "_comment")
+        }
+        config = _deep_merge(_public_defaults(), overrides)
+        ethernet_dhcp = bool(config["network"]["ethernet"].get("dhcp", True))
+
     header_path = Path(build_dir).resolve() / "generated" / "esp32_ot_build_assets.h"
     legacy_header = header_path.parent / "esp32_ot_generated_credentials.h"
     if legacy_header.exists():
         legacy_header.unlink()
-    _atomic_write(header_path, _header_bytes(embedded_admin_hash))
+    _atomic_write(header_path, _header_bytes(config, admin_hash, ethernet_dhcp))
     return BuildAssetsResult(header_path=header_path)
 
 

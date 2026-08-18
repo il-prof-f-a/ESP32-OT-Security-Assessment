@@ -36,7 +36,7 @@ jobs:
     env:
       USERPROFILE: /home/runner
       PYTHONUTF8: "1"
-      ESP32_OT_EMBEDDED_CREDENTIALS: "0"
+      ESP32_OT_EMBEDDED_CONFIG: "0"
     steps:
       - uses: actions/checkout@v4
         with:

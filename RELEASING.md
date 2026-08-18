@@ -52,5 +52,5 @@ Pushing a tag v* triggers .github/workflows/release.yml, which:
 - Do not hand-edit VERSION in a release commit; use the helper.
 - 0.x releases are marked prerelease. A failed build, checksum, scan or attestation prevents
   publication.
-- Releases always build with ESP32_OT_EMBEDDED_CREDENTIALS=0 (interactive provisioning); never
-  publish firmware built with embedded credentials.
+- Releases always build with ESP32_OT_EMBEDDED_CONFIG=0 (interactive provisioning); never
+  publish firmware built with embedded config.
