@@ -149,9 +149,34 @@ def _pbkdf2_hash(password: str) -> str:
     )
 
 
-def _embedded_admin_hash(project_dir: Path) -> str:
+def _embedded_requested(project_dir: Path, board: str) -> bool:
+    """Return True when embedded credentials should be generated.
+
+    An explicitly set ESP32_OT_EMBEDDED_CREDENTIALS environment variable wins
+    (CI forces "0" so releases use provisioning); otherwise the per-environment
+    -DESP32_OT_EMBEDDED_CREDENTIALS=1 flag in platformio.ini is used.
+    """
+    explicit = os.environ.get("ESP32_OT_EMBEDDED_CREDENTIALS")
+    if explicit is not None:
+        return explicit == "1"
+    if not board:
+        return False
+    platformio = Path(project_dir).resolve() / "platformio.ini"
+    try:
+        content = platformio.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    start = content.find(f"[env:{board}]")
+    if start < 0:
+        return False
+    end = content.find("\n[env:", start + 1)
+    block = content[start:] if end < 0 else content[start:end]
+    return "-DESP32_OT_EMBEDDED_CREDENTIALS=1" in block
+
+
+def _embedded_admin_hash(project_dir: Path, board: str) -> str:
     """Return the embedded admin PBKDF2 hash, or "" when the feature is disabled."""
-    if os.environ.get("ESP32_OT_EMBEDDED_CREDENTIALS", "0") != "1":
+    if not _embedded_requested(project_dir, board):
         return ""
     credentials_path = Path(project_dir).resolve() / "credentials.json"
     if credentials_path.is_file():
@@ -209,7 +234,7 @@ def generate_build_assets(
     Path(build_dir).resolve().mkdir(parents=True, exist_ok=True)
     if board is not None and not isinstance(board, str):
         raise TypeError("board must be a string or None")
-    embedded_admin_hash = _embedded_admin_hash(project_dir)
+    embedded_admin_hash = _embedded_admin_hash(project_dir, board or "")
     header_path = Path(build_dir).resolve() / "generated" / "esp32_ot_build_assets.h"
     legacy_header = header_path.parent / "esp32_ot_generated_credentials.h"
     if legacy_header.exists():
