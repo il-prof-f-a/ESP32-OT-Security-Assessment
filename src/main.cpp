@@ -5,6 +5,7 @@
 
 extern "C" {
   #include "esp_system.h"
+  #include "esp_app_desc.h"
   #include "esp_event.h"
   #include "esp_log.h"
   #include "nvs_flash.h"
@@ -375,7 +376,8 @@ extern "C" void app_main(void) {
     }
 
     // Storage (LittleFS) initialization
-    LOG_INFO(TAG, "FIRMWARE v2.2 - HYBRID: PSRAM tasks + filesystem protection");
+    LOG_INFOF(TAG, "FIRMWARE v%s - HYBRID: PSRAM tasks + filesystem protection",
+              esp_app_get_description()->version);
     LOG_INFO(TAG, "Initializing LittleFS storage...");
     esp_vfs_littlefs_conf_t littlefs_conf = {
         .base_path = "/data",
@@ -1039,7 +1041,7 @@ extern "C" void app_main(void) {
     MemoryMonitor::checkStatus("End inizialization", true);
 
     // AUDIT: Log system startup event with build information
-    AuditManager::getInstance().logSystemStartup("ESP32-Security-Device-v1.0", __DATE__ " " __TIME__);
+    AuditManager::getInstance().logSystemStartup(esp_app_get_description()->version, __DATE__ " " __TIME__);
 
     // Keep main() running - ESP32 embedded systems typically don't exit main()
     uint32_t last_watchdog_reset = 0;
