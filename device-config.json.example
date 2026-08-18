@@ -18,9 +18,9 @@
       "netmask": "",
       "gateway": "",
       "dns": "",
-      "time_sync": "ntp"
+      "time_sync": "ntp",
       "ntp": "pool.ntp.org",
-      "http_time_sync": "",
+      "http_time_sync": ""
     }
   },
   "audit": {
