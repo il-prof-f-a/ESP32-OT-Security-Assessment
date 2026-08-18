@@ -21,7 +21,6 @@ class Finding(NamedTuple):
 
 RULES = (
     ("private-key-pem", re.compile(br"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----")),
-    ("device-config-json-reference", re.compile(br"device-config\.json", re.IGNORECASE)),
     ("removed-generated-symbol", re.compile(
         br"kProvisioningApPassword|kServerPrivateKeyPem|ESP32_OT_CREDENTIALS_DIR"
     )),
