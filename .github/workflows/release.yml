@@ -41,12 +41,24 @@ jobs:
       - name: Build and package
         shell: bash
         run: |
-          pio run -e "${{ matrix.environment }}"
-          pio run -e "${{ matrix.environment }}" -t buildfs
           BD="$USERPROFILE/.platformio/build/ESP32-OT-Security-Assessment/${{ matrix.environment }}"
+          STAGE="$(mktemp -d)"
+
+          # 1. Build the firmware (bootloader + partition table + app).
+          pio run -e "${{ matrix.environment }}"
+          for f in bootloader.bin partitions.bin firmware.bin flasher_args.json; do
+            cp "$BD/$f" "$STAGE/$f" 2>/dev/null || true
+          done
+
+          # 2. Build the LittleFS image. This re-configures the build tree and
+          #    drops the firmware binaries, so they were staged above first.
+          pio run -e "${{ matrix.environment }}" -t buildfs
+          cp "$BD/littlefs.bin" "$STAGE/littlefs.bin" 2>/dev/null || true
+
+          # 3. Package from the staged directory.
           python scripts/package_release.py \
             --environment "${{ matrix.environment }}" \
-            --build-dir "$BD" \
+            --build-dir "$STAGE" \
             --version "$(tr -d '\r\n' < VERSION)" \
             --output-dir dist
           python scripts/check_release_secrets.py --path dist
