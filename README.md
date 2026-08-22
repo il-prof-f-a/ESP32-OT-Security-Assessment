@@ -12,6 +12,13 @@ reporting for Modbus TCP, S7, PROFINET, OPC UA and EtherNet/IP.
 > in laboratories or on systems you own or are explicitly authorized to assess. Never connect
 > active assessment functions to a production OT network without a reviewed test plan.
 
+## User guide
+
+The illustrated [web interface user guide](docs/user-guide/README.md) explains login, dashboard
+indicators, protocol configuration, discovery, vulnerability scanning, fuzzing, IDS, reporting,
+logging, network tools, diagnostics and the other management pages. Screenshots come from the
+experimental `v0.1.0` interface; the values shown are examples and may differ from your device.
+
 ## Hardware tested and important limitations
 
 | Device | Current result | Management transport | Important limitation |
