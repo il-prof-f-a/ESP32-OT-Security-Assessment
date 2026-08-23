@@ -54,6 +54,81 @@ class ReleaseSecretScanTests(unittest.TestCase):
             artifact.write_bytes(b"deterministic public firmware bytes")
             self.assertEqual(self.scanner.scan_paths([artifact]), [])
 
+    def test_repository_allows_the_documented_placeholder_once_in_each_root_document(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            placeholder = '"admin_password": "your-fixed-password-here"'
+            (root / "README.md").write_text(placeholder, encoding="utf-8")
+            (root / "CONFIG.md").write_text(placeholder, encoding="utf-8")
+
+            self.assertEqual(
+                self.scanner.main(["--repository", str(root)]),
+                0,
+            )
+
+    def test_repository_rejects_the_placeholder_in_any_other_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            nested = root / "docs"
+            nested.mkdir()
+            (nested / "README.md").write_text(
+                '"admin_password": "your-fixed-password-here"',
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                self.scanner.main(["--repository", str(root)]),
+                1,
+            )
+
+    def test_repository_rejects_an_unapproved_value_in_an_allowed_document(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "README.md").write_text(
+                '"admin_password": "different-example-password"',
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                self.scanner.main(["--repository", str(root)]),
+                1,
+            )
+
+    def test_repository_rejects_more_than_one_allowed_placeholder_per_document(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            placeholder = '"admin_password": "your-fixed-password-here"'
+            (root / "CONFIG.md").write_text(
+                f"{placeholder}\n{placeholder}\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                self.scanner.main(["--repository", str(root)]),
+                1,
+            )
+
+    def test_artifacts_never_allow_the_documentation_placeholder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            placeholder = b'{"admin_password":"your-fixed-password-here"}'
+            firmware = root / "firmware.bin"
+            firmware.write_bytes(placeholder)
+            bundle = root / "bundle.zip"
+            with zipfile.ZipFile(bundle, "w") as archive:
+                archive.writestr("README.md", placeholder)
+
+            firmware_findings = self.scanner.scan_paths([firmware])
+            bundle_findings = self.scanner.scan_paths([bundle])
+            self.assertIn(
+                "nonempty-admin-password",
+                [finding.rule for finding in firmware_findings],
+            )
+            self.assertIn(
+                "nonempty-admin-password",
+                [finding.rule for finding in bundle_findings],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

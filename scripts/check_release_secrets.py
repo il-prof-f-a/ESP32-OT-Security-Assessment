@@ -36,14 +36,53 @@ RULES = (
     )),
 )
 
+ADMIN_PASSWORD_VALUE_PATTERN = re.compile(
+    br'"admin_password"\s*:\s*"((?:\\.|[^"\\])*)"'
+)
+REPOSITORY_ADMIN_PASSWORD_EXCEPTIONS = {
+    "README.md": {b"your-fixed-password-here": 1},
+    "CONFIG.md": {b"your-fixed-password-here": 1},
+}
+
 IGNORED_DIRECTORIES = {".git", ".pio", ".venv", "__pycache__", "test-results"}
 SELF = Path(__file__).resolve()
 
 
-def _scan_bytes(path: str, content: bytes, denylist: Sequence[bytes]) -> list[Finding]:
+def _allowed_admin_password_offsets(
+    repository_path: str | None,
+    content: bytes,
+) -> set[int]:
+    exceptions = REPOSITORY_ADMIN_PASSWORD_EXCEPTIONS.get(repository_path or "", {})
+    allowed_offsets: set[int] = set()
+    for placeholder, maximum_occurrences in exceptions.items():
+        matching_offsets = [
+            match.start()
+            for match in ADMIN_PASSWORD_VALUE_PATTERN.finditer(content)
+            if match.group(1) == placeholder
+        ]
+        allowed_offsets.update(matching_offsets[:maximum_occurrences])
+    return allowed_offsets
+
+
+def _scan_bytes(
+    path: str,
+    content: bytes,
+    denylist: Sequence[bytes],
+    repository_path: str | None = None,
+) -> list[Finding]:
     findings: list[Finding] = []
+    allowed_admin_password_offsets = _allowed_admin_password_offsets(
+        repository_path,
+        content,
+    )
     for rule, pattern in RULES:
-        findings.extend(Finding(path, rule, match.start()) for match in pattern.finditer(content))
+        for match in pattern.finditer(content):
+            if (
+                rule == "nonempty-admin-password"
+                and match.start() in allowed_admin_password_offsets
+            ):
+                continue
+            findings.append(Finding(path, rule, match.start()))
     for index, denied in enumerate(denylist, start=1):
         if not denied:
             continue
@@ -73,16 +112,31 @@ def _iter_files(paths: Iterable[Path]) -> Iterable[Path]:
                 yield candidate
 
 
-def scan_paths(paths: Iterable[Path], denylist: Sequence[bytes] = ()) -> list[Finding]:
+def scan_paths(
+    paths: Iterable[Path],
+    denylist: Sequence[bytes] = (),
+    repository_root: Path | None = None,
+) -> list[Finding]:
     findings: list[Finding] = []
+    resolved_repository_root = repository_root.resolve() if repository_root else None
     for path in _iter_files(paths):
+        repository_path = None
+        if resolved_repository_root is not None:
+            try:
+                repository_path = path.resolve().relative_to(
+                    resolved_repository_root
+                ).as_posix()
+            except ValueError:
+                pass
         if path.name.lower() in {"device-config.json", "server.key"}:
             findings.append(Finding(str(path), "secret-filename", 0))
         try:
             content = path.read_bytes()
         except OSError as exc:
             raise RuntimeError(f"Cannot scan {path}: {exc}") from exc
-        findings.extend(_scan_bytes(str(path), content, denylist))
+        findings.extend(
+            _scan_bytes(str(path), content, denylist, repository_path)
+        )
         if path.suffix.lower() == ".zip":
             try:
                 with zipfile.ZipFile(path) as archive:
@@ -119,7 +173,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         paths.append(args.repository)
     if not paths:
         parser.error("provide --repository or at least one --path")
-    findings = scan_paths(paths, _read_denylist(args.denylist))
+    findings = scan_paths(
+        paths,
+        _read_denylist(args.denylist),
+        repository_root=args.repository,
+    )
     for finding in findings:
         print(finding.safe_description())
     if findings:
