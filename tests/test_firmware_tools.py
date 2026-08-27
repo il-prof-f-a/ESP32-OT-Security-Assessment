@@ -42,7 +42,7 @@ class FirmwareToolTests(unittest.TestCase):
             )
             self.assertEqual(self.flash.parse_application_offset(partitions), 0x200000)
 
-    def test_flash_command_contains_bootloader_partitions_and_application(self):
+    def test_update_flash_command_preserves_littlefs(self):
         with tempfile.TemporaryDirectory() as directory:
             build = Path(directory)
             (build / "bootloader").mkdir()
@@ -89,8 +89,19 @@ class FirmwareToolTests(unittest.TestCase):
             self.assertIn("0x2000", command)
             self.assertIn("0x8000", command)
             self.assertIn("0x200000", command)
-            self.assertIn("0x690000", command)
             self.assertIn(str(build / "esp32_ot_security_assessment.bin"), command)
+            self.assertNotIn("0x690000", command)
+            self.assertNotIn(str(build / "storage.bin"), command)
+
+            factory_command = self.flash.build_flash_command(
+                target="waveshare-esp32p4-eth",
+                port="COM10",
+                build_dir=build,
+                esptool_command=["python", "-m", "esptool"],
+                include_filesystem=True,
+            )
+            self.assertIn("0x690000", factory_command)
+            self.assertIn(str(build / "storage.bin"), factory_command)
 
     def test_flash_command_rejects_manifest_for_a_different_chip(self):
         with tempfile.TemporaryDirectory() as directory:

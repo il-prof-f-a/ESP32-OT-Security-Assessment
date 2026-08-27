@@ -154,9 +154,13 @@ esp_err_t ProvisioningServer::handleComplete(httpd_req_t* request) {
         cJSON_IsString(wifi_password) && cJSON_IsBool(ethernet_dhcp) &&
         password->valuestring && confirmation->valuestring &&
         std::strcmp(password->valuestring, confirmation->valuestring) == 0;
+    const size_t password_length =
+        cJSON_IsString(password) && password->valuestring
+            ? std::strlen(password->valuestring)
+            : 0;
     if (!fields_valid || !PasswordHasher::validatePolicy(
             password && password->valuestring ? password->valuestring : nullptr,
-            password && password->valuestring ? std::strlen(password->valuestring) : 0)) {
+            password_length)) {
         cJSON_Delete(root);
         std::memset(body, 0, sizeof(body));
         return sendJson(request, "400 Bad Request", "{\"error\":\"invalid_administrator_password\"}");
@@ -180,19 +184,24 @@ esp_err_t ProvisioningServer::handleComplete(httpd_req_t* request) {
     }
 
     ProvisioningSubmission submission;
-    submission.admin_password = PSRAMUtils::createPSRAMString(password->valuestring);
     submission.wifi_enabled = enable_wifi;
     submission.wifi_ssid = PSRAMUtils::createPSRAMString(wifi_ssid->valuestring);
     submission.wifi_password = PSRAMUtils::createPSRAMString(wifi_password->valuestring);
     submission.ethernet_dhcp = cJSON_IsTrue(ethernet_dhcp);
     psram_string admin_hash;
     const bool derived = PasswordHasher::derive(
-        submission.admin_password.c_str(), submission.admin_password.size(), admin_hash);
+        password->valuestring, password_length, admin_hash);
     cJSON_Delete(root);
     std::memset(body, 0, sizeof(body));
-    if (!derived || !self->store_.commit(submission, admin_hash, self->config_)) {
+    if (!derived) {
         submission.zeroizeSecrets();
-        return sendJson(request, "500 Internal Server Error", "{\"error\":\"storage_transaction_failed\"}");
+        return sendJson(request, "500 Internal Server Error",
+                        "{\"error\":\"password_hash_derivation_failed\"}");
+    }
+    if (!self->store_.commit(submission, admin_hash, self->config_)) {
+        submission.zeroizeSecrets();
+        return sendJson(request, "500 Internal Server Error",
+                        "{\"error\":\"storage_transaction_failed\"}");
     }
     submission.zeroizeSecrets();
     self->session_.consume();

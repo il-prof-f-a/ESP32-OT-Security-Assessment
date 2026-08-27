@@ -170,8 +170,13 @@ def build_flash_command(
     esptool_command: Iterable[str] | None = None,
     baud: int = 921600,
     partitions_path: Path | None = None,
+    include_filesystem: bool = False,
 ) -> list[str]:
-    """Build an explicit esptool write-flash command for a target."""
+    """Build an explicit esptool write-flash command for a target.
+
+    Ordinary upgrades omit the LittleFS seed image so on-device provisioning,
+    configuration, and the generated TLS identity survive the update.
+    """
     config = target_config(target)
     if not port.strip():
         raise ValueError("A serial port is required (for example COM10 or /dev/ttyUSB0)")
@@ -200,6 +205,8 @@ def build_flash_command(
         size,
     ]
     for offset, artifact in entries:
+        if not include_filesystem and artifact.name in {"littlefs.bin", "storage.bin"}:
+            continue
         result.extend((hex(offset), str(artifact)))
     return result
 
@@ -259,6 +266,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--build-dir", type=Path)
     parser.add_argument("--no-build", action="store_true", help="Flash existing artifacts")
     parser.add_argument(
+        "--include-filesystem",
+        action="store_true",
+        help="Also write the LittleFS seed image (replaces on-device configuration)",
+    )
+    parser.add_argument(
         "--erase-flash",
         action="store_true",
         help="Erase the complete chip before installing the built firmware",
@@ -285,11 +297,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     recovery_only = args.factory_reset or args.erase_all
     if recovery_only and args.erase_flash:
         parser.error("--erase-flash cannot be combined with a recovery-only operation")
+    install_filesystem = args.include_filesystem or args.erase_flash
     if not args.no_build and not recovery_only:
         commands.append([*_platformio_command(), "run", "-e", config.environment])
-        commands.append(
-            [*_platformio_command(), "run", "-e", config.environment, "-t", "buildfs"]
-        )
+        if install_filesystem:
+            commands.append(
+                [*_platformio_command(), "run", "-e", config.environment, "-t", "buildfs"]
+            )
     if args.factory_reset:
         regions = parse_recovery_regions(project_dir / "partitions.csv")
         print(f"Physical factory reset: chip={config.chip}, port={args.port}")
@@ -340,6 +354,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 build_dir=build_dir,
                 baud=args.baud,
                 partitions_path=project_dir / "partitions.csv",
+                include_filesystem=install_filesystem,
             )
         )
     for command in commands:

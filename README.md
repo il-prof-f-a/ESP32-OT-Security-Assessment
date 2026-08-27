@@ -166,12 +166,17 @@ chain cannot forward correctly on Windows.
 
 ### Explicit esptool workflow
 
-The helper builds the firmware and LittleFS, then writes every entry listed in the target's
-generated `flasher_args.json` with the correct chip and flash settings:
+The helper builds and writes the bootloader, partition table and application with the correct chip
+and flash settings. By default it deliberately preserves NVS and LittleFS, including the active
+configuration and the generated TLS identity:
 
 ```powershell
 python scripts/flash_esptool.py --target t-poe-pro --port COM10
 ```
+
+For a clean installation after `--erase-flash`, the helper also writes the public LittleFS seed
+image automatically. To deliberately replace LittleFS during another operation, add
+`--include-filesystem`; this removes the current device configuration and TLS identity.
 
 The current ESP32 layout uses bootloader `0x1000`, partition table `0x8000`, and application
 `0x200000`; ESP32-P4 uses a different bootloader offset. Do not copy offsets or flash-mode values
@@ -273,10 +278,10 @@ setup portal: platformio.ini carries -DESP32_OT_EMBEDDED_CONFIG=1 in every envir
 By default S3/P4 generate a unique self-signed certificate at first boot and store it on the device
 (LittleFS, at /data/certs/server.crt and /data/certs/server.key). For a single lab device you can
 instead seed a fixed certificate so the browser stops warning: create data/certs/server.crt and
-data/certs/server.key in the repository (they are gitignored via *.crt and *.key). pio run -t
-buildfs (included in the build scripts) flashes them to /data/certs, and the firmware uses them
-instead of generating a new pair. The key must match the certificate; an invalid pair is discarded
-and regenerated.
+data/certs/server.key in the repository (they are gitignored via *.crt and *.key). Build and write
+that seed only with `python scripts/flash_esptool.py --target <target> --port <port>
+--include-filesystem`; a normal firmware update preserves the existing on-device identity. The key
+must match the certificate; an invalid pair is discarded and regenerated.
 
 Release/CI builds always use interactive provisioning: the workflow forces the flag to 0, so
 downloadable firmware never contains an embedded password.
@@ -299,7 +304,8 @@ python scripts/flash_esptool.py --target t-poe-pro --port COM10 --factory-reset
 ```
 
 To erase the complete chip without installing firmware, use the separate `--erase-all` option.
-For a complete factory installation, `--erase-flash` erases the chip before writing firmware.
+For a complete factory installation, `--erase-flash` erases the chip before writing firmware and
+the public LittleFS seed image.
 
 An app-only release image updates the application and preserves NVS, LittleFS configuration and
 the TLS identity. A factory image is for clean installation, requires a full erase, and contains

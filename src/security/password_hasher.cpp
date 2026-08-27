@@ -88,10 +88,18 @@ bool parsePbkdf2(const psram_string& encoded,
 
 bool compute(const char* password, size_t length, const uint8_t* salt,
              uint8_t output[kHashBytes]) {
-    return mbedtls_pkcs5_pbkdf2_hmac_ext(
-               MBEDTLS_MD_SHA256,
-               reinterpret_cast<const unsigned char*>(password), length,
-               salt, kSaltBytes, kIterations, kHashBytes, output) == 0;
+    if (!password || length == 0 || length > kMaximumPasswordBytes) return false;
+
+    // The ESP32-P4 SHA accelerator may require input in internal DMA-capable RAM.
+    // Password strings are PSRAM-backed, so use a bounded, short-lived stack copy.
+    uint8_t password_internal[kMaximumPasswordBytes] = {};
+    std::memcpy(password_internal, password, length);
+    const bool derived = mbedtls_pkcs5_pbkdf2_hmac_ext(
+        MBEDTLS_MD_SHA256,
+        password_internal, length,
+        salt, kSaltBytes, kIterations, kHashBytes, output) == 0;
+    secureZero(password_internal, sizeof(password_internal));
+    return derived;
 }
 }  // namespace
 
@@ -109,7 +117,9 @@ bool PasswordHasher::validatePolicy(const char* password, size_t length) {
 
 bool PasswordHasher::derive(const char* password, size_t length, psram_string& hash_out) {
     hash_out.clear();
-    if (!validatePolicy(password, length)) return false;
+    if (!validatePolicy(password, length)) {
+        return false;
+    }
 
     uint8_t salt[kSaltBytes] = {};
     uint8_t hash[kHashBytes] = {};
@@ -125,9 +135,11 @@ bool PasswordHasher::derive(const char* password, size_t length, psram_string& h
     size_t salt_length = 0;
     size_t hash_length = 0;
     const bool encoded =
-        mbedtls_base64_encode(salt_b64, sizeof(salt_b64) - 1, &salt_length,
+        // Mbed TLS writes the encoded bytes plus a trailing NUL byte.  The
+        // arrays are sized for both, so pass their complete capacity.
+        mbedtls_base64_encode(salt_b64, sizeof(salt_b64), &salt_length,
                               salt, sizeof(salt)) == 0 &&
-        mbedtls_base64_encode(hash_b64, sizeof(hash_b64) - 1, &hash_length,
+        mbedtls_base64_encode(hash_b64, sizeof(hash_b64), &hash_length,
                               hash, sizeof(hash)) == 0;
     secureZero(salt, sizeof(salt));
     secureZero(hash, sizeof(hash));
@@ -151,7 +163,7 @@ bool PasswordHasher::derive(const char* password, size_t length, psram_string& h
     }
     hash_out = PSRAMUtils::createPSRAMString(result);
     secureZero(result, sizeof(result));
-    return true;
+    return !hash_out.empty();
 }
 
 bool PasswordHasher::verify(const char* password, size_t length,

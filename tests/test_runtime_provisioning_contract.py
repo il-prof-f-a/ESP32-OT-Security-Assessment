@@ -22,6 +22,40 @@ class RuntimeProvisioningContractTests(unittest.TestCase):
         self.assertIn('"pbkdf2:', implementation)
         self.assertIn("esp_fill_random", implementation)
 
+    def test_password_hasher_has_no_runtime_diagnostic_api_or_logs(self):
+        header = self.read("src/security/password_hasher.h")
+        implementation = self.read("src/security/password_hasher.cpp")
+
+        self.assertNotIn("DerivationFailure", header)
+        self.assertNotIn("derivationFailureCode", header)
+        self.assertNotIn("ESP_LOGE", implementation)
+        self.assertNotIn("LOG_ERRORF", implementation)
+
+    def test_password_hasher_reserves_the_nul_byte_for_base64_output(self):
+        implementation = self.read("src/security/password_hasher.cpp")
+
+        self.assertIn("unsigned char salt_b64[25]", implementation)
+        self.assertIn("unsigned char hash_b64[45]", implementation)
+        self.assertIn(
+            "mbedtls_base64_encode(salt_b64, sizeof(salt_b64),", implementation
+        )
+        self.assertIn(
+            "mbedtls_base64_encode(hash_b64, sizeof(hash_b64),", implementation
+        )
+        self.assertNotIn("sizeof(salt_b64) - 1", implementation)
+        self.assertNotIn("sizeof(hash_b64) - 1", implementation)
+
+    def test_password_hasher_uses_an_internal_buffer_for_pbkdf2_input(self):
+        implementation = self.read("src/security/password_hasher.cpp")
+
+        self.assertIn("password_internal", implementation)
+        self.assertIn("std::memcpy(password_internal, password, length)", implementation)
+        self.assertIn("secureZero(password_internal", implementation)
+        self.assertLess(
+            implementation.index("std::memcpy(password_internal, password, length)"),
+            implementation.index("mbedtls_pkcs5_pbkdf2_hmac_ext"),
+        )
+
     def test_password_policy_is_explicit(self):
         implementation = self.read("src/security/password_hasher.cpp")
 
@@ -73,6 +107,17 @@ class RuntimeProvisioningContractTests(unittest.TestCase):
             implementation.rindex('nvs_set_u32(handle, "config_crc_u32"'),
             implementation.rindex('nvs_set_u8(handle, "complete_u8", 1)'),
         )
+
+    def test_provisioning_errors_do_not_expose_internal_failure_stages(self):
+        header = self.read("src/provisioning/provisioning_store.h")
+        implementation = self.read("src/provisioning/provisioning_store.cpp")
+        server = self.read("src/web/provisioning_server.cpp")
+
+        self.assertNotIn("CommitFailure", header)
+        self.assertNotIn("lastFailureCode", header)
+        self.assertNotIn("LOG_ERRORF", implementation)
+        self.assertIn("storage_transaction_failed", server)
+        self.assertNotIn('\\"stage\\"', server)
 
     def test_setup_session_is_ephemeral_rate_limited_and_noncopyable(self):
         header = self.read("src/provisioning/setup_session.h")
@@ -161,6 +206,28 @@ class RuntimeProvisioningContractTests(unittest.TestCase):
         self.assertIn("Cache-Control", implementation)
         self.assertIn("Content-Security-Policy", implementation)
         self.assertIn("PasswordHasher::derive", implementation)
+
+    def test_provisioning_hashes_the_validated_http_password_before_zeroizing_it(self):
+        implementation = self.read("src/web/provisioning_server.cpp")
+
+        self.assertIn("password->valuestring, password_length, admin_hash", implementation)
+        submit_start = implementation.index("esp_err_t ProvisioningServer::handleComplete")
+        submit_body = implementation[submit_start:]
+        self.assertLess(
+            submit_body.index("PasswordHasher::derive"),
+            submit_body.index("cJSON_Delete(root);", submit_body.index("PasswordHasher::derive")),
+        )
+        self.assertNotIn(
+            "submission.admin_password = PSRAMUtils::createPSRAMString(password->valuestring)",
+            submit_body,
+        )
+
+    def test_provisioning_reports_generic_password_hash_errors(self):
+        implementation = self.read("src/web/provisioning_server.cpp")
+
+        self.assertIn("password_hash_derivation_failed", implementation)
+        self.assertNotIn("DerivationFailure", implementation)
+        self.assertNotIn("derivationFailureCode", implementation)
 
     def test_startup_gate_precedes_operational_security_and_network_services(self):
         main = self.read("src/main.cpp")
