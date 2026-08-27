@@ -26,7 +26,7 @@ experimental `v0.1.0` interface; the values shown are examples and may differ fr
 | LILYGO T-POE Pro | Firmware starts and operates in current tests | **HTTP only** | HTTPS currently causes instability, so credentials and management traffic are not encrypted. |
 | Waveshare ESP32-S3-ETH | Functional on a limited set of tested networks | HTTPS with a per-device self-signed certificate | Network compatibility is limited; there is no native 24 V input and no GPIO screw-terminal block. |
 | Waveshare ESP32-P4-ETH | Best current functional result | HTTPS with a per-device self-signed certificate | No Wi-Fi: management is exposed on the same Ethernet subnet as the OT network, so management/OT separation is not achieved. |
-| GUITION JC-ESP32P4-M3-DEV | **Experimental; build-validated, not hardware-validated** | HTTPS over ESP32-C6 remote Wi-Fi | Requires a separately flashed C6 image; PHY/SDIO mappings and full runtime behavior still require validation on the purchased PCB revision. |
+| GUITION JC-ESP32P4-M3-DEV | Functional in the current laboratory setup | HTTPS over ESP32-C6 remote Wi-Fi | Both the P4 and its separately flashed C6 coprocessor image are mandatory. The project remains experimental and needs broader network and soak testing. |
 
 ### LILYGO T-POE Pro
 
@@ -82,7 +82,7 @@ same Ethernet subnet being assessed.
 - [Manufacturer product page and official purchase link](https://www.waveshare.com/esp32-p4-eth.htm)
 - [Hardware image attribution](docs/assets/hardware/SOURCES.md)
 
-### GUITION JC-ESP32P4-M3-DEV (experimental)
+### GUITION JC-ESP32P4-M3-DEV (two-chip experimental target)
 
 <p>
   <img src="docs/assets/hardware/guition-jc-esp32p4-m3-dev-photo.webp" alt="GUITION JC-ESP32P4-M3-DEV board" width="520">
@@ -90,17 +90,29 @@ same Ethernet subnet being assessed.
 
 This dual-chip target combines an ESP32-P4 with 32 MB PSRAM and 16 MB flash, an IP101 Ethernet
 PHY for OT assessment, and an ESP32-C6 connected over SDIO for Wi-Fi-only management. The P4 and
-C6 images are version-pinned and built separately. The target compiles, but it must remain marked
-experimental until physical boot, networking, isolation and soak tests pass.
+C6 images are version-pinned and built separately. The current laboratory board has completed
+initial boot, Ethernet, C6 Wi-Fi, management-isolation and provisioning checks; it remains
+experimental until it has passed broader network-compatibility and soak tests.
 
 <p>
   <img src="docs/assets/hardware/guition-jc-esp32p4-m3-dev-network-pinout.svg" alt="GUITION network pinout used by the firmware" width="720">
 </p>
 
+The two chips require different programming connections. Power and program the P4 through the USB
+port nearest the RJ45 Ethernet connector. Program the C6 with an external CH340-class USB-to-UART
+adapter wired only to `C6_U0RXD`, `C6_U0TXD` and GND (cross TX/RX). **Never connect the CH340 3.3 V
+or 5 V supply pin to this board**: P4 USB provides board power, and a second power source can damage
+the USB interface or the board. The complete, boot-mode-aware procedure is in the linked two-chip
+guide.
+
+<p>
+  <img src="docs/assets/hardware/guition-jc-esp32p4-m3-dev-c6-uart-pinout.jpg" alt="GUITION header labels showing C6 U0 RXD, U0 TXD, IO9 and CHIP PU" width="620">
+</p>
+
 - [Detailed hardware profile and pinout](docs/hardware/guition-jc-esp32p4-m3-dev.md)
 - [GUITION manufacturer product page](https://www.guition.com/esp32p4-display-module/esp32p4-display-module)
 - [Purchase listing for the documented model](https://www.aliexpress.com/item/1005009511796128.html)
-- [Two-chip build, flashing and recovery guide](docs/installation/guition-two-chip.md)
+- [Two-chip build, flashing, UART wiring and recovery guide](docs/installation/guition-two-chip.md)
 - [Network isolation model and residual exposure](docs/security/network-isolation.md)
 
 ## Quick installation
@@ -182,8 +194,10 @@ The current ESP32 layout uses bootloader `0x1000`, partition table `0x8000`, and
 `0x200000`; ESP32-P4 uses a different bootloader offset. Do not copy offsets or flash-mode values
 between boards. `flasher_args.json` and each release manifest are authoritative.
 
-The Guition board also requires its matching ESP32-C6 coprocessor image. Build and flash the two
-chips through explicitly identified, different serial ports:
+The Guition board also requires its matching ESP32-C6 coprocessor image. Power/program the P4 via
+the USB port nearest RJ45, then connect a CH340-class adapter to the C6 UART using **TX →
+`C6_U0RXD`, RX → `C6_U0TXD`, GND → GND only**. Leave the adapter's 3.3 V and 5 V wires disconnected.
+Build and flash the two chips through explicitly identified, different serial ports:
 
 ```powershell
 ./scripts/guition_two_chip.ps1 -P4Port COM10 -C6Port COM12 -FlashC6 -FlashP4
@@ -225,8 +239,8 @@ AP password and HTTPS fingerprint are displayed.
 - ESP32-P4-ETH starts Ethernet with DHCP. Find the HTTPS address and certificate fingerprint on
   UART and connect from the same Ethernet subnet.
 - GUITION uses the separately flashed C6 for its Wi-Fi setup and management path. It never falls
-  back to Ethernet; if C6/Wi-Fi is unavailable, management remains unavailable. This path has not
-  yet completed physical validation.
+  back to Ethernet; if C6/Wi-Fi is unavailable, management remains unavailable. This behavior has
+  been checked on the laboratory board but requires wider network and soak testing.
 - Set a unique administrator password of at least 16 bytes and select the network settings. Five
   invalid token attempts in one minute lock setup for 60 seconds. The session expires after 15
   minutes.

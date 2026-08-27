@@ -13,6 +13,8 @@ Retrieved on 2026-08-15.
 | `waveshare-esp32-p4-eth-photo.jpg` | Waveshare | [ESP32-P4-ETH wiki](https://www.waveshare.com/wiki/ESP32-P4-ETH) ([original image](https://www.waveshare.com/w/upload/7/7b/540px-ESP32-P4-ETH-1.jpg)) |
 | `waveshare-esp32-p4-eth-pinout.jpg` | Waveshare | [ESP32-P4-ETH wiki](https://www.waveshare.com/wiki/ESP32-P4-ETH) ([original image](https://www.waveshare.com/w/upload/5/54/ESP32-P4-ETH-details-inter.jpg)) |
 | `guition-jc-esp32p4-m3-dev-photo.webp` | ESPHome Devices contributors | [GUITION device page](https://devices.esphome.io/devices/guition-esp32-p4-m3-dev/) ([source image](https://devices.esphome.io/_astro/guition_jc_esp32_p4_m3_dev.D0zgi97b_Z2hNAYu.webp)) |
+| `guition-jc-esp32p4-m3-dev-photo-user.jpg` | Project maintainer | Project-provided board photograph for hardware identification. |
+| `guition-jc-esp32p4-m3-dev-c6-uart-pinout.jpg` | GUITION | Project-maintainer-provided pin-definition image; the labels are used to document the tested C6 UART wiring. |
 | `guition-jc-esp32p4-m3-dev-network-pinout.svg` | Project-generated diagram | Derived from the [GUITION specification](https://www.guition.com/esp32p4-display-module/esp32p4-display-module) and [community hardware reference](https://devices.esphome.io/devices/guition-esp32-p4-m3-dev/). |
 
 LILYGO and T-POE Pro are marks of their respective owner. Waveshare, ESP32-S3-ETH, and ESP32-P4-ETH are marks or product names of their respective owner. ESP32 is a trademark of Espressif Systems.

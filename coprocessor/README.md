@@ -22,7 +22,20 @@ flashing; never assume that the P4 and C6 expose the same programming port.
 ./scripts/build_c6_coprocessor.ps1 -Port COM12 -Upload -Monitor
 ```
 
-The 4 MB C6 flash profile and the board interconnect remain provisional until
-they are verified on the purchased PCB revision. Do not flash this image to the
-P4, and do not describe the Guition target as tested until the physical
-validation matrix has passed.
+## GUITION C6 UART wiring and power safety
+
+For the tested `JC-ESP32P4-M3-DEV` board, power and program the P4 through the USB port nearest
+the RJ45 connector. Connect the CH340-class UART adapter to the C6 header only as follows:
+
+| Adapter | C6-labelled board pin |
+| --- | --- |
+| TXD | `C6_U0RXD` |
+| RXD | `C6_U0TXD` |
+| GND | GND |
+
+**Do not connect the adapter's 3.3 V, 5 V or VCC pin.** The board is powered from the P4 USB
+connection; a second supply can back-power and damage USB circuitry or either board.
+
+Initial C6 Wi-Fi operation has passed on the laboratory board. Do not flash this image to the P4.
+The target still requires broader network, recovery and soak testing before it can be considered
+production-ready.

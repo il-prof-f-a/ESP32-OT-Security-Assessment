@@ -1,8 +1,12 @@
 # GUITION JC-ESP32P4-M3-DEV
 
-> Status: **experimental, build-validated only**. The target has not completed the physical validation matrix on the purchased PCB revision.
+> Status: **experimental, initially hardware-validated**. Initial boot, Ethernet, C6 Wi-Fi,
+> management isolation and provisioning checks have passed on the laboratory board. Broader network
+> compatibility, failure recovery and soak testing remain open.
 
 ![GUITION JC-ESP32P4-M3-DEV](../assets/hardware/guition-jc-esp32p4-m3-dev-photo.webp)
+
+![GUITION JC-ESP32P4-M3-DEV physical board](../assets/hardware/guition-jc-esp32p4-m3-dev-photo-user.jpg)
 
 The board combines an ESP32-P4, 32 MB package PSRAM, 16 MB NOR flash, an IP101 100 Mbit/s Ethernet PHY, and an ESP32-C6 radio connected through SDIO. In this project the P4 runs the security-assessment firmware while the C6 runs the pinned ESP-Hosted `3.0.6` coprocessor image.
 
@@ -19,6 +23,35 @@ The board combines an ESP32-P4, 32 MB package PSRAM, 16 MB NOR flash, an IP101 1
 | C6 SDIO D0–D3 | 14 / 15 / 16 / 17 | Remote Wi-Fi data bus |
 
 The C6-side SDIO GPIO numbers differ from the P4-side numbers. Do not transpose them when building or debugging the coprocessor image.
+
+## Programming and power connections
+
+The board has two independently programmable chips and consequently needs two separate serial
+connections. The USB connection for the P4 and the external C6 UART adapter have different roles.
+
+1. Connect the **USB port nearest the RJ45 Ethernet connector** to the host computer. This is the
+   P4 programming UART and the board's power source during this procedure.
+2. Connect a CH340-class USB-to-UART adapter to the C6-labelled header with the following three
+   wires only:
+
+   | USB-to-UART adapter | Board header | Purpose |
+   | --- | --- | --- |
+   | TXD | `C6_U0RXD` | C6 receive input |
+   | RXD | `C6_U0TXD` | C6 transmit output |
+   | GND | GND | Shared signal reference |
+
+3. Leave the adapter's **3.3 V and 5 V/VCC pins disconnected**. The P4 USB connection already
+   powers the board. Feeding power from the CH340 adapter can back-power the USB circuit and may
+   damage the host USB port, the adapter or the development board.
+
+![C6 UART and boot-control header labels](../assets/hardware/guition-jc-esp32p4-m3-dev-c6-uart-pinout.jpg)
+
+`C6_IO9` is the C6 boot strap and `C6_CHIP_PU` is the C6 reset/enable signal. If the C6 does not
+enter download mode automatically, hold `C6_IO9` at GND, reset the C6 by pulling `C6_CHIP_PU` low
+and releasing it, then release `C6_IO9` after the uploader connects. Do not attach either of these
+signals to a power pin.
+
+See the [two-chip flashing guide](../installation/guition-two-chip.md) for the command sequence.
 
 ## Network policy
 
