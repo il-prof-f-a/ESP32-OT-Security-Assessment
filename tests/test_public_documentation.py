@@ -22,7 +22,9 @@ class PublicDocumentationTests(unittest.TestCase):
         self.assertIn("no native 24 V input", readme)
         self.assertIn("same Ethernet subnet", readme)
         self.assertIn("yet guaranteed", readme)
-        self.assertIn("build-validated, not hardware-validated", readme)
+        self.assertIn("Functional in the current laboratory setup", readme)
+        self.assertIn("separately flashed C6 coprocessor image", readme)
+        self.assertIn("broader network and soak testing", readme)
 
     def test_readme_local_links_and_images_exist(self):
         readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
