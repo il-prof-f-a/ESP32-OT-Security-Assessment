@@ -123,7 +123,10 @@ bool buildProvisionedConfig(ConfigurationManager& config,
                 replaceBool(wifi, "enabled", submission.wifi_enabled) &&
                 replaceString(wifi, "ssid", submission.wifi_ssid.c_str()) &&
                 replaceString(wifi, "password", submission.wifi_password.c_str()) &&
-                replaceBool(ethernet, "dhcp", submission.ethernet_dhcp);
+                replaceBool(ethernet, "dhcp", submission.ethernet_dhcp) &&
+                replaceString(ethernet, "ip", submission.ethernet_ip.c_str()) &&
+                replaceString(ethernet, "netmask", submission.ethernet_netmask.c_str()) &&
+                replaceString(ethernet, "gateway", submission.ethernet_gateway.c_str());
     }
     char* rendered = valid ? cJSON_PrintUnformatted(root) : nullptr;
     const bool rendered_ok = rendered != nullptr;

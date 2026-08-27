@@ -14,6 +14,11 @@ const char* ConfigurationManager::kNVS_CRC_KEY   = "config_crc32";
 const char* ConfigurationManager::kCONFIG_PATH   = "/data/config/config.json";
 const char* ConfigurationManager::kCONFIG_BAK    = "/data/config/config.json.bak";
 
+namespace {
+constexpr char kProvisioningNamespace[] = "provisioning";
+constexpr uint16_t kProvisioningSchemaVersion = 1;
+}
+
 ConfigurationManager::ConfigurationManager() {
 }
 
@@ -144,23 +149,11 @@ bool ConfigurationManager::tryRecoveryFromBackup() {
     std::ifstream ifs(kCONFIG_BAK, std::ios::binary);
     if (!ifs) return false;
     std::string json((std::istreambuf_iterator<char>(ifs)), {});
-    if (root_) cJSON_Delete(root_);
-    {
-        PSRAMJsonParser::PSRAMContext ctx;
-        root_ = PSRAMJsonParser::parseInPSRAM(json.c_str(), json.size());
-    }
-    if (!root_) return false;
-
-    // Update raw cache
-    raw_ = PSRAMUtils::createPSRAMString(json.c_str());
-
-    // Write configuration file using AsyncStorage
-    esp_err_t err = AsyncStorage::Global::writeFileRaw(kCONFIG_PATH, json.data(), json.size());
-    if (err != ESP_OK) {
-        LOG_ERROR("Config", "Failed to write config file");
-        return false;
-    }
-    return true;
+    PSRAMJsonParser::PSRAMContext ctx;
+    cJSON* recovered = PSRAMJsonParser::parseInPSRAM(json.c_str(), json.size());
+    if (!recovered) return false;
+    cJSON_Delete(recovered);
+    return saveConfigJSON(PSRAMUtils::createPSRAMString(json.c_str()));
 }
 
 bool ConfigurationManager::loadOrCreateDefault() {
@@ -200,6 +193,12 @@ bool ConfigurationManager::saveConfigJSON(const psram_string& json_ps) {
 
         return false;
 
+    }
+
+    bool provisioning_transaction = false;
+    if (!beginProvisionedConfigUpdate(provisioning_transaction)) {
+        LOG_ERROR("Config", "Failed to begin provisioning metadata update");
+        return false;
     }
 
     //LOG_INFO("Config", "Ensured /data/config directory exists");
@@ -295,6 +294,11 @@ bool ConfigurationManager::saveConfigJSON(const psram_string& json_ps) {
 
         parseAndCache(root_);
 
+        if (!finishProvisionedConfigUpdate(crc, provisioning_transaction)) {
+            LOG_ERROR("Config", "Failed to finalize provisioning metadata update");
+            return false;
+        }
+
         //LOG_INFO("Config", " Configuration parsed and cached successfully");
 
         return true;
@@ -307,6 +311,45 @@ bool ConfigurationManager::saveConfigJSON(const psram_string& json_ps) {
 
     return false;
 
+}
+
+bool ConfigurationManager::beginProvisionedConfigUpdate(bool& transaction_active) {
+    transaction_active = false;
+    nvs_handle_t handle;
+    esp_err_t error = nvs_open(kProvisioningNamespace, NVS_READONLY, &handle);
+    if (error == ESP_ERR_NVS_NOT_FOUND) return true;
+    if (error != ESP_OK) return false;
+
+    uint16_t schema = 0;
+    uint8_t complete = 0;
+    const bool ready =
+        nvs_get_u16(handle, "schema_u16", &schema) == ESP_OK &&
+        nvs_get_u8(handle, "complete_u8", &complete) == ESP_OK &&
+        schema == kProvisioningSchemaVersion && complete == 1;
+    nvs_close(handle);
+    if (!ready) return true;
+
+    error = nvs_open(kProvisioningNamespace, NVS_READWRITE, &handle);
+    if (error != ESP_OK) return false;
+    error = nvs_set_u8(handle, "complete_u8", 0);
+    if (error == ESP_OK) error = nvs_commit(handle);
+    nvs_close(handle);
+    if (error != ESP_OK) return false;
+    transaction_active = true;
+    return true;
+}
+
+bool ConfigurationManager::finishProvisionedConfigUpdate(uint32_t crc,
+                                                          bool transaction_active) {
+    if (!transaction_active) return true;
+    nvs_handle_t handle;
+    esp_err_t error = nvs_open(kProvisioningNamespace, NVS_READWRITE, &handle);
+    if (error != ESP_OK) return false;
+    error = nvs_set_u32(handle, "config_crc_u32", crc);
+    if (error == ESP_OK) error = nvs_set_u8(handle, "complete_u8", 1);
+    if (error == ESP_OK) error = nvs_commit(handle);
+    nvs_close(handle);
+    return error == ESP_OK;
 }
 
 

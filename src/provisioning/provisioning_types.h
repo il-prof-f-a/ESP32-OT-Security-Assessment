@@ -16,6 +16,9 @@ struct ProvisioningSubmission {
     psram_string admin_password = PSRAMUtils::createPSRAMString("");
     psram_string wifi_ssid = PSRAMUtils::createPSRAMString("");
     psram_string wifi_password = PSRAMUtils::createPSRAMString("");
+    psram_string ethernet_ip = PSRAMUtils::createPSRAMString("");
+    psram_string ethernet_netmask = PSRAMUtils::createPSRAMString("");
+    psram_string ethernet_gateway = PSRAMUtils::createPSRAMString("");
     bool wifi_enabled = false;
     bool ethernet_dhcp = true;
 

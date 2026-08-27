@@ -361,6 +361,8 @@ private:
     bool parseAndCache(cJSON* root);
     void mergeDefaultProtocolFields();
     uint32_t crc32(const uint8_t* data, size_t len) const;
+    bool beginProvisionedConfigUpdate(bool& transaction_active);
+    bool finishProvisionedConfigUpdate(uint32_t crc, bool transaction_active);
 
 
     bool saveConfigSourceToNVS(ConfigSource source);

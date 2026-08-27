@@ -108,6 +108,30 @@ class RuntimeProvisioningContractTests(unittest.TestCase):
             implementation.rindex('nvs_set_u8(handle, "complete_u8", 1)'),
         )
 
+    def test_every_configuration_save_refreshes_completed_provisioning_metadata(self):
+        header = self.read("src/core/configuration_manager.h")
+        implementation = self.read("src/core/configuration_manager.cpp")
+
+        self.assertIn("beginProvisionedConfigUpdate", header)
+        self.assertIn("finishProvisionedConfigUpdate", header)
+        save_start = implementation.index("bool ConfigurationManager::saveConfigJSON")
+        save_body = implementation[save_start:implementation.index("bool ConfigurationManager::isFeatureEnabled", save_start)]
+        self.assertLess(
+            save_body.index("beginProvisionedConfigUpdate"),
+            save_body.index("writeFileRaw(kCONFIG_PATH"),
+        )
+        self.assertLess(
+            save_body.index("writeFileRaw(kCONFIG_PATH"),
+            save_body.rindex("finishProvisionedConfigUpdate"),
+        )
+        self.assertIn('nvs_set_u8(handle, "complete_u8", 0)', implementation)
+        self.assertIn('nvs_set_u32(handle, "config_crc_u32", crc)', implementation)
+        self.assertIn('nvs_set_u8(handle, "complete_u8", 1)', implementation)
+        recovery_start = implementation.index("bool ConfigurationManager::tryRecoveryFromBackup")
+        recovery_body = implementation[recovery_start:implementation.index("bool ConfigurationManager::loadOrCreateDefault", recovery_start)]
+        self.assertIn("return saveConfigJSON", recovery_body)
+        self.assertNotIn("writeFileRaw(kCONFIG_PATH", recovery_body)
+
     def test_provisioning_errors_do_not_expose_internal_failure_stages(self):
         header = self.read("src/provisioning/provisioning_store.h")
         implementation = self.read("src/provisioning/provisioning_store.cpp")
@@ -221,6 +245,22 @@ class RuntimeProvisioningContractTests(unittest.TestCase):
             "submission.admin_password = PSRAMUtils::createPSRAMString(password->valuestring)",
             submit_body,
         )
+
+    def test_provisioning_accepts_and_persists_static_ethernet_parameters(self):
+        types = self.read("src/provisioning/provisioning_types.h")
+        store = self.read("src/provisioning/provisioning_store.cpp")
+        server = self.read("src/web/provisioning_server.cpp")
+        page = self.read("src/web/ui/provisioning.html")
+
+        for field in ("ethernet_ip", "ethernet_netmask", "ethernet_gateway"):
+            self.assertIn(field, types)
+            self.assertIn(field, server)
+        self.assertIn("ip4addr_aton", server)
+        self.assertIn('replaceString(ethernet, "ip"', store)
+        self.assertIn('replaceString(ethernet, "netmask"', store)
+        self.assertIn('replaceString(ethernet, "gateway"', store)
+        for control in ("ethernet-ip", "ethernet-netmask", "ethernet-gateway"):
+            self.assertIn(control, page)
 
     def test_provisioning_reports_generic_password_hash_errors(self):
         implementation = self.read("src/web/provisioning_server.cpp")

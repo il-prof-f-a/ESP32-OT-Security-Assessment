@@ -24,15 +24,23 @@
     <label>Wi-Fi SSID<input id="ssid" type="text" maxlength="32"></label>
     <label>Wi-Fi password<input id="wifi-password" type="password" minlength="8" maxlength="63" autocomplete="new-password"></label>
     <label><input id="ethernet-dhcp" type="checkbox" checked> Use Ethernet DHCP</label>
+    <div id="ethernet-static" hidden>
+      <label>Ethernet static IP address<input id="ethernet-ip" type="text" inputmode="decimal" autocomplete="off"></label>
+      <label>Ethernet netmask<input id="ethernet-netmask" type="text" inputmode="decimal" autocomplete="off"></label>
+      <label>Ethernet gateway<input id="ethernet-gateway" type="text" inputmode="decimal" autocomplete="off"></label>
+    </div>
     <button type="submit">Complete setup</button>
   </form>
   <div id="result" role="status" aria-live="polite"></div>
 </main>
 <script>
 const form=document.getElementById('setup'),result=document.getElementById('result');
+const ethernetDhcp=document.getElementById('ethernet-dhcp'),ethernetStatic=document.getElementById('ethernet-static');
+function updateEthernetMode(){const staticMode=!ethernetDhcp.checked;ethernetStatic.hidden=!staticMode;for(const id of ['ethernet-ip','ethernet-netmask','ethernet-gateway'])document.getElementById(id).required=staticMode}
+ethernetDhcp.addEventListener('change',updateEthernetMode);updateEthernetMode();
 form.addEventListener('submit',async event=>{event.preventDefault();result.textContent='Saving configuration…';
 const value=id=>document.getElementById(id).value,checked=id=>document.getElementById(id).checked;
-const body={admin_password:value('password'),admin_password_confirmation:value('confirmation'),network:{wifi_enabled:checked('wifi-enabled'),wifi_ssid:value('ssid'),wifi_password:value('wifi-password'),ethernet_dhcp:checked('ethernet-dhcp')}};
+const body={admin_password:value('password'),admin_password_confirmation:value('confirmation'),network:{wifi_enabled:checked('wifi-enabled'),wifi_ssid:value('ssid'),wifi_password:value('wifi-password'),ethernet_dhcp:checked('ethernet-dhcp'),ethernet_ip:value('ethernet-ip'),ethernet_netmask:value('ethernet-netmask'),ethernet_gateway:value('ethernet-gateway')}};
 try{const response=await fetch('/api/provisioning/complete',{method:'POST',headers:{'Content-Type':'application/json','X-Setup-Token':value('token')},body:JSON.stringify(body)});result.textContent=await response.text();if(response.ok)form.reset()}catch(error){result.textContent='Setup request failed: '+error.message}});
 </script>
 </body>

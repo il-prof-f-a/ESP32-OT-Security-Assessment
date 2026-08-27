@@ -5,6 +5,7 @@
 
 #include "../core/configuration_manager.h"
 #include "../security/password_hasher.h"
+#include "lwip/ip4_addr.h"
 #include "cJSON.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -18,6 +19,12 @@
 
 namespace {
 constexpr size_t kMaximumBodyBytes = 4096;
+
+bool validIpv4(const char* value) {
+    if (!value || !*value) return false;
+    ip4_addr_t parsed{};
+    return ip4addr_aton(value, &parsed) != 0;
+}
 
 bool allowedUniqueKeys(cJSON* object, const char* const* allowed, size_t count) {
     if (!cJSON_IsObject(object)) return false;
@@ -134,10 +141,11 @@ esp_err_t ProvisioningServer::handleComplete(httpd_req_t* request) {
     static const char* const top_keys[] = {
         "admin_password", "admin_password_confirmation", "network"};
     static const char* const network_keys[] = {
-        "wifi_enabled", "wifi_ssid", "wifi_password", "ethernet_dhcp"};
+        "wifi_enabled", "wifi_ssid", "wifi_password", "ethernet_dhcp",
+        "ethernet_ip", "ethernet_netmask", "ethernet_gateway"};
     cJSON* network = root ? cJSON_GetObjectItemCaseSensitive(root, "network") : nullptr;
     if (!root || !allowedUniqueKeys(root, top_keys, 3) ||
-        !allowedUniqueKeys(network, network_keys, 4)) {
+        !allowedUniqueKeys(network, network_keys, 7)) {
         if (root) cJSON_Delete(root);
         std::memset(body, 0, sizeof(body));
         return sendJson(request, "400 Bad Request", "{\"error\":\"invalid_or_unknown_json_keys\"}");
@@ -149,9 +157,14 @@ esp_err_t ProvisioningServer::handleComplete(httpd_req_t* request) {
     cJSON* wifi_ssid = cJSON_GetObjectItemCaseSensitive(network, "wifi_ssid");
     cJSON* wifi_password = cJSON_GetObjectItemCaseSensitive(network, "wifi_password");
     cJSON* ethernet_dhcp = cJSON_GetObjectItemCaseSensitive(network, "ethernet_dhcp");
+    cJSON* ethernet_ip = cJSON_GetObjectItemCaseSensitive(network, "ethernet_ip");
+    cJSON* ethernet_netmask = cJSON_GetObjectItemCaseSensitive(network, "ethernet_netmask");
+    cJSON* ethernet_gateway = cJSON_GetObjectItemCaseSensitive(network, "ethernet_gateway");
     const bool fields_valid = cJSON_IsString(password) && cJSON_IsString(confirmation) &&
         cJSON_IsBool(wifi_enabled) && cJSON_IsString(wifi_ssid) &&
         cJSON_IsString(wifi_password) && cJSON_IsBool(ethernet_dhcp) &&
+        cJSON_IsString(ethernet_ip) && cJSON_IsString(ethernet_netmask) &&
+        cJSON_IsString(ethernet_gateway) &&
         password->valuestring && confirmation->valuestring &&
         std::strcmp(password->valuestring, confirmation->valuestring) == 0;
     const size_t password_length =
@@ -182,12 +195,24 @@ esp_err_t ProvisioningServer::handleComplete(httpd_req_t* request) {
         std::memset(body, 0, sizeof(body));
         return sendJson(request, "400 Bad Request", "{\"error\":\"invalid_wifi_configuration\"}");
     }
+    const bool use_ethernet_dhcp = cJSON_IsTrue(ethernet_dhcp);
+    if (!use_ethernet_dhcp &&
+        (!validIpv4(ethernet_ip->valuestring) ||
+         !validIpv4(ethernet_netmask->valuestring) ||
+         !validIpv4(ethernet_gateway->valuestring))) {
+        cJSON_Delete(root);
+        std::memset(body, 0, sizeof(body));
+        return sendJson(request, "400 Bad Request", "{\"error\":\"invalid_ethernet_configuration\"}");
+    }
 
     ProvisioningSubmission submission;
     submission.wifi_enabled = enable_wifi;
     submission.wifi_ssid = PSRAMUtils::createPSRAMString(wifi_ssid->valuestring);
     submission.wifi_password = PSRAMUtils::createPSRAMString(wifi_password->valuestring);
-    submission.ethernet_dhcp = cJSON_IsTrue(ethernet_dhcp);
+    submission.ethernet_dhcp = use_ethernet_dhcp;
+    submission.ethernet_ip = PSRAMUtils::createPSRAMString(ethernet_ip->valuestring);
+    submission.ethernet_netmask = PSRAMUtils::createPSRAMString(ethernet_netmask->valuestring);
+    submission.ethernet_gateway = PSRAMUtils::createPSRAMString(ethernet_gateway->valuestring);
     psram_string admin_hash;
     const bool derived = PasswordHasher::derive(
         password->valuestring, password_length, admin_hash);
