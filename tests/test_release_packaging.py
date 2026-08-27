@@ -89,6 +89,22 @@ class ReleasePackagingTests(unittest.TestCase):
                     " merge_bin ",
                     f" {products.factory.read_text(encoding='utf-8')} ",
                 )
+                self.assertIn(
+                    " --flash_mode ",
+                    f" {products.factory.read_text(encoding='utf-8')} ",
+                )
+                self.assertIn(
+                    " --output ",
+                    f" {products.factory.read_text(encoding='utf-8')} ",
+                )
+                self.assertIn(
+                    " --flash_size ",
+                    f" {products.factory.read_text(encoding='utf-8')} ",
+                )
+                self.assertIn(
+                    " --flash_freq ",
+                    f" {products.factory.read_text(encoding='utf-8')} ",
+                )
                 if c6_build is not None:
                     self.assertEqual(manifest["coprocessor"]["chip"], "esp32c6")
                     self.assertEqual(
@@ -99,6 +115,10 @@ class ReleasePackagingTests(unittest.TestCase):
                     self.assertTrue(products.coprocessor_app.is_file())
                     self.assertIn(
                         " merge_bin ",
+                        f" {products.coprocessor_factory.read_text(encoding='utf-8')} ",
+                    )
+                    self.assertIn(
+                        " --flash_mode ",
                         f" {products.coprocessor_factory.read_text(encoding='utf-8')} ",
                     )
                 with zipfile.ZipFile(products.bundle) as bundle:

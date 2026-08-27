@@ -154,13 +154,13 @@ def package_release(
         "--chip",
         chip,
         "merge_bin",
-        "-o",
+        "--output",
         str(factory),
-        "--flash-mode",
+        "--flash_mode",
         mode,
-        "--flash-size",
+        "--flash_size",
         size,
-        "--flash-freq",
+        "--flash_freq",
         frequency,
     ]
     for offset, source in entries:
@@ -185,9 +185,9 @@ def package_release(
         shutil.copyfile(c6_firmware, coprocessor_app)
         c6_merge_command = [
             sys.executable, "-m", "esptool", "--chip", c6_chip,
-            "merge_bin", "-o", str(coprocessor_factory),
-            "--flash-mode", c6_mode, "--flash-size", c6_size,
-            "--flash-freq", c6_frequency,
+            "merge_bin", "--output", str(coprocessor_factory),
+            "--flash_mode", c6_mode, "--flash_size", c6_size,
+            "--flash_freq", c6_frequency,
         ]
         c6_packaged_entries = []
         for offset, source in c6_entries:
