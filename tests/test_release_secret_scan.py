@@ -1,5 +1,7 @@
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -128,6 +130,34 @@ class ReleaseSecretScanTests(unittest.TestCase):
                 "nonempty-admin-password",
                 [finding.rule for finding in bundle_findings],
             )
+
+    @unittest.skipUnless(shutil.which("git"), "git is required")
+    def test_repository_mode_excludes_gitignored_local_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            (root / ".gitignore").write_text("device-config.json\n*.key\n", encoding="utf-8")
+            (root / "README.md").write_text("public documentation\n", encoding="utf-8")
+            (root / "device-config.json").write_text(
+                '{"admin_password":"local-only-secret"}', encoding="utf-8"
+            )
+            (root / "server.key").write_text(
+                "-----BEGIN PRIVATE KEY-----\nLOCALONLY\n-----END PRIVATE KEY-----\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(self.scanner.main(["--repository", str(root)]), 0)
+
+    @unittest.skipUnless(shutil.which("git"), "git is required")
+    def test_repository_mode_scans_untracked_nonignored_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            (root / "unsafe.json").write_text(
+                '{"admin_password":"must-be-detected"}', encoding="utf-8"
+            )
+
+            self.assertEqual(self.scanner.main(["--repository", str(root)]), 1)
 
 
 if __name__ == "__main__":

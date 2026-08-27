@@ -14,6 +14,7 @@ class PublicDocumentationTests(unittest.TestCase):
             "LILYGO T-POE Pro",
             "Waveshare ESP32-S3-ETH",
             "Waveshare ESP32-P4-ETH",
+            "GUITION JC-ESP32P4-M3-DEV",
         ):
             self.assertIn(device, readme)
 
@@ -21,6 +22,7 @@ class PublicDocumentationTests(unittest.TestCase):
         self.assertIn("no native 24 V input", readme)
         self.assertIn("same Ethernet subnet", readme)
         self.assertIn("yet guaranteed", readme)
+        self.assertIn("build-validated, not hardware-validated", readme)
 
     def test_readme_local_links_and_images_exist(self):
         readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
@@ -60,6 +62,7 @@ class PublicDocumentationTests(unittest.TestCase):
         self.assertIn("idf.py -B", readme)
         self.assertIn("IDF_TARGET=esp32p4", readme)
         self.assertIn("pio run -e waveshare-esp32p4-eth", readme)
+        self.assertIn("pio run -e guition-jc-esp32p4-m3-dev", readme)
         self.assertIn("pioarduino/platform-espressif32", readme)
 
     def test_readme_documents_installation_and_flash_workflows(self):
@@ -77,6 +80,8 @@ class PublicDocumentationTests(unittest.TestCase):
             "0x8000",
             "0x200000",
             "bootloader mode",
+            "guition_two_chip.ps1",
+            "ESP-Hosted `3.0.6`",
         ):
             self.assertIn(fragment, readme)
 
@@ -87,6 +92,7 @@ class PublicDocumentationTests(unittest.TestCase):
             "build_flash.ps1",
             "build_flash.sh",
             "flash_esptool.py",
+            "guition_two_chip.ps1",
         ):
             self.assertTrue((PROJECT_ROOT / "scripts" / name).is_file(), name)
 

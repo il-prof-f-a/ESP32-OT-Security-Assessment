@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import re
+import subprocess
 from typing import Iterable, NamedTuple, Sequence
 import zipfile
 
@@ -112,6 +113,45 @@ def _iter_files(paths: Iterable[Path]) -> Iterable[Path]:
                 yield candidate
 
 
+def _iter_publishable_repository_files(repository_root: Path) -> Iterable[Path]:
+    """Yield tracked and non-ignored untracked files from a Git repository.
+
+    A non-Git directory falls back to the recursive behavior used by unit tests
+    and exported source archives. Explicit --path scans always remain exhaustive.
+    """
+    root = Path(repository_root).resolve()
+    try:
+        result = subprocess.run(
+            [
+                "git", "-C", str(root), "ls-files", "-z", "--cached",
+                "--others", "--exclude-standard",
+            ],
+            check=False,
+            capture_output=True,
+        )
+    except OSError:
+        result = None
+
+    if result is None or result.returncode != 0:
+        yield from _iter_files([root])
+        return
+
+    for raw_relative in result.stdout.split(b"\0"):
+        if not raw_relative:
+            continue
+        relative = Path(raw_relative.decode("utf-8", errors="surrogateescape"))
+        candidate = root / relative
+        if not candidate.is_file():
+            continue
+        if any(part in IGNORED_DIRECTORIES for part in relative.parts):
+            continue
+        if "tests" in relative.parts:
+            continue
+        if candidate.resolve() == SELF:
+            continue
+        yield candidate
+
+
 def scan_paths(
     paths: Iterable[Path],
     denylist: Sequence[bytes] = (),
@@ -170,7 +210,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     paths = list(args.path)
     if args.repository:
-        paths.append(args.repository)
+        paths.extend(_iter_publishable_repository_files(args.repository))
     if not paths:
         parser.error("provide --repository or at least one --path")
     findings = scan_paths(

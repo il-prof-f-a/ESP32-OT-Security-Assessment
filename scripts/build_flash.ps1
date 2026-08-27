@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("t-poe-pro", "esp32-s3-eth", "waveshare-esp32p4-eth")]
+    [ValidateSet("t-poe-pro", "esp32-s3-eth", "waveshare-esp32p4-eth", "guition-jc-esp32p4-m3-dev")]
     [string]$Target,
     [string]$Port,
     [switch]$Upload,

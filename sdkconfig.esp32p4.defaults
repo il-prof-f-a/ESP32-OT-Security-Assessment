@@ -1,5 +1,6 @@
 # ESP32-P4 (Waveshare ESP32-P4-ETH) defaults
-CONFIG_COMPILER_HIDE_PATHS_MACROS=n
+CONFIG_APP_REPRODUCIBLE_BUILD=y
+CONFIG_COMPILER_HIDE_PATHS_MACROS=y
 
 # The ESP32-P4-ETH uses pre-v3 silicon (v1.3). The pinned pioarduino
 # PlatformIO builder still generates the pre-v3 sections linker template.

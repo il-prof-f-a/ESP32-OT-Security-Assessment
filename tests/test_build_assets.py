@@ -14,6 +14,21 @@ from build_assets import generate_build_assets  # noqa: E402
 
 
 class BuildAssetsTests(unittest.TestCase):
+    def test_build_rejects_credentials_in_littlefs_seed_directory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            key = root / "data/certs/server.key"
+            key.parent.mkdir(parents=True)
+            key.write_text(
+                "-----BEGIN PRIVATE KEY-----\n"
+                "DUMMYTESTMATERIAL\n"
+                "-----END PRIVATE KEY-----\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "LittleFS seed"):
+                generate_build_assets(root, root / "build", "")
+
     def test_clean_builds_are_byte_for_byte_deterministic(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -70,6 +85,7 @@ class BuildAssetsTests(unittest.TestCase):
                     "t-poe-pro",
                     "esp32-s3-eth",
                     "waveshare-esp32p4-eth",
+                    "guition-jc-esp32p4-m3-dev",
                 )
             }
 

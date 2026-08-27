@@ -27,6 +27,9 @@ class FirmwareToolTests(unittest.TestCase):
         self.assertEqual(self.flash.TARGETS["t-poe-pro"].chip, "esp32")
         self.assertEqual(self.flash.TARGETS["esp32-s3-eth"].chip, "esp32s3")
         self.assertEqual(self.flash.TARGETS["waveshare-esp32p4-eth"].chip, "esp32p4")
+        self.assertEqual(
+            self.flash.TARGETS["guition-jc-esp32p4-m3-dev"].chip, "esp32p4"
+        )
 
     def test_application_offset_is_read_from_partition_table(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -79,6 +82,7 @@ class FirmwareToolTests(unittest.TestCase):
             self.assertIn("esp32p4", command)
             self.assertIn("--port", command)
             self.assertIn("COM10", command)
+            self.assertIn("--no-progress", command)
             self.assertIn("qio", command)
             self.assertIn("32MB", command)
             self.assertIn("80m", command)

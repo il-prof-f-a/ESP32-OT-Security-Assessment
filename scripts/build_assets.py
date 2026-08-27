@@ -20,6 +20,8 @@ from pathlib import Path
 import secrets
 import tempfile
 
+from check_release_secrets import scan_paths
+
 
 @dataclass(frozen=True)
 class BuildAssetsResult:
@@ -193,6 +195,25 @@ def _device_config_path(project_dir: Path) -> Path:
     return Path(project_dir).resolve() / "device-config.json"
 
 
+def _validate_littlefs_seed(project_dir: Path) -> None:
+    """Reject local credentials before PlatformIO can copy them into LittleFS."""
+
+    data_dir = Path(project_dir).resolve() / "data"
+    if not data_dir.is_dir():
+        return
+    findings = scan_paths([data_dir])
+    if not findings:
+        return
+    safe_findings = ", ".join(
+        f"{Path(finding.path).relative_to(project_dir)} ({finding.rule})"
+        for finding in findings
+    )
+    raise ValueError(
+        "LittleFS seed contains credential material; move it outside the public "
+        f"repository before building: {safe_findings}"
+    )
+
+
 def _load_device_config(project_dir: Path) -> dict:
     """Return device-config.json (creating it with a generated password if missing)."""
     path = _device_config_path(project_dir)
@@ -275,10 +296,12 @@ def generate_build_assets(
 ) -> BuildAssetsResult:
     """Generate public assets; board is accepted for a stable build interface."""
 
-    Path(project_dir).resolve(strict=True)
+    project_dir = Path(project_dir).resolve(strict=True)
     Path(build_dir).resolve().mkdir(parents=True, exist_ok=True)
     if board is not None and not isinstance(board, str):
         raise TypeError("board must be a string or None")
+
+    _validate_littlefs_seed(project_dir)
 
     admin_hash = ""
     ethernet_dhcp = True

@@ -9,6 +9,7 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "ui/gen/provisioning_html_gen.hpp"
+#include "../network/network_policy.h"
 
 
 #ifndef ESP32_OT_WEB_HTTP_ONLY
@@ -43,15 +44,6 @@ esp_err_t sendJson(httpd_req_t* request, const char* status, const char* body) {
     return httpd_resp_sendstr(request, body);
 }
 
-const char* boardName() {
-#if defined(BOARD_WAVESHARE_ESP32P4_ETH)
-    return "waveshare-esp32p4-eth";
-#elif defined(BOARD_ESP32_S3_ETH)
-    return "esp32-s3-eth";
-#else
-    return "t-poe-pro";
-#endif
-}
 }  // namespace
 
 
@@ -94,12 +86,8 @@ esp_err_t ProvisioningServer::handleStatus(httpd_req_t* request) {
     std::snprintf(
         response, sizeof(response),
         "{\"board\":\"%s\",\"network\":\"%s\",\"transport\":\"%s\",\"expires_in_ms\":%llu,\"tls_fingerprint_sha256\":\"%s\"}",
-        boardName(),
-#if defined(BOARD_WAVESHARE_ESP32P4_ETH)
-        "ethernet",
-#else
-        "wifi-ap",
-#endif
+        NetworkPolicy::boardName(),
+        NetworkPolicy::managementUsesEthernet() ? "ethernet" : "wifi-ap",
 #if ESP32_OT_WEB_HTTP_ONLY
         "http",
 #else
@@ -175,7 +163,7 @@ esp_err_t ProvisioningServer::handleComplete(httpd_req_t* request) {
     }
 
     const bool enable_wifi = cJSON_IsTrue(wifi_enabled);
-#if defined(BOARD_WAVESHARE_ESP32P4_ETH)
+#if ESP32_OT_MGMT_POLICY == ESP32_OT_MGMT_ETHERNET_ONLY
     if (enable_wifi) {
         cJSON_Delete(root);
         std::memset(body, 0, sizeof(body));
