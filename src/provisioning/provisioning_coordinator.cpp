@@ -6,6 +6,7 @@
 #include "setup_session.h"
 #include "../core/configuration_manager.h"
 #include "../network/ethernet_manager.h"
+#include "../network/network_policy.h"
 #include "../network/wifi_manager.h"
 #include "../web/provisioning_server.h"
 
@@ -45,7 +46,7 @@ void directSerialLine(const char* key, const char* value) {
     directSerialLine("SETUP_TOKEN", session.setupToken());
 
     esp_netif_t* interface = nullptr;
-#if defined(BOARD_WAVESHARE_ESP32P4_ETH)
+#if ESP32_OT_MGMT_POLICY == ESP32_OT_MGMT_ETHERNET_ONLY
     static EthernetManager ethernet(nullptr);
     while (true) {
         if (ethernet.initializeFromConfig()) {

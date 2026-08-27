@@ -1,5 +1,6 @@
 #include "../core/audit_manager.h"
 #include "net_guard.h"
+#include "../network/assessment_interface.h"
 extern "C" {
   #include "esp_timer.h"
 }
@@ -25,7 +26,7 @@ bool NetGuard::checkRate(size_t plus_bytes) {
 int NetGuard::tcpConnect(const std::string& ip, uint16_t port, uint32_t timeout_ms) {
     if (!pol_ || !hasFlag(pol_->allowed, SandboxAction::NETWORK_ACTIVE)) { AuditManager::getInstance().logDenied(actor_.c_str(), "NETWORK_ACTIVE", "permission"); return -1; }
     if (!isPortAllowed(port)) { AuditManager::getInstance().logDenied(actor_.c_str(), "tcpConnect", "port_not_allowed"); return -1; }
-    int s = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    int s = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (s < 0) return -1;
     struct timeval tv{ .tv_sec=(int)(timeout_ms/1000), .tv_usec=(int)((timeout_ms%1000)*1000) };
     ::setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
@@ -40,7 +41,7 @@ int NetGuard::udpBroadcast(uint16_t port, const void* data, size_t len) {
     if (!pol_) return -1;
     if (!hasFlag(pol_->allowed, SandboxAction::UDP_BROADCAST)) { AuditManager::getInstance().logDenied(actor_.c_str(), "udpBroadcast", "permission"); return -1; }
     if (!checkRate(len)) { AuditManager::getInstance().logRateLimit(actor_.c_str(), "udpBroadcast"); return -1; }
-    int s = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    int s = AssessmentInterface::openBoundSocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (s < 0) return -1;
     int yes = 1; ::setsockopt(s, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(yes));
     sockaddr_in dst{}; dst.sin_family=AF_INET; dst.sin_port=htons(port); dst.sin_addr.s_addr = htonl(0xFFFFFFFFu);

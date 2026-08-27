@@ -10,6 +10,7 @@
 #include "logging_system.h"
 #include "task_alloc_helpers.h"
 #include "task_config.h"
+#include "../network/assessment_interface.h"
 
 extern "C" {
     #include "esp_heap_caps.h"
@@ -342,24 +343,18 @@ bool NetworkEngine::enableRawTaps(){
     // Legacy method - use basic hardcoded ports for backward compatibility
     // UDP taps - temporarily disabled due to callback crash
     // TODO: Debug callback pointer corruption issue
-    /*
-    tap_.u2222 = udp_new();
-    if (tap_.u2222) {
-        udp_bind(tap_.u2222, IP_ANY_TYPE, 2222);
-        udp_recv(tap_.u2222, &NetworkEngine::udp_recv_cb, this);
-    }
-    tap_.u502 = udp_new();
-    if (tap_.u502) {
-        udp_bind(tap_.u502, IP_ANY_TYPE, 502);
-        udp_recv(tap_.u502, &NetworkEngine::udp_rev_cb, this);
-    }
-    */
     // TCP "any": we cannot easily hook all, but we could create raw pcb (not public). For now, skip.
     LOG_INFO("NetEngine","Raw UDP/TCP taps disabled (debugging).");
     return true;
 }
 
 bool NetworkEngine::enableRawTaps(const std::vector<BasePlugin*>& plugins){
+    ip_addr_t assessment_address{};
+    if (!AssessmentInterface::localAddress(&assessment_address)) {
+        LOG_ERROR("NetEngine", "Ethernet is not ready; raw assessment taps remain disabled");
+        return false;
+    }
+
     // Dynamic port discovery from plugins
     std::set<uint16_t> all_ports;
 
@@ -396,7 +391,7 @@ bool NetworkEngine::enableRawTaps(const std::vector<BasePlugin*>& plugins){
         // UDP tap
         struct udp_pcb* u_pcb = udp_new();
         if (u_pcb) {
-            if (udp_bind(u_pcb, IP_ANY_TYPE, port) == ERR_OK) {
+            if (udp_bind(u_pcb, &assessment_address, port) == ERR_OK) {
                 udp_recv(u_pcb, &NetworkEngine::udp_recv_cb, this);
                 tap_.udp_pcbs.push_back(u_pcb);
                 tap_.udp_ports.push_back(port);
@@ -410,7 +405,7 @@ bool NetworkEngine::enableRawTaps(const std::vector<BasePlugin*>& plugins){
         // TCP tap - Listen on port and intercept connections
         struct tcp_pcb* t_pcb = tcp_new();
         if (t_pcb) {
-            if (tcp_bind(t_pcb, IP_ANY_TYPE, port) == ERR_OK) {
+            if (tcp_bind(t_pcb, &assessment_address, port) == ERR_OK) {
                 struct tcp_pcb* listening_pcb = tcp_listen(t_pcb);
                 if (listening_pcb) {
                     // Set callbacks for connection handling

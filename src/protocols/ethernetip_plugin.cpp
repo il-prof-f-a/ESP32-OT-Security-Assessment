@@ -1,5 +1,6 @@
 #include "ethernetip_plugin.h"
 #include "../assessment/fuzzing_engine.h"
+#include "../network/assessment_interface.h"
 #include "../core/reporting_engine.h"
 #include "../core/logging_system.h"
 #include "../core/psram_allocator.h"
@@ -364,7 +365,7 @@ bool EtherNetIPPlugin::activeListIdentityPSRAM(const psram_string& target, psram
     char ip_buf[64] = {0};
     PSRAMUtils::copyToStackBuffer(ip_buf, sizeof(ip_buf), ip_ps);
 
-    int s = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    int s = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (s < 0) {
         out_json = PSRAMUtils::createPSRAMString("{\"error\":\"socket\"}");
         return false;
@@ -381,12 +382,6 @@ bool EtherNetIPPlugin::activeListIdentityPSRAM(const psram_string& target, psram
         out_json = PSRAMUtils::createPSRAMString("{\"error\":\"ethernet_not_ready\"}");
         return false;
     }
-    sockaddr_in local{};
-    local.sin_family = AF_INET;
-    local.sin_addr.s_addr = eth_ip.ip.addr;
-    local.sin_port = 0;
-    ::bind(s, reinterpret_cast<sockaddr*>(&local), sizeof(local));
-
     sockaddr_in sa{};
     sa.sin_family = AF_INET;
     sa.sin_port = htons(port);
@@ -710,7 +705,7 @@ bool EtherNetIPPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
 
     if (need_session) {
         do {
-            sock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+            sock = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
             if (sock < 0) { session_error = PSRAMUtils::createPSRAMString("socket_failed"); break; }
             configureTcpSocket(sock);
             struct timeval tv{ .tv_sec = static_cast<int>(timeout_ms / 1000U), .tv_usec = static_cast<int>((timeout_ms % 1000U) * 1000U) };
@@ -722,9 +717,6 @@ bool EtherNetIPPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
             if (!eth || esp_netif_get_ip_info(eth, &eth_ip) != ESP_OK || eth_ip.ip.addr == 0) {
                 session_error = PSRAMUtils::createPSRAMString("ethernet_not_ready"); break;
             }
-            sockaddr_in local{}; local.sin_family = AF_INET; local.sin_addr.s_addr = eth_ip.ip.addr; local.sin_port = 0;
-            if (::bind(sock, reinterpret_cast<sockaddr*>(&local), sizeof(local)) != 0) { session_error = PSRAMUtils::createPSRAMString("bind_failed"); break; }
-
             sockaddr_in remote{}; remote.sin_family = AF_INET; remote.sin_port = htons(port);
             if (::inet_aton(ip_buf, &remote.sin_addr) == 0) { session_error = PSRAMUtils::createPSRAMString("invalid_ip"); break; }
             if (::connect(sock, reinterpret_cast<sockaddr*>(&remote), sizeof(remote)) != 0) { session_error = PSRAMUtils::createPSRAMString("connect_failed"); break; }
@@ -1242,7 +1234,7 @@ psram_string EtherNetIPPlugin::legacyDoVulnerabilityScan(const psram_string& tar
     uint32_t session_handle = 0;
 
     do {
-        sock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        sock = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (sock < 0) {
             connect_error = PSRAMUtils::createPSRAMString("socket");
             break;
@@ -1258,15 +1250,6 @@ psram_string EtherNetIPPlugin::legacyDoVulnerabilityScan(const psram_string& tar
         esp_netif_ip_info_t eth_ip{};
         if (!eth || esp_netif_get_ip_info(eth, &eth_ip) != ESP_OK || eth_ip.ip.addr == 0) {
             connect_error = PSRAMUtils::createPSRAMString("ethernet_not_ready");
-            break;
-        }
-
-        sockaddr_in local{};
-        local.sin_family = AF_INET;
-        local.sin_addr.s_addr = eth_ip.ip.addr;
-        local.sin_port = 0;
-        if (::bind(sock, reinterpret_cast<sockaddr*>(&local), sizeof(local)) != 0) {
-            connect_error = PSRAMUtils::createPSRAMString("bind");
             break;
         }
 
@@ -1728,7 +1711,7 @@ std::string EtherNetIPPlugin::legacyDoNetworkDiscovery(const std::string& target
                 break;
             }
 
-            sock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+            sock = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
             if (sock < 0) {
                 error_phase = "socket";
                 error_reason = "socket_failed";
@@ -1742,16 +1725,6 @@ std::string EtherNetIPPlugin::legacyDoNetworkDiscovery(const std::string& target
             };
             ::setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
             ::setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-
-            sockaddr_in local{};
-            local.sin_family = AF_INET;
-            local.sin_addr.s_addr = eth_ip.ip.addr;
-            local.sin_port = 0;
-            if (::bind(sock, reinterpret_cast<sockaddr*>(&local), sizeof(local)) != 0) {
-                error_phase = "bind";
-                error_reason = "bind_failed";
-                break;
-            }
 
             sockaddr_in remote{};
             remote.sin_family = AF_INET;
@@ -2412,7 +2385,7 @@ FuzzResult EtherNetIPPlugin::execute(const FuzzJob& job, const FuzzTestCase& tc,
         if (port == ENIP_TCP_PORT) {
             port = ENIP_IO_UDP;
         }
-        int us = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        int us = AssessmentInterface::openBoundSocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         if (us < 0) {
             status_details = "udp_socket_creation_failed";
             return FuzzResult::SOCKET_ERROR;
@@ -2425,16 +2398,6 @@ FuzzResult EtherNetIPPlugin::execute(const FuzzJob& job, const FuzzTestCase& tc,
         if (!eth || esp_netif_get_ip_info(eth, &eth_ip) != ESP_OK || eth_ip.ip.addr == 0) {
             ::close(us);
             status_details = "ethernet_not_ready";
-            return FuzzResult::SOCKET_ERROR;
-        }
-
-        sockaddr_in local{};
-        local.sin_family = AF_INET;
-        local.sin_addr.s_addr = eth_ip.ip.addr;
-        local.sin_port = 0;
-        if (::bind(us, reinterpret_cast<sockaddr*>(&local), sizeof(local)) != 0) {
-            ::close(us);
-            status_details = "udp_bind_failed";
             return FuzzResult::SOCKET_ERROR;
         }
 
@@ -2477,7 +2440,7 @@ FuzzResult EtherNetIPPlugin::execute(const FuzzJob& job, const FuzzTestCase& tc,
         return FuzzResult::SUCCESS;
     }
 
-    int sock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    int sock = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (sock < 0) {
         status_details = "socket_creation_failed";
         return FuzzResult::SOCKET_ERROR;
@@ -2494,16 +2457,6 @@ FuzzResult EtherNetIPPlugin::execute(const FuzzJob& job, const FuzzTestCase& tc,
     if (!eth || esp_netif_get_ip_info(eth, &eth_ip) != ESP_OK || eth_ip.ip.addr == 0) {
         ::close(sock);
         status_details = "ethernet_not_ready";
-        return FuzzResult::SOCKET_ERROR;
-    }
-
-    sockaddr_in local{};
-    local.sin_family = AF_INET;
-    local.sin_addr.s_addr = eth_ip.ip.addr;
-    local.sin_port = 0;
-    if (::bind(sock, reinterpret_cast<sockaddr*>(&local), sizeof(local)) != 0) {
-        ::close(sock);
-        status_details = "bind_failed";
         return FuzzResult::SOCKET_ERROR;
     }
 
@@ -3236,15 +3189,8 @@ bool EtherNetIPPlugin::doPacketAnalysis(const NetworkPacket& pkt) {
 
 
 bool EtherNetIPPlugin::activeBroadcastDiscovery(uint32_t timeout_ms, std::string& out_json) {
-    int s = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    int s = AssessmentInterface::openBoundSocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (s < 0) { out_json = "{\"error\":\"socket\"}"; return false; }
-    // Bind to Ethernet (ETH_DEF)
-    esp_netif_t* eth2 = esp_netif_get_handle_from_ifkey("ETH_DEF");
-    esp_netif_ip_info_t eth_ip2{};
-    if (!eth2 || esp_netif_get_ip_info(eth2, &eth_ip2) != ESP_OK || eth_ip2.ip.addr == 0) { ::close(s); out_json = "{\"error\":\"ethernet_not_ready\"}"; return false; }
-    sockaddr_in local2{}; local2.sin_family = AF_INET; local2.sin_addr.s_addr = eth_ip2.ip.addr; local2.sin_port = 0;
-    ::bind(s, (sockaddr*)&local2, sizeof(local2));
-
     int yes = 1;
     ::setsockopt(s, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(yes));
     struct timeval tv{ .tv_sec = (int)(timeout_ms/1000), .tv_usec = (int)((timeout_ms%1000)*1000) };

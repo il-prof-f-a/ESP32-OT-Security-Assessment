@@ -2,6 +2,7 @@
 #include "opcua_fuzzing_seeds.h"
 #include "../core/logging_system.h"
 #include "../core/psram_json_parser.h"
+#include "../network/assessment_interface.h"
 
 extern "C" {
     #include <esp_timer.h>
@@ -283,7 +284,7 @@ bool FuzzingExecutor::connectAndSend(const char* server_url, uint16_t port,
                                     uint32_t timeout_ms, bool& timed_out) {
     timed_out = false;
 
-    int sock_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    int sock_fd = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (sock_fd < 0) {
         return false;
     }

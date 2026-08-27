@@ -4,6 +4,7 @@
 #include "../core/logging_system.h"
 #include "../core/plugin_manager.h"
 #include "../assessment/fuzzing_engine.h"
+#include "../network/assessment_interface.h"
 
 #include "../core/psram_allocator.h"
 #include "../core/psram_json_parser.h"
@@ -317,7 +318,7 @@ bool ModbusTCPPlugin::parseTarget(const std::string& target, std::string& host, 
 }
 
 bool ModbusTCPPlugin::modbusConnect(const std::string& host, uint16_t port, int& sock) {
-    sock = ::socket(AF_INET, SOCK_STREAM, 0);
+    sock = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, 0);
     if (sock<0) return false;
     configureTcpSocket(sock);
     // Bind socket to Ethernet interface (ETH_DEF) to force egress on ETH
@@ -326,8 +327,6 @@ bool ModbusTCPPlugin::modbusConnect(const std::string& host, uint16_t port, int&
     if (!eth || esp_netif_get_ip_info(eth, &eth_ip) != ESP_OK || eth_ip.ip.addr == 0) {
         ::close(sock); sock = -1; return false; // Ethernet not ready
     }
-    struct sockaddr_in local{}; local.sin_family = AF_INET; local.sin_addr.s_addr = eth_ip.ip.addr; local.sin_port = 0;
-    ::bind(sock, (struct sockaddr*)&local, sizeof(local));
 #ifdef SO_BINDTODEVICE
     {
         struct ifreq ifr;
@@ -974,14 +973,12 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
             return true;
         }
         for (int attempt = 0; attempt < connect_retries; ++attempt) {
-            int probe = ::socket(AF_INET, SOCK_STREAM, 0);
+            int probe = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, 0);
             if (probe < 0) {
                 vTaskDelay(pdMS_TO_TICKS(30));
                 continue;
             }
             configureTcpSocket(probe);
-            struct sockaddr_in local{}; local.sin_family = AF_INET; local.sin_addr.s_addr = eth_ip.ip.addr; local.sin_port = 0;
-            ::bind(probe, (struct sockaddr*)&local, sizeof(local));
 #ifdef SO_BINDTODEVICE
             {
                 struct ifreq ifr;
@@ -1118,7 +1115,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
             uint64_t host_start_ms = (uint64_t)(esp_timer_get_time() / 1000ULL);
 
             for (int attempt = 0; attempt < connect_retries; ++attempt) {
-                sock = ::socket(AF_INET, SOCK_STREAM, 0);
+                sock = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, 0);
                 if (sock < 0) {
                     LOG_WARNINGF(TAG_MB, "Failed to create socket for %s (errno=%d)", ip.c_str(), errno);
                     vTaskDelay(pdMS_TO_TICKS(40));
@@ -1126,8 +1123,6 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
                 }
 
                 configureTcpSocket(sock);
-                struct sockaddr_in local{}; local.sin_family = AF_INET; local.sin_addr.s_addr = eth_ip.ip.addr; local.sin_port = 0;
-                ::bind(sock, (struct sockaddr*)&local, sizeof(local));
 #ifdef SO_BINDTODEVICE
                 {
                     struct ifreq ifr;
@@ -1759,7 +1754,7 @@ FuzzResult ModbusTCPPlugin::execute(const FuzzJob& job, const FuzzTestCase& tc,
     }
 
     // Try to connect and send the test case
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    int sock = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
         status_details = "socket_creation_failed errno:" + std::to_string(errno);
         return FuzzResult::SOCKET_ERROR;
@@ -1780,8 +1775,6 @@ FuzzResult ModbusTCPPlugin::execute(const FuzzJob& job, const FuzzTestCase& tc,
     if (!eth || esp_netif_get_ip_info(eth, &eth_ip) != ESP_OK || eth_ip.ip.addr == 0) {
         close(sock); status_details = "ethernet_not_ready"; return FuzzResult::CONNECTION_FAILED;
     }
-    struct sockaddr_in local{}; local.sin_family = AF_INET; local.sin_addr.s_addr = eth_ip.ip.addr; local.sin_port = 0;
-    ::bind(sock, (struct sockaddr*)&local, sizeof(local));
 #ifdef SO_BINDTODEVICE
     {
         struct ifreq ifr;

@@ -54,7 +54,9 @@ extern "C" void web_server_task(void *pv) {
     if (success_flag) *success_flag = true;
     if (started) xSemaphoreGive(started);
 
-    for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+    while (srv->isRunning()) {
+        vTaskDelay(pdMS_TO_TICKS(250));
     }
+    LOG_INFO("WebServerTask", "Web server stopped; terminating wrapper task");
+    vTaskDelete(nullptr);
 }

@@ -168,12 +168,8 @@ public:
     struct GeneralDiscoveryConfig {
         psram_string target;
         psram_string mode_label;
-        // Bind interface for discovery sockets:
-        // - "" (default): ETH_DEF (previous behavior, Ethernet-only)
-        // - "ETH_DEF": Ethernet
-        // - "WIFI_STA_DEF": WiFi STA
-        // - "WIFI_AP_DEF": WiFi AP
-        // - "AUTO": try ETH_DEF then WIFI_STA_DEF
+        // Compatibility field. Assessment sockets are always bound to ETH_DEF;
+        // any other value is ignored to preserve the IT/OT boundary.
         psram_string bind_ifkey;
         bool ping_scan = true;
         bool port_scan = false;

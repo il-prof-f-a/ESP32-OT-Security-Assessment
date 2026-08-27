@@ -26,6 +26,9 @@
 #include "../core/filesystem_task_delegate.h"
 #include "../core/log_retention.h"
 #include "../network/ethernet_manager.h"
+#include "../network/assessment_interface.h"
+#include "../network/network_policy.h"
+#include "../network/management_interface_controller.h"
 #include "../core/audit_manager.h"
 #include "../reporters/gpio_reporter.h"
 #include "../network/wifi_manager.h"
@@ -128,6 +131,86 @@ static inline void free_cjson_str(char* s) {
 static bool read_body_psram(httpd_req_t* req, char** out_buf, size_t* out_len, size_t max_len = 32768);
 
 WebServer* WebServer::self_ = nullptr;
+
+void WebServer::setAllowedManagementAddress(uint32_t ipv4_network_order) {
+    allowed_management_ipv4_.store(ipv4_network_order, std::memory_order_release);
+}
+
+void WebServer::clearAllowedManagementAddress() {
+    allowed_management_ipv4_.store(0, std::memory_order_release);
+}
+
+esp_err_t WebServer::authorizeOpenSocket(httpd_handle_t server, int sockfd) {
+    (void)server;
+    if (!self_) return ESP_FAIL;
+
+    sockaddr_storage local{};
+    socklen_t length = sizeof(local);
+    const uint32_t allowed = self_->allowed_management_ipv4_.load(std::memory_order_acquire);
+    const bool address_allowed =
+        allowed != 0U &&
+        getsockname(sockfd, reinterpret_cast<sockaddr*>(&local), &length) == 0 &&
+        local.ss_family == AF_INET &&
+        reinterpret_cast<const sockaddr_in*>(&local)->sin_addr.s_addr == allowed;
+    if (!address_allowed) {
+        // Plain HTTP honors the error return. esp_https_server calls the hook after
+        // the TLS handshake and ignores its return value, so close the socket too.
+        ::shutdown(sockfd, SHUT_RDWR);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+bool WebServer::authorizeRequestInterface(httpd_req_t* req) {
+    if (!req || !self_) return false;
+    const int sockfd = httpd_req_to_sockfd(req);
+    if (sockfd < 0) return false;
+
+    sockaddr_storage local{};
+    socklen_t length = sizeof(local);
+    const uint32_t allowed = self_->allowed_management_ipv4_.load(std::memory_order_acquire);
+    return allowed != 0U &&
+           getsockname(sockfd, reinterpret_cast<sockaddr*>(&local), &length) == 0 &&
+           local.ss_family == AF_INET &&
+           reinterpret_cast<const sockaddr_in*>(&local)->sin_addr.s_addr == allowed;
+}
+
+esp_err_t WebServer::guardedUriHandler(httpd_req_t* req) {
+    if (!authorizeRequestInterface(req)) {
+        if (req) {
+            httpd_resp_set_status(req, "403 Forbidden");
+            httpd_resp_set_type(req, "text/plain");
+            httpd_resp_send(req, "Forbidden", HTTPD_RESP_USE_STRLEN);
+        }
+        return ESP_FAIL;
+    }
+    if (!req || !req->user_ctx) return ESP_FAIL;
+    auto* context = static_cast<GuardedUriContext*>(req->user_ctx);
+    if (!context->handler) return ESP_FAIL;
+    req->user_ctx = context->user_ctx;
+    return context->handler(req);
+}
+
+esp_err_t WebServer::registerGuardedHandler(httpd_handle_t server,
+                                            const httpd_uri_t* uri) {
+    if (!self_ || !uri || self_->guarded_uri_count_ >= kMaxGuardedUriContexts) {
+        return ESP_ERR_HTTPD_HANDLERS_FULL;
+    }
+    GuardedUriContext& context =
+        self_->guarded_uri_contexts_[self_->guarded_uri_count_++];
+    context.handler = uri->handler;
+    context.user_ctx = uri->user_ctx;
+    httpd_uri_t guarded = *uri;
+    guarded.handler = &WebServer::guardedUriHandler;
+    guarded.user_ctx = &context;
+    const esp_err_t result = httpd_register_uri_handler(server, &guarded);
+    if (result != ESP_OK) --self_->guarded_uri_count_;
+    return result;
+}
+
+// All routes declared below pass through the same destination-address guard.
+#define httpd_register_uri_handler(server, uri) \
+    WebServer::registerGuardedHandler((server), (uri))
 WebServer::HttpdMonitorData WebServer::httpd_monitor_;
 esp_timer_handle_t WebServer::httpd_monitor_timer_ = nullptr;
 
@@ -742,6 +825,15 @@ static bool build_status_json(StaticJsonBuffer& cache) {
         if (!json_append_cstr(cache, len, "\"version\":")) { attempt++; required += 2048; continue; }
         if (!json_append_escaped(cache, len, esp_app_get_description()->version, true)) { attempt++; required += 2048; continue; }
         if (!json_append_char(cache, len, ',')) { attempt++; required += 2048; continue; }
+        if (!json_append_cstr(cache, len, "\"board\":")) { attempt++; required += 2048; continue; }
+        if (!json_append_escaped(cache, len, NetworkPolicy::boardName(), true)) { attempt++; required += 2048; continue; }
+        if (!json_append_cstr(cache, len, ",\"management_policy\":")) { attempt++; required += 2048; continue; }
+        if (!json_append_escaped(cache, len, NetworkPolicy::managementInterfaceName(), true)) { attempt++; required += 2048; continue; }
+        if (!json_append_cstr(cache, len, ",\"management_state\":")) { attempt++; required += 2048; continue; }
+        if (!json_append_escaped(cache, len, managementInterfaceStateName(currentManagementInterfaceState()), true)) { attempt++; required += 2048; continue; }
+        if (!json_append_cstr(cache, len, ",\"management_degraded\":")) { attempt++; required += 2048; continue; }
+        if (!json_append_cstr(cache, len, managementInterfaceIsDegraded() ? "true" : "false")) { attempt++; required += 2048; continue; }
+        if (!json_append_cstr(cache, len, ",\"assessment_interface\":\"ethernet\",")) { attempt++; required += 2048; continue; }
         if (!json_append_cstr(cache, len, "\"network\":{\"eth\":{\"ip\":")) { attempt++; required += 2048; continue; }
         if (!json_append_escaped(cache, len, eth_ip, true)) { attempt++; required += 2048; continue; }
         if (!json_append_cstr(cache, len, "},\"wifi\":{\"ip\":")) { attempt++; required += 2048; continue; }
@@ -2393,6 +2485,7 @@ bool WebServer::start(uint16_t port) {
 bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     if (!WebServer::self_) WebServer::self_ = this;
     if (http_ || https_server_) { LOG_WARNING(TAG_WEB, "start(): server already running"); return false; }
+    guarded_uri_count_ = 0;
 #if !ESP32_OT_WEB_HTTP_ONLY
     if (!tls_credentials_.ensurePresent()) {
         LOG_ERROR(TAG_WEB, "Unable to load or generate the runtime TLS identity");
@@ -2444,6 +2537,7 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     // Enable wildcard URI matching so we can install catch-all fallback handlers for debugging
     cfg.uri_match_fn = httpd_uri_match_wildcard;
+    cfg.open_fn = &WebServer::authorizeOpenSocket;
     cfg.server_port = port;
     cfg.lru_purge_enable = true;
     // HTTPS handshake (mbedTLS X.509/PEM/ECC) is expensive: keep connections alive to reduce new handshakes.
@@ -2678,6 +2772,7 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
         https_conf.httpd.stack_size = prof.stack_size;
         https_conf.httpd.max_open_sockets = prof.max_open_sockets;
         https_conf.httpd.backlog_conn = prof.backlog;
+        https_conf.httpd.open_fn = &WebServer::authorizeOpenSocket;
 
         err = httpd_ssl_start(&https_server_, &https_conf);
 
@@ -3314,7 +3409,7 @@ void WebServer::shutdown() {
         LOG_INFO(TAG_WEB, "WebServer HTTP stopped");
     }
     if (https_server_) {
-        httpd_stop(https_server_);
+        httpd_ssl_stop(https_server_);
         https_server_ = nullptr;
         LOG_INFO(TAG_WEB, "WebServer HTTPS stopped");
     }
@@ -6953,11 +7048,10 @@ esp_err_t WebServer::h_wifi_connect_result(httpd_req_t* req) {
             httpd_stop(self_->http_);
             self_->http_ = nullptr;
         }
+        self_->clearAllowedManagementAddress();
         self_->wifi_->stopAP();
-        esp_netif_t* sta_netif = self_->wifi_->sta();
-        if (sta_netif) {
-            self_->startWithTask(443, sta_netif);
-        }
+        // The central management controller will validate subnet separation and
+        // restart the server on the new STA address from the main loop.
 
         if (self_->wifi_transition_mutex_) {
             if (xSemaphoreTake(self_->wifi_transition_mutex_, pdMS_TO_TICKS(200)) == pdTRUE) {
@@ -9091,7 +9185,7 @@ esp_err_t WebServer::h_network_ping(httpd_req_t* req) {
             cJSON_AddNumberToObject(ping_result, "sequence", i + 1);
 
             // Create socket for connectivity test
-            int s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+            int s = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
             if (s < 0) {
                 cJSON_AddStringToObject(ping_result, "status", "socket_error");
                 cJSON_AddNumberToObject(ping_result, "time_ms", -1);
@@ -9163,6 +9257,18 @@ esp_err_t WebServer::h_network_status(httpd_req_t* req) {
 
     cJSON* response = cJSON_CreateObject();
     cJSON* interfaces = cJSON_CreateArray();
+    cJSON_AddStringToObject(response, "board", NetworkPolicy::boardName());
+    cJSON_AddStringToObject(response, "management_policy",
+                            NetworkPolicy::managementInterfaceName());
+    cJSON_AddStringToObject(response, "management_state",
+                            managementInterfaceStateName(currentManagementInterfaceState()));
+    cJSON_AddBoolToObject(response, "management_degraded",
+                          managementInterfaceIsDegraded());
+    cJSON_AddStringToObject(response, "assessment_interface", "ethernet");
+    cJSON* capabilities = cJSON_AddObjectToObject(response, "capabilities");
+    cJSON_AddBoolToObject(capabilities, "wifi", NetworkPolicy::hasWiFi());
+    cJSON_AddBoolToObject(capabilities, "remote_wifi", NetworkPolicy::usesRemoteWiFi());
+    cJSON_AddBoolToObject(capabilities, "https", ESP32_OT_WEB_HTTP_ONLY == 0);
 
     // Check WiFi STA
     esp_netif_t* wifi_sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
@@ -9239,13 +9345,16 @@ esp_err_t WebServer::h_network_status(httpd_req_t* req) {
 
     cJSON_AddItemToObject(response, "interfaces", interfaces);
 
-    // Determine primary interface
-    esp_netif_t* primary = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-    if (!primary || esp_netif_get_ip_info(primary, NULL) != ESP_OK) {
+    // Report the policy-selected management interface without cross-interface
+    // fallback, so status output cannot hide a degraded separation state.
+    esp_netif_t* primary = nullptr;
+    if (NetworkPolicy::managementUsesEthernet()) {
         primary = esp_netif_get_handle_from_ifkey("ETH_DEF");
-    }
-    if (!primary || esp_netif_get_ip_info(primary, NULL) != ESP_OK) {
-        primary = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    } else {
+        primary = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+        if (!primary || esp_netif_get_ip_info(primary, NULL) != ESP_OK) {
+            primary = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+        }
     }
 
     if (primary) {
@@ -12478,8 +12587,8 @@ esp_err_t WebServer::h_discovery_general_start(httpd_req_t* req) {
     cfg.ping_scan = ping_scan;
     cfg.emit_progress_events = true;
 
-    // Optional: bind interface selection (default ETH_DEF to preserve legacy behavior).
-    // Accepted: "eth", "wifi_sta", "wifi", "wifi_ap", "auto"
+    // Assessment is intentionally Ethernet-only. Reject stale clients that try
+    // to select AUTO or Wi-Fi instead of silently weakening network separation.
     const char* iface_raw = (iface_item && cJSON_IsString(iface_item)) ? cJSON_GetStringValue(iface_item) : nullptr;
     if (iface_raw && iface_raw[0]) {
         char iface_norm[16] = {0};
@@ -12492,16 +12601,13 @@ esp_err_t WebServer::h_discovery_general_start(httpd_req_t* req) {
         }
         iface_norm[n] = '\0';
 
-        if (strcmp(iface_norm, "auto") == 0) {
-            cfg.bind_ifkey = PSRAMUtils::createPSRAMString("AUTO");
-        } else if (strcmp(iface_norm, "eth") == 0 || strcmp(iface_norm, "ethernet") == 0) {
-            cfg.bind_ifkey = PSRAMUtils::createPSRAMString("ETH_DEF");
-        } else if (strcmp(iface_norm, "wifi") == 0 || strcmp(iface_norm, "wifi_sta") == 0 || strcmp(iface_norm, "sta") == 0) {
-            cfg.bind_ifkey = PSRAMUtils::createPSRAMString("WIFI_STA_DEF");
-        } else if (strcmp(iface_norm, "wifi_ap") == 0 || strcmp(iface_norm, "ap") == 0) {
-            cfg.bind_ifkey = PSRAMUtils::createPSRAMString("WIFI_AP_DEF");
+        if (strcmp(iface_norm, "eth") != 0 && strcmp(iface_norm, "ethernet") != 0) {
+            cJSON_Delete(json);
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                       "Assessment interface must be Ethernet");
         }
     }
+    cfg.bind_ifkey = PSRAMUtils::createPSRAMString("ETH_DEF");
 
     if (emit_progress_item && cJSON_IsBool(emit_progress_item)) {
         cfg.emit_progress_events = cJSON_IsTrue(emit_progress_item);

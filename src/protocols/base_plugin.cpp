@@ -4,6 +4,7 @@
 #include "../core/logging_system.h"
 #include "../core/plugin_manager.h"
 #include "../network/eth_l2_adapter.h"
+#include "../network/assessment_interface.h"
 #include "../assessment/discovery_manager.h"
 #include "../core/psram_json_parser.h"
 
@@ -582,38 +583,15 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
     cJSON* reachable_summary = cJSON_CreateArray();
     cJSON_AddItemToObject(root, "reachable_hosts", reachable_summary);
 
-    // Interface selection: default ETH_DEF (Ethernet-only, as before).
-    esp_netif_t* netif = nullptr;
-    const char* requested_ifkey = nullptr;
-    if (!cfg.bind_ifkey.empty()) {
-        requested_ifkey = cfg.bind_ifkey.c_str();
-    }
-    if (requested_ifkey && strcmp(requested_ifkey, "AUTO") == 0) {
-        // AUTO: try Ethernet then WiFi STA (not AP, to avoid scans from the setup network).
-        netif = esp_netif_get_handle_from_ifkey("ETH_DEF");
-        if (!netif) {
-            netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-        }
-        if (netif) {
-            requested_ifkey = esp_netif_get_ifkey(netif);
-        }
-    } else if (requested_ifkey && requested_ifkey[0] != '\0') {
-        netif = esp_netif_get_handle_from_ifkey(requested_ifkey);
-    } else {
-        requested_ifkey = "ETH_DEF";
-        netif = esp_netif_get_handle_from_ifkey("ETH_DEF");
-    }
+    // Assessment traffic is always Ethernet-only. bind_ifkey is retained in
+    // the public structure for configuration compatibility but cannot override
+    // the security boundary.
+    const char* requested_ifkey = "ETH_DEF";
+    esp_netif_t* netif = esp_netif_get_handle_from_ifkey("ETH_DEF");
     esp_netif_ip_info_t ip_info{};
     if (!netif || esp_netif_get_ip_info(netif, &ip_info) != ESP_OK || ip_info.ip.addr == 0) {
-        // Mantieni status legacy per default ETH_DEF, altrimenti usa status piu' generico.
-        if (requested_ifkey && strcmp(requested_ifkey, "ETH_DEF") == 0) {
-            cJSON_AddStringToObject(root, "status", "ethernet_not_ready");
-        } else {
-            cJSON_AddStringToObject(root, "status", "netif_not_ready");
-        }
-        if (requested_ifkey && requested_ifkey[0] != '\0') {
-            cJSON_AddStringToObject(root, "interface", requested_ifkey);
-        }
+        cJSON_AddStringToObject(root, "status", "ethernet_not_ready");
+        cJSON_AddStringToObject(root, "interface", requested_ifkey);
         char* js = cJSON_PrintUnformatted(root);
         std::string out = js ? std::string(js) : std::string("{}");
         if (js) heap_caps_free(js);
@@ -744,7 +722,7 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
             return;
         }
 
-        ctx.sock = ::socket(AF_INET, SOCK_STREAM, 0);
+        ctx.sock = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, 0);
         if (ctx.sock < 0) {
             ctx.code = SocketResultCode::SocketFail;
             ctx.errno_code = errno;
@@ -754,21 +732,6 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
         }
 
         configureSocketForDiscovery(ctx.sock);
-        struct sockaddr_in local{};
-        local.sin_family = AF_INET;
-        local.sin_addr.s_addr = ip_info.ip.addr;
-        local.sin_port = 0;
-        if (::bind(ctx.sock, (struct sockaddr*)&local, sizeof(local)) != 0) {
-            LOG_WARNINGF(TAG_GENERAL, "bind() failed on sock=%d errno=%d - the socket might be using the wrong interface", ctx.sock, errno);
-        }
-#ifdef SO_BINDTODEVICE
-        if (netif) {
-            struct ifreq ifr;
-            if_indextoname(esp_netif_get_netif_impl_index(netif), ifr.ifr_name);
-            (void)setsockopt(ctx.sock, SOL_SOCKET, SO_BINDTODEVICE, (void*)&ifr, sizeof(struct ifreq));
-        }
-#endif
-
         struct timeval tv{};
         tv.tv_sec = ctx.timeout_ms / 1000U;
         tv.tv_usec = (ctx.timeout_ms % 1000U) * 1000;

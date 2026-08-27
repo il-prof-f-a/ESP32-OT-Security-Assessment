@@ -25,6 +25,7 @@ extern "C" {
 #include "../core/plugin_manager.h"
 #include "../core/network_engine.h"
 #include "../network/ethernet_tx_if.h"
+#include "../network/assessment_interface.h"
 #include <string>
 #include <vector>
 #include <cstring>
@@ -401,28 +402,6 @@ static bool parseJsonIntFieldSimple(const std::string& s, const char* key, int& 
     return true;
 }
 
-static bool bindPreferredInterface(int sock, psram_string& out_ifkey) {
-    out_ifkey.clear();
-    const char* ifkeys[] = {"ETH_DEF", "WIFI_STA_DEF", "WIFI_AP_DEF"};
-    for (size_t i = 0; i < (sizeof(ifkeys) / sizeof(ifkeys[0])); ++i) {
-        esp_netif_t* netif = esp_netif_get_handle_from_ifkey(ifkeys[i]);
-        if (!netif) continue;
-        esp_netif_ip_info_t ip_info{};
-        if (esp_netif_get_ip_info(netif, &ip_info) != ESP_OK || ip_info.ip.addr == 0) {
-            continue;
-        }
-        struct sockaddr_in local{};
-        local.sin_family = AF_INET;
-        local.sin_addr.s_addr = ip_info.ip.addr;
-        local.sin_port = 0;
-        if (::bind(sock, (struct sockaddr*)&local, sizeof(local)) == 0) {
-            out_ifkey = PSRAMUtils::createPSRAMString(ifkeys[i]);
-            return true;
-        }
-    }
-    return false;
-}
-
 static bool recvExact(int sock, uint8_t* dst, size_t len, bool& out_timed_out) {
     out_timed_out = false;
     if (!dst || len == 0) {
@@ -727,15 +706,12 @@ void OPCUAPlugin::loadIDSRules(const std::string& rules_json) {
 bool OPCUAPlugin::activeDiscover(const std::string& ip, uint16_t port, uint32_t timeout_ms){
     // Minimal HEL → expect ACK. No GetEndpoints (requires full encoder).
     // Create TCP socket and connect
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    int sock = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) return false;
     // Bind to Ethernet interface (ETH_DEF)
     esp_netif_t* eth = esp_netif_get_handle_from_ifkey("ETH_DEF");
     esp_netif_ip_info_t eth_ip{};
     if (!eth || esp_netif_get_ip_info(eth, &eth_ip) != ESP_OK || eth_ip.ip.addr == 0) { close(sock); return false; }
-    struct sockaddr_in local{}; local.sin_family = AF_INET; local.sin_addr.s_addr = eth_ip.ip.addr; local.sin_port = 0;
-    ::bind(sock, (struct sockaddr*)&local, sizeof(local));
-
     struct sockaddr_in addr = {};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
@@ -1908,7 +1884,7 @@ bool OPCUAPlugin::connectToServer(const std::string& endpoint_url) {
     // Reset previous connection if any, then establish TCP session
     disconnectFromServer();
 
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    int sock = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
         LOG_ERROR("OPCUA_PLUGIN", "Failed to create socket for OPC UA connection");
         return false;
@@ -2023,7 +1999,7 @@ bool OPCUAPlugin::discoverEndpoints(const std::string& server_url, OPCUAServer& 
     }
 
     // Create TCP socket
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    int sock = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
         LOG_ERROR("OPCUA_PLUGIN", "Failed to create socket");
         return false;
@@ -2037,12 +2013,6 @@ bool OPCUAPlugin::discoverEndpoints(const std::string& server_url, OPCUAServer& 
         LOG_ERROR("OPCUA_PLUGIN", "Failed to get Ethernet interface");
         return false;
     }
-
-    struct sockaddr_in local{};
-    local.sin_family = AF_INET;
-    local.sin_addr.s_addr = eth_ip.ip.addr;
-    local.sin_port = 0;
-    ::bind(sock, (struct sockaddr*)&local, sizeof(local));
 
     // Connect to server
     struct sockaddr_in server_addr{};
@@ -2810,7 +2780,7 @@ FuzzResult OPCUAPlugin::execute(const FuzzJob& job, const FuzzTestCase& tc,
         }
     }
 
-    int sock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    int sock = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (sock < 0) {
         status_details = "socket_creation_failed";
         return FuzzResult::SOCKET_ERROR;
@@ -2824,11 +2794,7 @@ FuzzResult OPCUAPlugin::execute(const FuzzJob& job, const FuzzTestCase& tc,
     ::setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     ::setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
-    psram_string bound_if;
-    const bool bound_ok = bindPreferredInterface(sock, bound_if);
-    if (!bound_ok) {
-        bound_if = PSRAMUtils::createPSRAMString("AUTO");
-    }
+    const psram_string bound_if = PSRAMUtils::createPSRAMString("ETH_DEF");
 
     struct sockaddr_in remote {};
     memset(&remote, 0, sizeof(remote));

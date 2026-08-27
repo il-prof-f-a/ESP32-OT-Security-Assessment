@@ -5,6 +5,7 @@
 #include "../core/logging_system.h"
 #include "../core/psram_json_parser.h"
 #include "../security/security_manager.h"
+#include "../network/assessment_interface.h"
 
 extern "C" {
   #include "lwip/sockets.h"
@@ -414,7 +415,7 @@ bool S7Plugin::splitTarget(const std::string& t, std::string& ip, uint16_t& port
 
 bool S7Plugin::doHandshake(const std::string& ip, uint16_t port, uint16_t& pdu, std::string& note) {
     pdu = 0; note.clear();
-  int sock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  int sock = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (sock < 0) { note = "socket_error"; return false; }
   configureTcpSocket(sock);
   struct timeval tv{.tv_sec=2,.tv_usec=0};
@@ -427,9 +428,6 @@ bool S7Plugin::doHandshake(const std::string& ip, uint16_t port, uint16_t& pdu, 
   if (!eth || esp_netif_get_ip_info(eth, &eth_ip) != ESP_OK || eth_ip.ip.addr == 0) {
       ::close(sock); note = "ethernet_not_ready"; return false;
   }
-  sockaddr_in local{}; local.sin_family = AF_INET; local.sin_addr.s_addr = eth_ip.ip.addr; local.sin_port = 0;
-  ::bind(sock, (sockaddr*)&local, sizeof(local));
-
   sockaddr_in sa{}; sa.sin_family=AF_INET; sa.sin_port=htons(port);
   if (::inet_aton(ip.c_str(), &sa.sin_addr)==0) { ::close(sock); note="bad_ip"; return false; }
   if (::connect(sock,(sockaddr*)&sa,sizeof(sa))!=0) { ::close(sock); note="connect_fail"; return false; }
@@ -557,17 +555,12 @@ bool S7Plugin::activeScanJSON(const std::string& target,
     }
 
     auto make_sock = [&](int& sock_out) -> bool {
-        sock_out = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        sock_out = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (sock_out < 0) return false;
         configureTcpSocket(sock_out);
         struct timeval tv{.tv_sec = (int)(io_timeout_ms / 1000U), .tv_usec = (int)((io_timeout_ms % 1000U) * 1000U)};
         ::setsockopt(sock_out, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
         ::setsockopt(sock_out, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-        sockaddr_in local{};
-        local.sin_family = AF_INET;
-        local.sin_addr.s_addr = eth_ip.ip.addr;
-        local.sin_port = 0;
-        (void)::bind(sock_out, (sockaddr*)&local, sizeof(local));
         return true;
     };
 
@@ -843,54 +836,15 @@ static bool s7_connect_setup_best_effort(S7Plugin* self,
         return false;
     }
 
-    // Choose interface with target-aware policy:
-    // 1) Prefer interface that has IP and same subnet of target.
-    // 2) Fallback to ETH_DEF if up, then WIFI_STA_DEF.
+    // Assessment traffic is always Ethernet-bound. Management connectivity must
+    // never become an implicit fallback for protocol operations.
     const char* ifkey = "ETH_DEF";
-    esp_netif_t* netif = nullptr;
     esp_netif_ip_info_t ip_info{};
-    esp_netif_ip_info_t eth_info{};
-    esp_netif_ip_info_t wifi_info{};
-    bool eth_ready = false;
-    bool wifi_ready = false;
-
     esp_netif_t* eth = esp_netif_get_handle_from_ifkey("ETH_DEF");
-    if (eth && esp_netif_get_ip_info(eth, &eth_info) == ESP_OK && eth_info.ip.addr != 0) {
-        eth_ready = true;
-    }
-    esp_netif_t* wifi = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-    if (wifi && esp_netif_get_ip_info(wifi, &wifi_info) == ESP_OK && wifi_info.ip.addr != 0) {
-        wifi_ready = true;
-    }
-
-    auto same_subnet = [&](const esp_netif_ip_info_t& info) -> bool {
-        if (info.netmask.addr == 0 || info.ip.addr == 0) return false;
-        return ((sa.sin_addr.s_addr & info.netmask.addr) == (info.ip.addr & info.netmask.addr));
-    };
-
-    if (eth_ready && same_subnet(eth_info)) {
-        netif = eth;
-        ip_info = eth_info;
-        ifkey = "ETH_DEF";
-    } else if (wifi_ready && same_subnet(wifi_info)) {
-        netif = wifi;
-        ip_info = wifi_info;
-        ifkey = "WIFI_STA_DEF";
-    } else if (eth_ready) {
-        netif = eth;
-        ip_info = eth_info;
-        ifkey = "ETH_DEF";
-    } else if (wifi_ready) {
-        netif = wifi;
-        ip_info = wifi_info;
-        ifkey = "WIFI_STA_DEF";
-    }
-
     out_ifkey = PSRAMUtils::createPSRAMString(ifkey);
-    if (!netif || ip_info.ip.addr == 0) {
-        out_error_json = PSRAMUtils::createPSRAMString("{\"error\":\"netif_not_ready\",\"interface\":\"");
-        out_error_json += PSRAMUtils::createPSRAMString(ifkey);
-        out_error_json += PSRAMUtils::createPSRAMString("\"}");
+    if (!eth || esp_netif_get_ip_info(eth, &ip_info) != ESP_OK || ip_info.ip.addr == 0) {
+        out_error_json = PSRAMUtils::createPSRAMString(
+            "{\"error\":\"ethernet_not_ready\",\"interface\":\"ETH_DEF\"}");
         return false;
     }
 
@@ -899,17 +853,12 @@ static bool s7_connect_setup_best_effort(S7Plugin* self,
     if (io_timeout_ms > 15000) io_timeout_ms = 15000;
 
     auto make_sock = [&](int& sock_out) -> bool {
-        sock_out = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        sock_out = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (sock_out < 0) return false;
         configureTcpSocket(sock_out);
         struct timeval tv{.tv_sec = (int)(io_timeout_ms / 1000U), .tv_usec = (int)((io_timeout_ms % 1000U) * 1000U)};
         ::setsockopt(sock_out, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
         ::setsockopt(sock_out, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-        sockaddr_in local{};
-        local.sin_family = AF_INET;
-        local.sin_addr.s_addr = ip_info.ip.addr;
-        local.sin_port = 0;
-        (void)::bind(sock_out, (sockaddr*)&local, sizeof(local));
         return true;
     };
 
@@ -1627,7 +1576,7 @@ bool S7Plugin::clientOpsPSRAM(const psram_string& request_json, psram_string& ou
     rep += PSRAMUtils::createPSRAMString(",\"tcp_connection_ok\":");
     rep += PSRAMUtils::createPSRAMString(tcp_connection_ok ? "true" : "false");
     rep += PSRAMUtils::createPSRAMString(",\"interface\":\"");
-    json_append_escaped(rep, ifkey_json.empty() ? "AUTO" : ifkey_json.c_str());
+    json_append_escaped(rep, ifkey_json.empty() ? "ETH_DEF" : ifkey_json.c_str());
     rep += PSRAMUtils::createPSRAMString("\"");
     rep += PSRAMUtils::createPSRAMString(",\"connection_attempts\":");
     rep += attempts_json.empty() ? PSRAMUtils::createPSRAMString("[]") : attempts_json;
@@ -2129,20 +2078,7 @@ bool S7Plugin::doVulnerabilityScanPSRAM(const psram_string& target,
         return false;
     }
 
-    // Best-effort: track which netif is up for reporting purposes.
-    const char* ifkey = "AUTO";
-    {
-        esp_netif_ip_info_t ip_info{};
-        esp_netif_t* netif = esp_netif_get_handle_from_ifkey("ETH_DEF");
-        if (netif && esp_netif_get_ip_info(netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0) {
-            ifkey = "ETH_DEF";
-        } else {
-            netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-            if (netif && esp_netif_get_ip_info(netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0) {
-                ifkey = "WIFI_STA_DEF";
-            }
-        }
-    }
+    const char* ifkey = "ETH_DEF";
 
     const uint64_t t0_ms = (uint64_t)(esp_timer_get_time() / 1000ULL);
 
@@ -2545,7 +2481,7 @@ std::string S7Plugin::legacyDoVulnerabilityScan(const std::string& target) {
     }
 
     // Create socket for vulnerability testing
-    int sock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    int sock = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (sock < 0) {
         scans_fail_++;
         return "";
@@ -2564,12 +2500,6 @@ std::string S7Plugin::legacyDoVulnerabilityScan(const std::string& target) {
         scans_fail_++;
         return "";
     }
-
-    sockaddr_in local{};
-    local.sin_family = AF_INET;
-    local.sin_addr.s_addr = eth_ip.ip.addr;
-    local.sin_port = 0;
-    ::bind(sock, (sockaddr*)&local, sizeof(local));
 
     // Connect to target
     sockaddr_in sa{};
@@ -3349,7 +3279,7 @@ FuzzResult S7Plugin::execute(const FuzzJob& job, const FuzzTestCase& tc,
             status_details = "setup_comm_failed";
         }
     } else {
-        sock = socket(AF_INET, SOCK_STREAM, 0);
+        sock = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, 0);
         if (sock < 0) {
             status_details = "socket_creation_failed errno:" + std::to_string(errno);
             return FuzzResult::SOCKET_ERROR;
@@ -3362,9 +3292,6 @@ FuzzResult S7Plugin::execute(const FuzzJob& job, const FuzzTestCase& tc,
         if (!eth || esp_netif_get_ip_info(eth, &eth_ip) != ESP_OK || eth_ip.ip.addr == 0) {
             close(sock); status_details = "ethernet_not_ready"; return FuzzResult::CONNECTION_FAILED;
         }
-        struct sockaddr_in local{}; local.sin_family = AF_INET; local.sin_addr.s_addr = eth_ip.ip.addr; local.sin_port = 0;
-        ::bind(sock, (struct sockaddr*)&local, sizeof(local));
-
         struct sockaddr_in addr = {};
         addr.sin_family = AF_INET;
         addr.sin_port = htons(port);

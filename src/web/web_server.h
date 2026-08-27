@@ -55,6 +55,9 @@ public:
     bool start(uint16_t port = 80);
     bool startOnInterface(uint16_t port, esp_netif_t* netif);
     void shutdown();
+    bool isRunning() const { return http_ != nullptr || https_server_ != nullptr; }
+    void setAllowedManagementAddress(uint32_t ipv4_network_order);
+    void clearAllowedManagementAddress();
 
     static WebServer* instance() { return self_; }
     static const WebServer* instanceConst() { return self_; }
@@ -110,6 +113,17 @@ public:
 private:
     friend void webserver_httpd_monitor_note_request(httpd_req_t* req);
     friend void webserver_httpd_monitor_note_response(httpd_req_t* req, int status_code, const char* auth_status);
+
+    struct GuardedUriContext {
+        esp_err_t (*handler)(httpd_req_t*) = nullptr;
+        void* user_ctx = nullptr;
+    };
+
+    static esp_err_t authorizeOpenSocket(httpd_handle_t server, int sockfd);
+    static bool authorizeRequestInterface(httpd_req_t* req);
+    static esp_err_t guardedUriHandler(httpd_req_t* req);
+    static esp_err_t registerGuardedHandler(httpd_handle_t server,
+                                            const httpd_uri_t* uri);
 
     static esp_err_t h_root(httpd_req_t* req);
     static esp_err_t h_status(httpd_req_t* req);
@@ -411,6 +425,10 @@ private:
     LogFileManager* log_file_manager_ = nullptr;
 
     httpd_handle_t http_ = nullptr;
+    std::atomic<uint32_t> allowed_management_ipv4_{0};
+    static constexpr size_t kMaxGuardedUriContexts = 256;
+    GuardedUriContext guarded_uri_contexts_[kMaxGuardedUriContexts]{};
+    size_t guarded_uri_count_ = 0;
 
     // WiFi connection transition state
     SemaphoreHandle_t wifi_transition_mutex_ = nullptr;

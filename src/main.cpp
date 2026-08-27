@@ -59,6 +59,7 @@ extern "C" {
 #include "network/ethernet_manager.h"
 #include "network/wifi_manager.h"
 #include "network/eth_l2_adapter.h"
+#include "network/management_interface_controller.h"
 #include "lwip/ip4_addr.h"
 #include "lwip/inet.h"
 #include "cJSON.h"
@@ -949,63 +950,12 @@ extern "C" void app_main(void) {
     // starts after fallback path (AP/STA late start).
     web.attachFull(&pm, &ids, &eth, &wifi, scannerPtr, &net);
 
-    // Try best-effort early start: bind to ANY if no IP yet
-    bool early_started = false;
-    esp_netif_t* wifi_sta_netif_early = wifi.sta();
-    if (wifi_sta_netif_early) {
-        esp_netif_ip_info_t ipi;
-        if (esp_netif_get_ip_info(wifi_sta_netif_early, &ipi) == ESP_OK && ipi.ip.addr != 0) {
-            early_started = web.startWithTask(443, wifi_sta_netif_early);
-            LOG_INFO(TAG, "HTTP server early started on WiFi STA");
-        }
-    }
-
-    //MemoryMonitor::checkStatus("After WebServer Init");
-
-    // If not started yet, retry to start on WiFi interfaces now
-    bool web_started = (early_started);
-
-    // Try WiFi STA
-    if (!web_started) {
-        esp_netif_t* wifi_sta_netif = wifi.sta();
-        if (wifi_sta_netif) {
-            esp_netif_ip_info_t wifi_ip_info;
-            if (esp_netif_get_ip_info(wifi_sta_netif, &wifi_ip_info) == ESP_OK && wifi_ip_info.ip.addr != 0) {
-                if (web.startWithTask(443, wifi_sta_netif)) {
-                    LOG_INFOF(TAG, "HTTP server started on WiFi STA: http://%s:80/ (Web Management)", inet_ntoa(wifi_ip_info.ip));
-                    web_started = true;
-                }
-            }
-        }
-    }
-
-    // If STA failed, try WiFi AP
-    if (!web_started) {
-        esp_netif_t* wifi_ap_netif = wifi.ap();
-        if (wifi_ap_netif) {
-            esp_netif_ip_info_t ap_ip_info;
-            if (esp_netif_get_ip_info(wifi_ap_netif, &ap_ip_info) == ESP_OK && ap_ip_info.ip.addr != 0) {
-                if (web.startWithTask(443, wifi_ap_netif)) {
-                    LOG_INFOF(TAG, "HTTP server started on WiFi AP: http://%s/ (Web Management)", inet_ntoa(ap_ip_info.ip));
-                    web_started = true;
-                }
-            }
-        }
-    }
-
-    // Try Ethernet last (reliable for Ethernet-only boards such as T-POE Pro
-    // and ESP32-P4). The actual port/scheme (HTTP 80 vs HTTPS 443) is chosen
-    // inside startOnInterface based on ESP32_OT_WEB_HTTP_ONLY.
-    if (!web_started && eth.netif() && eth.hasValidIP()) {
-        LOG_INFO(TAG, "Attempting to start WebServer on Ethernet interface...");
-        if (web.startWithTask(443, eth.netif())) {
-            psram_string eth_ip = eth.getIP();
-            LOG_INFOF(TAG, "Web server started on Ethernet (%s)", eth_ip.c_str());
-            web_started = true;
-        } else {
-            LOG_ERROR(TAG, "Failed to start WebServer on Ethernet interface");
-        }
-    }
+    // A single fail-closed controller owns management-interface selection.
+    // Wi-Fi-only profiles never fall back to Ethernet, and overlapping IT/OT
+    // subnets disable management until the configuration is safe again.
+    static ManagementInterfaceController management_controller(web, eth, wifi);
+    management_controller.tick();
+    const bool web_started = web.isRunning();
 
     if (!web_started) {
         LOG_ERROR(TAG, " HTTP server failed to start on all interfaces (Ethernet, WiFi STA, WiFi AP)");
@@ -1048,6 +998,7 @@ extern "C" void app_main(void) {
     uint32_t last_memory_check = 0;
     while (true) {
         TimeManager::processPendingSync();
+        management_controller.tick();
 
         uint32_t now = esp_timer_get_time() / 1000000; // seconds
 
