@@ -33,6 +33,9 @@ TARGETS = {
     "waveshare-esp32p4-eth": TargetConfig(
         chip="esp32p4", environment="waveshare-esp32p4-eth"
     ),
+    "guition-jc-esp32p4-m3-dev": TargetConfig(
+        chip="esp32p4", environment="guition-jc-esp32p4-m3-dev"
+    ),
 }
 
 
@@ -188,6 +191,7 @@ def build_flash_command(
         "--baud",
         str(baud),
         "write-flash",
+        "--no-progress",
         "--flash-mode",
         mode,
         "--flash-freq",

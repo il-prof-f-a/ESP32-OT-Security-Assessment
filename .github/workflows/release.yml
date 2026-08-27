@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [t-poe-pro, esp32-s3-eth, waveshare-esp32p4-eth]
+        environment: [t-poe-pro, esp32-s3-eth, waveshare-esp32p4-eth, guition-jc-esp32p4-m3-dev]
     env:
       USERPROFILE: /home/runner
       PYTHONUTF8: "1"
@@ -43,6 +43,16 @@ jobs:
         run: |
           BD="$USERPROFILE/.platformio/build/ESP32-OT-Security-Assessment/${{ matrix.environment }}"
           STAGE="$(mktemp -d)"
+          C6_STAGE=""
+
+          if [[ "${{ matrix.environment }}" == "guition-jc-esp32p4-m3-dev" ]]; then
+            pio run --project-dir coprocessor/esp32c6 -e esp32c6-coprocessor
+            C6_BD="$USERPROFILE/.platformio/build/ESP32-OT-Security-Assessment-coprocessor/esp32c6-coprocessor"
+            C6_STAGE="$(mktemp -d)"
+            for f in bootloader.bin partitions.bin firmware.bin ota_data_initial.bin flasher_args.json; do
+              cp "$C6_BD/$f" "$C6_STAGE/$f"
+            done
+          fi
 
           # 1. Build the firmware (bootloader + partition table + app).
           pio run -e "${{ matrix.environment }}"
@@ -56,11 +66,16 @@ jobs:
           cp "$BD/littlefs.bin" "$STAGE/littlefs.bin" 2>/dev/null || true
 
           # 3. Package from the staged directory.
+          PACKAGE_ARGS=()
+          if [[ -n "$C6_STAGE" ]]; then
+            PACKAGE_ARGS+=(--c6-build-dir "$C6_STAGE")
+          fi
           python scripts/package_release.py \
             --environment "${{ matrix.environment }}" \
             --build-dir "$STAGE" \
             --version "$(tr -d '\r\n' < VERSION)" \
-            --output-dir dist
+            --output-dir dist \
+            "${PACKAGE_ARGS[@]}"
           python scripts/check_release_secrets.py --path dist
       - uses: actions/upload-artifact@v4
         with:

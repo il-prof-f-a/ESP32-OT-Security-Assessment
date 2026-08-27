@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="620" viewBox="0 0 1100 620" role="img" aria-labelledby="title desc">
+  <title id="title">GUITION JC-ESP32P4-M3-DEV network pinout</title>
+  <desc id="desc">Firmware-relevant ESP32-P4 Ethernet and ESP32-C6 SDIO connections.</desc>
+  <rect width="1100" height="620" fill="#0b1220"/>
+  <text x="550" y="54" fill="#f8fafc" font-family="sans-serif" font-size="30" text-anchor="middle">JC-ESP32P4-M3-DEV — network pinout used by this firmware</text>
+  <rect x="60" y="100" width="430" height="430" rx="24" fill="#172033" stroke="#38bdf8" stroke-width="3"/>
+  <text x="275" y="145" fill="#7dd3fc" font-family="sans-serif" font-size="28" text-anchor="middle">ESP32-P4</text>
+  <text x="95" y="195" fill="#f8fafc" font-family="monospace" font-size="22">Ethernet IP101 (PHY address 1)</text>
+  <text x="95" y="240" fill="#cbd5e1" font-family="monospace" font-size="21">MDC / GPIO31</text>
+  <text x="95" y="278" fill="#cbd5e1" font-family="monospace" font-size="21">MDIO / GPIO52</text>
+  <text x="95" y="316" fill="#cbd5e1" font-family="monospace" font-size="21">PHY power-reset / GPIO51</text>
+  <text x="95" y="354" fill="#cbd5e1" font-family="monospace" font-size="21">RMII external clock / GPIO50</text>
+  <text x="95" y="420" fill="#fbbf24" font-family="sans-serif" font-size="19">OT assessment interface</text>
+  <text x="95" y="452" fill="#94a3b8" font-family="sans-serif" font-size="18">All scanner and IDS egress is fail-closed to ETH_DEF.</text>
+  <rect x="610" y="100" width="430" height="430" rx="24" fill="#172033" stroke="#a78bfa" stroke-width="3"/>
+  <text x="825" y="145" fill="#c4b5fd" font-family="sans-serif" font-size="28" text-anchor="middle">ESP32-C6 remote Wi-Fi</text>
+  <text x="645" y="195" fill="#f8fafc" font-family="monospace" font-size="22">P4-side ESP-Hosted SDIO</text>
+  <text x="645" y="240" fill="#cbd5e1" font-family="monospace" font-size="21">Reset / GPIO54</text>
+  <text x="645" y="278" fill="#cbd5e1" font-family="monospace" font-size="21">CMD / GPIO19 · CLK / GPIO18</text>
+  <text x="645" y="316" fill="#cbd5e1" font-family="monospace" font-size="21">D0 / GPIO14 · D1 / GPIO15</text>
+  <text x="645" y="354" fill="#cbd5e1" font-family="monospace" font-size="21">D2 / GPIO16 · D3 / GPIO17</text>
+  <text x="645" y="420" fill="#fbbf24" font-family="sans-serif" font-size="19">IT management interface</text>
+  <text x="645" y="452" fill="#94a3b8" font-family="sans-serif" font-size="18">HTTPS is allowed only on the remote Wi-Fi address.</text>
+  <path d="M490 300 H610" stroke="#64748b" stroke-width="4" stroke-dasharray="10 8"/>
+  <text x="550" y="584" fill="#94a3b8" font-family="sans-serif" font-size="17" text-anchor="middle">Provisional until verified on the exact purchased PCB revision; not a complete board pinout.</text>
+</svg>

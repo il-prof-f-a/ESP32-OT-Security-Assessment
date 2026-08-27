@@ -6,8 +6,9 @@ wrong for the ESP32-P4 (which uses 0x2000). flash_esptool.py reads every
 offset and flash setting from flasher_args.json, including LittleFS, and forces
 UTF-8 so the esptool progress bar does not crash under cp1252.
 
-PlatformIO runs the upload target only after a successful build, so we pass
---no-build.
+PlatformIO's upload target does not build LittleFS. Let flash_esptool.py run
+its firmware and buildfs steps so the manifest always has every required
+artifact before the ESP32-P4 is written.
 """
 Import("env")
 
@@ -16,5 +17,5 @@ env.Replace(
     # though partitions.csv and flasher_args.json place this app at 0x200000.
     ESP32_APP_OFFSET="0x200000",
     UPLOADCMD='$PYTHONEXE "$PROJECT_DIR/scripts/flash_esptool.py" '
-              '--target waveshare-esp32p4-eth --port $UPLOAD_PORT --no-build'
+              '--target $PIOENV --port $UPLOAD_PORT'
 )

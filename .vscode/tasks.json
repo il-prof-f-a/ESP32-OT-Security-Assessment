@@ -35,7 +35,7 @@
     {
       "id": "target",
       "type": "pickString",
-      "options": ["t-poe-pro", "esp32-s3-eth", "waveshare-esp32p4-eth"],
+      "options": ["t-poe-pro", "esp32-s3-eth", "waveshare-esp32p4-eth", "guition-jc-esp32p4-m3-dev"],
       "description": "Board target",
       "default": "waveshare-esp32p4-eth"
     },

@@ -26,6 +26,7 @@ experimental `v0.1.0` interface; the values shown are examples and may differ fr
 | LILYGO T-POE Pro | Firmware starts and operates in current tests | **HTTP only** | HTTPS currently causes instability, so credentials and management traffic are not encrypted. |
 | Waveshare ESP32-S3-ETH | Functional on a limited set of tested networks | HTTPS with a per-device self-signed certificate | Network compatibility is limited; there is no native 24 V input and no GPIO screw-terminal block. |
 | Waveshare ESP32-P4-ETH | Best current functional result | HTTPS with a per-device self-signed certificate | No Wi-Fi: management is exposed on the same Ethernet subnet as the OT network, so management/OT separation is not achieved. |
+| GUITION JC-ESP32P4-M3-DEV | **Experimental; build-validated, not hardware-validated** | HTTPS over ESP32-C6 remote Wi-Fi | Requires a separately flashed C6 image; PHY/SDIO mappings and full runtime behavior still require validation on the purchased PCB revision. |
 
 ### LILYGO T-POE Pro
 
@@ -81,6 +82,27 @@ same Ethernet subnet being assessed.
 - [Manufacturer product page and official purchase link](https://www.waveshare.com/esp32-p4-eth.htm)
 - [Hardware image attribution](docs/assets/hardware/SOURCES.md)
 
+### GUITION JC-ESP32P4-M3-DEV (experimental)
+
+<p>
+  <img src="docs/assets/hardware/guition-jc-esp32p4-m3-dev-photo.webp" alt="GUITION JC-ESP32P4-M3-DEV board" width="520">
+</p>
+
+This dual-chip target combines an ESP32-P4 with 32 MB PSRAM and 16 MB flash, an IP101 Ethernet
+PHY for OT assessment, and an ESP32-C6 connected over SDIO for Wi-Fi-only management. The P4 and
+C6 images are version-pinned and built separately. The target compiles, but it must remain marked
+experimental until physical boot, networking, isolation and soak tests pass.
+
+<p>
+  <img src="docs/assets/hardware/guition-jc-esp32p4-m3-dev-network-pinout.svg" alt="GUITION network pinout used by the firmware" width="720">
+</p>
+
+- [Detailed hardware profile and pinout](docs/hardware/guition-jc-esp32p4-m3-dev.md)
+- [GUITION manufacturer product page](https://www.guition.com/esp32p4-display-module/esp32p4-display-module)
+- [Purchase listing for the documented model](https://www.aliexpress.com/item/1005009511796128.html)
+- [Two-chip build, flashing and recovery guide](docs/installation/guition-two-chip.md)
+- [Network isolation model and residual exposure](docs/security/network-isolation.md)
+
 ## Quick installation
 
 Requirements are Git, Python 3.10 or newer, and either Visual Studio Code with the
@@ -103,7 +125,8 @@ powershell -ExecutionPolicy Bypass -File scripts/setup_platformio.ps1
 ```
 
 Open this repository folder in VS Code after setup. PlatformIO should show these environments:
-`t-poe-pro`, `esp32-s3-eth`, and `waveshare-esp32p4-eth`.
+`t-poe-pro`, `esp32-s3-eth`, `waveshare-esp32p4-eth`, and
+`guition-jc-esp32p4-m3-dev`.
 
 ## Build, upload and monitor
 
@@ -113,6 +136,7 @@ Build any target from the PlatformIO sidebar or a terminal:
 pio run -e t-poe-pro
 pio run -e esp32-s3-eth
 pio run -e waveshare-esp32p4-eth
+pio run -e guition-jc-esp32p4-m3-dev
 ```
 
 Example upload and serial monitor on Windows:
@@ -135,6 +159,11 @@ scripts/build_flash.ps1 -Target t-poe-pro -Port COM10
 If automatic reset fails, hold the board's BOOT button, start upload, release BOOT when esptool
 connects, and then reset the device. This is the board's bootloader mode.
 
+On Windows, a checkout path without spaces is recommended for fully byte-for-byte reproducible
+images. The build still removes local user-profile paths when the repository is under a path with
+spaces; it filters only compiler prefix-map entries that the current PlatformIO/GCC response-file
+chain cannot forward correctly on Windows.
+
 ### Explicit esptool workflow
 
 The helper builds the firmware and LittleFS, then writes every entry listed in the target's
@@ -148,19 +177,30 @@ The current ESP32 layout uses bootloader `0x1000`, partition table `0x8000`, and
 `0x200000`; ESP32-P4 uses a different bootloader offset. Do not copy offsets or flash-mode values
 between boards. `flasher_args.json` and each release manifest are authoritative.
 
+The Guition board also requires its matching ESP32-C6 coprocessor image. Build and flash the two
+chips through explicitly identified, different serial ports:
+
+```powershell
+./scripts/guition_two_chip.ps1 -P4Port COM10 -C6Port COM12 -FlashC6 -FlashP4
+```
+
+See the [GUITION two-chip guide](docs/installation/guition-two-chip.md) before connecting either
+programming interface.
+
 ### ESP32-P4 build paths
 
 The VS Code/PlatformIO environment is fully supported by this repository:
 
 ```powershell
 pio run -e waveshare-esp32p4-eth
+pio run -e guition-jc-esp32p4-m3-dev
 ```
 
 It pins the tested `pioarduino/platform-espressif32` revision because stock PlatformIO does not
 yet provide the required ESP32-P4 toolchain mapping. A native ESP-IDF 5.5 build remains available:
 
 ```bash
-IDF_TARGET=esp32p4 idf.py -B build/waveshare-esp32p4-eth build
+IDF_TARGET=esp32p4 idf.py -B build/waveshare-esp32p4-eth -D ESP32_OT_BOARD=waveshare-esp32p4-eth build
 ```
 
 The supplied P4 configuration targets pre-v3 ESP32-P4 silicon. Verify the chip revision before
@@ -179,6 +219,9 @@ AP password and HTTPS fingerprint are displayed.
   uses HTTPS.
 - ESP32-P4-ETH starts Ethernet with DHCP. Find the HTTPS address and certificate fingerprint on
   UART and connect from the same Ethernet subnet.
+- GUITION uses the separately flashed C6 for its Wi-Fi setup and management path. It never falls
+  back to Ethernet; if C6/Wi-Fi is unavailable, management remains unavailable. This path has not
+  yet completed physical validation.
 - Set a unique administrator password of at least 16 bytes and select the network settings. Five
   invalid token attempts in one minute lock setup for 60 seconds. The session expires after 15
   minutes.
@@ -264,7 +307,7 @@ all flash entries from the build manifest.
 
 ## Downloading verified releases
 
-Each prerelease contains four assets per target:
+Each prerelease contains four primary assets per target:
 
 - `esp32-ot-security-<target>-v<version>-factory.bin`
 - `esp32-ot-security-<target>-v<version>-app.bin`
@@ -281,6 +324,10 @@ sha256sum -c SHA256SUMS.txt
 The manifest records the target chip, flash mode/size, every offset and every SHA-256 digest. The
 ZIP contains the individual flash files and manifest for advanced esptool use.
 
+The Guition release additionally contains board-prefixed ESP32-C6 app/factory images and raw flash
+entries. Its manifest records the mandatory ESP-Hosted `3.0.6` / ESP-IDF `5.5.3` pairing and C6
+offsets. Packaging fails rather than publishing a Guition P4 image without its matching C6 image.
+
 ## Testing
 
 Run host-side tests and the release secret gate:
@@ -290,7 +337,7 @@ python -m unittest discover -s tests -p "test_*.py" -v
 python scripts/check_release_secrets.py --repository .
 ```
 
-Firmware/build changes must compile all three PlatformIO environments. Hardware claims must state
+Firmware/build changes must compile all four PlatformIO environments and the Guition C6 project. Hardware claims must state
 the exact board, network topology and firmware revision used.
 
 ## Repository layout

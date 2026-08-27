@@ -26,12 +26,69 @@ class BuildIntegrationTests(unittest.TestCase):
     def test_every_platformio_environment_generates_public_build_assets_first(self):
         platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
         sections = re.split(r"(?=^\[env:)", platformio, flags=re.MULTILINE)[1:]
-        self.assertEqual(len(sections), 3)
+        self.assertEqual(len(sections), 4)
         for section in sections:
             self.assertIn("pre:scripts/platformio_build_assets.py", section)
             self.assertNotIn("platformio_provision.py", section)
 
         self.assertIn("[env:waveshare-esp32p4-eth]", platformio)
+        self.assertIn("[env:guition-jc-esp32p4-m3-dev]", platformio)
+
+    def test_every_target_declares_an_explicit_management_policy(self):
+        platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
+        expected = {
+            "t-poe-pro": "ESP32_OT_MGMT_WIFI_ONLY",
+            "esp32-s3-eth": "ESP32_OT_MGMT_WIFI_ONLY",
+            "waveshare-esp32p4-eth": "ESP32_OT_MGMT_ETHERNET_ONLY",
+            "guition-jc-esp32p4-m3-dev": "ESP32_OT_MGMT_WIFI_ONLY",
+        }
+
+        for environment, policy in expected.items():
+            with self.subTest(environment=environment):
+                section = platformio.split(f"[env:{environment}]", 1)[1].split(
+                    "[env:", 1
+                )[0]
+                self.assertIn(f"-DESP32_OT_MGMT_POLICY={policy}", section)
+
+        guition = platformio.split("[env:guition-jc-esp32p4-m3-dev]", 1)[1]
+        self.assertIn("-DESP32_OT_WIFI_BACKEND_REMOTE=1", guition)
+        self.assertIn("-DESP32_OT_WEB_HTTP_ONLY=0", guition)
+
+    def test_guition_p4_environment_uses_a_dedicated_16mb_board_definition(self):
+        platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
+        metadata_path = PROJECT_ROOT / "boards/guition-jc-esp32p4-m3-dev.json"
+        self.assertTrue(metadata_path.is_file())
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        guition = platformio.split("[env:guition-jc-esp32p4-m3-dev]", 1)[1]
+
+        self.assertIn("board = guition-jc-esp32p4-m3-dev", guition)
+        self.assertIn("board_build.flash_size = 16MB", guition)
+        self.assertIn("-DBOARD_GUITION_JC_ESP32P4_M3_DEV", guition)
+        self.assertEqual(metadata["upload"]["flash_size"], "16MB")
+        self.assertEqual(metadata["vendor"], "GUITION")
+
+    def test_direct_p4_build_requires_an_explicit_board_profile(self):
+        cmake = (PROJECT_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+
+        self.assertIn('set(ESP32_OT_BOARD "" CACHE STRING', cmake)
+        self.assertIn('ESP32_OT_BOARD must be set for IDF_TARGET=esp32p4', cmake)
+        self.assertIn('STREQUAL "waveshare-esp32p4-eth"', cmake)
+        self.assertIn('STREQUAL "guition-jc-esp32p4-m3-dev"', cmake)
+
+    def test_platformio_passes_each_p4_identity_to_cmake(self):
+        platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
+        for environment in (
+            "waveshare-esp32p4-eth",
+            "guition-jc-esp32p4-m3-dev",
+        ):
+            with self.subTest(environment=environment):
+                section = platformio.split(f"[env:{environment}]", 1)[1].split(
+                    "[env:", 1
+                )[0]
+                self.assertIn(
+                    f"board_build.cmake_extra_args = -DESP32_OT_BOARD={environment}",
+                    section,
+                )
 
     def test_platformio_p4_environment_uses_a_local_waveshare_board_definition(self):
         platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
@@ -54,6 +111,23 @@ class BuildIntegrationTests(unittest.TestCase):
     def test_p4_combined_image_uses_the_partition_table_application_offset(self):
         upload_script = (PROJECT_ROOT / "scripts/p4_upload.py").read_text(encoding="utf-8")
         self.assertIn('ESP32_APP_OFFSET="0x200000"', upload_script)
+
+    def test_p4_upload_builds_littlefs_before_flashing_manifest(self):
+        upload_script = (PROJECT_ROOT / "scripts/p4_upload.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("--no-build", upload_script)
+
+    def test_p4_upload_override_runs_after_the_platform_upload_builder(self):
+        platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
+
+        for environment in (
+            "waveshare-esp32p4-eth",
+            "guition-jc-esp32p4-m3-dev",
+        ):
+            section = platformio.split(f"[env:{environment}]", 1)[1].split(
+                "[env:", 1
+            )[0]
+            self.assertIn("post:scripts/p4_upload.py", section)
 
     def test_p4_emac_configuration_does_not_use_broken_designated_initializer_macro(self):
         source = (PROJECT_ROOT / "src/network/ethernet_manager.cpp").read_text(
@@ -178,16 +252,43 @@ class BuildIntegrationTests(unittest.TestCase):
 
         self.assertRegex(gitignore, r"(?m)^/dependencies\.lock$")
 
-    def test_windows_paths_with_spaces_do_not_break_prefix_map_flags(self):
+    def test_release_builds_enable_path_redaction_and_reproducibility(self):
         defaults = (
             "sdkconfig.defaults",
             "sdkconfig.esp32s3eth.defaults",
             "sdkconfig.esp32p4.defaults",
+            "sdkconfig.guition-jc-esp32p4-m3-dev.defaults",
+            "coprocessor/esp32c6/sdkconfig.defaults",
         )
         for filename in defaults:
             content = (PROJECT_ROOT / filename).read_text(encoding="utf-8")
-            self.assertIn("CONFIG_COMPILER_HIDE_PATHS_MACROS=n", content)
-            self.assertNotIn("CONFIG_COMPILER_HIDE_PATHS_MACROS=y", content)
+            self.assertIn("CONFIG_APP_REPRODUCIBLE_BUILD=y", content)
+            self.assertIn("CONFIG_COMPILER_HIDE_PATHS_MACROS=y", content)
+            self.assertNotIn("CONFIG_COMPILER_HIDE_PATHS_MACROS=n", content)
+
+    def test_windows_spaceful_prefix_maps_are_filtered_before_platformio(self):
+        root_cmake = (PROJECT_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+        c6_cmake = (
+            PROJECT_ROOT / "coprocessor/esp32c6/CMakeLists.txt"
+        ).read_text(encoding="utf-8")
+        workaround = (
+            PROJECT_ROOT / "scripts/cmake/filter_spaceful_prefix_maps.cmake"
+        ).read_text(encoding="utf-8")
+
+        include_line = (
+            'include("${CMAKE_CURRENT_LIST_DIR}/scripts/cmake/'
+            'filter_spaceful_prefix_maps.cmake")'
+        )
+        self.assertIn(include_line, root_cmake)
+        self.assertIn(
+            'include("${CMAKE_CURRENT_LIST_DIR}/../../scripts/cmake/'
+            'filter_spaceful_prefix_maps.cmake")',
+            c6_cmake,
+        )
+        self.assertIn("esp32_ot_filter_spaceful_prefix_maps()", root_cmake)
+        self.assertIn("esp32_ot_filter_spaceful_prefix_maps()", c6_cmake)
+        self.assertIn("idf_build_set_property(COMPILE_OPTIONS", workaround)
+        self.assertIn('string(FIND "${_source_prefix}" " "', workaround)
 
     def test_native_p4_profile_uses_the_board_flash_capacity(self):
         defaults = (PROJECT_ROOT / "sdkconfig.esp32p4.defaults").read_text(encoding="utf-8")
@@ -219,8 +320,222 @@ class BuildIntegrationTests(unittest.TestCase):
         )
 
         self.assertIn('#include "soc/soc_caps.h"', wifi)
-        self.assertIn("#if SOC_WIFI_SUPPORTED", wifi)
+        self.assertIn(
+            "#if SOC_WIFI_SUPPORTED || ESP32_OT_WIFI_BACKEND_REMOTE", wifi
+        )
         self.assertIn('LOG_INFO(TAG, "Wi-Fi is unavailable on this target")', wifi)
+
+    def test_guition_remote_wifi_dependencies_and_sdio_profile_are_pinned(self):
+        manifest = (PROJECT_ROOT / "src/idf_component.yml").read_text(
+            encoding="utf-8"
+        )
+        defaults = (
+            PROJECT_ROOT / "sdkconfig.guition-jc-esp32p4-m3-dev.defaults"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("espressif/esp_wifi_remote:", manifest)
+        self.assertIn("espressif/esp_hosted:", manifest)
+        self.assertIn('version: "==1.6.4"', manifest)
+        self.assertIn('version: "==3.0.6"', manifest)
+        self.assertEqual(manifest.count("rules:"), 2)
+        self.assertEqual(manifest.count('if: "target in [esp32p4]"'), 2)
+        for setting in (
+            "CONFIG_SLAVE_IDF_TARGET_ESP32C6=y",
+            "CONFIG_ESP_HOSTED_CP_TARGET_ESP32C6=y",
+            "CONFIG_ESP_HOSTED_P4_DEV_BOARD_FUNC_BOARD=y",
+            "CONFIG_WIFI_RMT_STATIC_RX_BUFFER_NUM=16",
+            "CONFIG_WIFI_RMT_DYNAMIC_RX_BUFFER_NUM=64",
+            "CONFIG_WIFI_RMT_DYNAMIC_TX_BUFFER_NUM=64",
+        ):
+            self.assertIn(setting, defaults)
+
+    def test_guition_psram_is_explicitly_enabled_with_safe_initial_timing(self):
+        defaults = (
+            PROJECT_ROOT / "sdkconfig.guition-jc-esp32p4-m3-dev.defaults"
+        ).read_text(encoding="utf-8")
+
+        for setting in (
+            "CONFIG_SPIRAM=y",
+            "CONFIG_SPIRAM_MODE_HEX=y",
+            "CONFIG_SPIRAM_SPEED_20M=y",
+        ):
+            self.assertIn(setting, defaults)
+
+    def test_platformio_preserves_esp_hosted_force_include_as_one_flag(self):
+        cmake = (PROJECT_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+
+        self.assertIn("if(TARGET eh_host_config)", cmake)
+        self.assertIn(
+            'list(REMOVE_ITEM _ESP_HOST_CONFIG_OPTIONS "SHELL:-include eh_host_port_master_config.h")',
+            cmake,
+        )
+        self.assertIn(
+            'target_compile_options(eh_host_config INTERFACE "-includeeh_host_port_master_config.h")',
+            cmake,
+        )
+
+    def test_p4_targets_aggregate_linker_fragments_for_windows_spaceful_paths(self):
+        cmake = (PROJECT_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+
+        self.assertIn("if(CMAKE_HOST_WIN32)", cmake)
+        self.assertIn(
+            'if(CMAKE_HOST_WIN32 AND "${_IDF_TGT}" STREQUAL "esp32p4")',
+            cmake,
+        )
+        self.assertIn("function(__ldgen_add_fragment_files fragment_files)", cmake)
+        self.assertIn("foreach(fragment_file IN LISTS fragment_files)", cmake)
+        self.assertIn("esp32_ot_all_fragments.lf", cmake)
+        self.assertIn("__LDGEN_FRAGMENT_FILES", cmake)
+        self.assertIn("CMAKE_CONFIGURE_DEPENDS", cmake)
+
+    def test_guition_c6_coprocessor_project_is_reproducible_and_version_pinned(self):
+        cp_root = PROJECT_ROOT / "coprocessor/esp32c6"
+        manifest = (cp_root / "main/idf_component.yml").read_text(encoding="utf-8")
+        defaults = (cp_root / "sdkconfig.defaults").read_text(encoding="utf-8")
+        build_script = (PROJECT_ROOT / "scripts/build_c6_coprocessor.ps1").read_text(
+            encoding="utf-8"
+        )
+
+        for path in (
+            cp_root / "CMakeLists.txt",
+            cp_root / "main/CMakeLists.txt",
+            cp_root / "main/main.c",
+            cp_root / "partitions.csv",
+            PROJECT_ROOT / "coprocessor/README.md",
+        ):
+            self.assertTrue(path.is_file(), path)
+
+        self.assertIn('version: "==3.0.6"', manifest)
+        self.assertIn('version: ">=5.5,<5.6"', manifest)
+        for setting in (
+            "CONFIG_APP_REPRODUCIBLE_BUILD=y",
+            "CONFIG_COMPILER_HIDE_PATHS_MACROS=y",
+            "CONFIG_ESP_HOSTED_CP=y",
+            "CONFIG_ESP_HOSTED_CP_FOR_MCU=y",
+            "CONFIG_ESP_HOSTED_CP_RPC_V2=y",
+            "CONFIG_ESP_HOSTED_CP_FEAT_WIFI=y",
+            "CONFIG_EH_TRANSPORT_CP_SDIO=y",
+            "CONFIG_EH_TRANSPORT_CP_SDIO_MODE_SW_AGGR=y",
+            "CONFIG_EH_TRANSPORT_CP_SDIO_PIN_CMD=18",
+            "CONFIG_EH_TRANSPORT_CP_SDIO_PIN_CLK=19",
+            "CONFIG_EH_TRANSPORT_CP_SDIO_PIN_D0=20",
+            "CONFIG_EH_TRANSPORT_CP_SDIO_PIN_D1=21",
+            "CONFIG_EH_TRANSPORT_CP_SDIO_PIN_D2=22",
+            "CONFIG_EH_TRANSPORT_CP_SDIO_PIN_D3=23",
+        ):
+            self.assertIn(setting, defaults)
+
+        self.assertIn('$env:IDF_TARGET = "esp32c6"', build_script)
+        self.assertIn('"-B", $BuildDir', build_script)
+        self.assertIn('"--project-dir", $projectDir', build_script)
+        self.assertIn("idf.py", build_script)
+
+    def test_release_workflow_stages_the_guition_c6_ota_metadata(self):
+        workflow = (PROJECT_ROOT / ".github/workflows/release.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("guition-jc-esp32p4-m3-dev", workflow)
+        self.assertIn("pio run --project-dir coprocessor/esp32c6", workflow)
+        self.assertIn("ota_data_initial.bin flasher_args.json", workflow)
+        self.assertIn("--c6-build-dir", workflow)
+
+    def test_management_controller_replaces_cross_interface_web_fallback(self):
+        main = (PROJECT_ROOT / "src/main.cpp").read_text(encoding="utf-8")
+        coordinator = (
+            PROJECT_ROOT / "src/provisioning/provisioning_coordinator.cpp"
+        ).read_text(encoding="utf-8")
+        controller = (
+            PROJECT_ROOT / "src/network/management_interface_controller.cpp"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("ManagementInterfaceController management_controller", main)
+        self.assertGreaterEqual(main.count("management_controller.tick()"), 2)
+        self.assertNotIn("Try Ethernet last", main)
+        self.assertNotIn("Try WiFi STA", main)
+        self.assertIn('#include "../network/network_policy.h"', coordinator)
+        self.assertIn("ESP32_OT_MGMT_POLICY == ESP32_OT_MGMT_ETHERNET_ONLY", coordinator)
+        self.assertIn("BLOCKED_SUBNET_OVERLAP", controller)
+        self.assertIn("web_.shutdown()", controller)
+
+    def test_web_server_filters_connections_and_handlers_by_local_address(self):
+        header = (PROJECT_ROOT / "src/web/web_server.h").read_text(encoding="utf-8")
+        source = (PROJECT_ROOT / "src/web/web_server.cpp").read_text(encoding="utf-8")
+        task = (PROJECT_ROOT / "src/web/web_server_task.cpp").read_text(
+            encoding="utf-8"
+        )
+        controller_header = (
+            PROJECT_ROOT / "src/network/management_interface_controller.h"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("setAllowedManagementAddress", header)
+        self.assertIn("authorizeOpenSocket", header)
+        self.assertIn("authorizeRequestInterface", header)
+        self.assertIn("guardedUriHandler", header)
+        self.assertGreaterEqual(source.count("open_fn = &WebServer::authorizeOpenSocket"), 2)
+        self.assertIn("getsockname", source)
+        self.assertIn("shutdown(sockfd, SHUT_RDWR)", source)
+        self.assertIn("registerGuardedHandler", source)
+        self.assertIn("httpd_ssl_stop(https_server_)", source)
+        self.assertIn("srv->isRunning()", task)
+        self.assertIn('"management_policy"', source)
+        self.assertIn('"management_state"', source)
+        self.assertIn('"assessment_interface"', source)
+        self.assertIn("currentManagementInterfaceState", controller_header)
+
+    def test_assessment_egress_is_centralized_on_ethernet(self):
+        header = (
+            PROJECT_ROOT / "src/network/assessment_interface.h"
+        ).read_text(encoding="utf-8")
+        source = (
+            PROJECT_ROOT / "src/network/assessment_interface.cpp"
+        ).read_text(encoding="utf-8")
+        base = (PROJECT_ROOT / "src/protocols/base_plugin.cpp").read_text(
+            encoding="utf-8"
+        )
+        network_engine = (PROJECT_ROOT / "src/core/network_engine.cpp").read_text(
+            encoding="utf-8"
+        )
+        web = (PROJECT_ROOT / "src/web/web_server.cpp").read_text(encoding="utf-8")
+        s7 = (PROJECT_ROOT / "src/protocols/s7_plugin.cpp").read_text(
+            encoding="utf-8"
+        )
+        scanner = (PROJECT_ROOT / "src/web/ui/scanner.html").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("openBoundSocket", header)
+        self.assertIn('esp_netif_get_handle_from_ifkey("ETH_DEF")', source)
+        self.assertIn("SO_BINDTODEVICE", source)
+        self.assertIn("::bind", source)
+        self.assertNotIn('strcmp(requested_ifkey, "AUTO")', base)
+        self.assertNotIn('esp_netif_get_handle_from_ifkey("WIFI_STA_DEF")', base)
+        self.assertNotRegex(network_engine, r"(?:udp|tcp)_bind\([^\n]*IP_ANY_TYPE")
+        self.assertIn('cfg.bind_ifkey = PSRAMUtils::createPSRAMString("ETH_DEF")', web)
+        self.assertNotIn('createPSRAMString("AUTO")', web)
+        self.assertNotIn('createPSRAMString("WIFI_STA_DEF")', web)
+        self.assertNotIn('createPSRAMString("WIFI_AP_DEF")', web)
+        self.assertNotIn('esp_netif_get_handle_from_ifkey("WIFI_STA_DEF")', s7)
+        self.assertNotIn('"AUTO"', s7)
+        self.assertNotIn('<option value="auto">', scanner)
+        self.assertNotIn('<option value="wifi_sta">', scanner)
+        self.assertNotIn('<option value="wifi_ap">', scanner)
+
+        assessment_sources = [
+            PROJECT_ROOT / "src/protocols/base_plugin.cpp",
+            PROJECT_ROOT / "src/protocols/modbus_tcp_plugin.cpp",
+            PROJECT_ROOT / "src/protocols/ethernetip_plugin.cpp",
+            PROJECT_ROOT / "src/protocols/opcua_plugin.cpp",
+            PROJECT_ROOT / "src/protocols/opcua_fuzzing_executor.cpp",
+            PROJECT_ROOT / "src/protocols/opcua_vulnerability_tests.cpp",
+            PROJECT_ROOT / "src/protocols/s7_plugin.cpp",
+            PROJECT_ROOT / "src/sandbox/net_guard.cpp",
+        ]
+        raw_socket = re.compile(r"(?<!openBound)(?<!lwip_)\bsocket\s*\(")
+        for path in assessment_sources:
+            content = path.read_text(encoding="utf-8")
+            self.assertIsNone(raw_socket.search(content), path)
+            self.assertNotIn("::bind(", content, path)
 
     def test_no_psram_diagnostic_does_not_shadow_runtime_memory_state(self):
         main = (PROJECT_ROOT / "src/main.cpp").read_text(encoding="utf-8")

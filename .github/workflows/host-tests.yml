@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [t-poe-pro, esp32-s3-eth, waveshare-esp32p4-eth]
+        environment: [t-poe-pro, esp32-s3-eth, waveshare-esp32p4-eth, guition-jc-esp32p4-m3-dev]
     env:
       USERPROFILE: /home/runner
       PYTHONUTF8: "1"
@@ -76,3 +76,24 @@ jobs:
         with:
           python-version: "3.11"
       - run: python scripts/check_release_secrets.py --repository .
+
+  build-guition-c6:
+    name: Build Guition ESP32-C6 coprocessor
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      USERPROFILE: /home/runner
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned build tools
+        run: python -m pip install platformio==6.1.19 esptool==4.9.0
+      - name: Build pinned ESP-Hosted 3.0.6 image
+        run: pio run --project-dir coprocessor/esp32c6 -e esp32c6-coprocessor
+      - name: Scan coprocessor firmware
+        run: |
+          BD="$USERPROFILE/.platformio/build/ESP32-OT-Security-Assessment-coprocessor/esp32c6-coprocessor"
+          python scripts/check_release_secrets.py --path "$BD/firmware.bin"

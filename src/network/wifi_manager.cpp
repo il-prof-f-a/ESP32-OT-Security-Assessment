@@ -12,8 +12,9 @@ extern "C" {
 // Use PSRAM-backed cJSON hooks
 #include "../core/psram_json_parser.h"
 #include "soc/soc_caps.h"
+#include "network_policy.h"
 
-#if SOC_WIFI_SUPPORTED
+#if SOC_WIFI_SUPPORTED || ESP32_OT_WIFI_BACKEND_REMOTE
 
 static const char* TAG = "WiFiManager";
 

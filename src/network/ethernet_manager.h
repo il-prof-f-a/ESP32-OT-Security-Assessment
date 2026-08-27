@@ -25,7 +25,8 @@ class NetworkEngine;
 
 // Board selection and hardware configuration
 // Select via PlatformIO build_flags, e.g.:
-//  -D BOARD_TPOE_PRO   or   -D BOARD_WAVESHARE_ESP32P4_ETH or -D BOARD_ESP32_S3_ETH
+//  -D BOARD_TPOE_PRO, -D BOARD_ESP32_S3_ETH,
+//  -D BOARD_WAVESHARE_ESP32P4_ETH, or -D BOARD_GUITION_JC_ESP32P4_M3_DEV
 
 // Backward compatibility with existing flag
 #if defined(LILYGO_T_ETH_POE_PRO) && !defined(BOARD_TPOE_PRO)
@@ -68,8 +69,8 @@ class NetworkEngine;
     #define ETH_SPI_CLOCK_MHZ       20
   #endif
 
-#elif defined(BOARD_WAVESHARE_ESP32P4_ETH)
-  // Waveshare ESP32-P4-ETH (ESP32-P4 internal EMAC + IP101GRI PHY over RMII)
+#elif defined(BOARD_WAVESHARE_ESP32P4_ETH) || defined(BOARD_GUITION_JC_ESP32P4_M3_DEV)
+  // Supported ESP32-P4 boards (internal EMAC + IP101GRI PHY over RMII).
   // Pin mapping per Waveshare docs (ESP32-P4 family):
   //  TXD0/1: GPIO34/35, RXD0/1: GPIO30/29, TX_EN: GPIO49, CRS_DV: GPIO28
   //  REF_CLK: GPIO50 (50 MHz from PHY), MDIO: GPIO52, MDC: GPIO31, PHY RESET: GPIO51
