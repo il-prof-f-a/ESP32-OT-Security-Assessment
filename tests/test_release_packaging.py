@@ -85,6 +85,10 @@ class ReleasePackagingTests(unittest.TestCase):
                 self.assertEqual(manifest["files"][0]["offset"], int(offset, 0))
                 self.assertEqual(products.app.read_bytes(), b"application")
                 self.assertTrue(products.factory.is_file())
+                self.assertIn(
+                    " merge_bin ",
+                    f" {products.factory.read_text(encoding='utf-8')} ",
+                )
                 if c6_build is not None:
                     self.assertEqual(manifest["coprocessor"]["chip"], "esp32c6")
                     self.assertEqual(
@@ -93,6 +97,10 @@ class ReleasePackagingTests(unittest.TestCase):
                     )
                     self.assertTrue(products.coprocessor_factory.is_file())
                     self.assertTrue(products.coprocessor_app.is_file())
+                    self.assertIn(
+                        " merge_bin ",
+                        f" {products.coprocessor_factory.read_text(encoding='utf-8')} ",
+                    )
                 with zipfile.ZipFile(products.bundle) as bundle:
                     self.assertIn(products.manifest.name, bundle.namelist())
 

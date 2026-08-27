@@ -153,7 +153,7 @@ def package_release(
         "esptool",
         "--chip",
         chip,
-        "merge-bin",
+        "merge_bin",
         "-o",
         str(factory),
         "--flash-mode",
@@ -185,7 +185,7 @@ def package_release(
         shutil.copyfile(c6_firmware, coprocessor_app)
         c6_merge_command = [
             sys.executable, "-m", "esptool", "--chip", c6_chip,
-            "merge-bin", "-o", str(coprocessor_factory),
+            "merge_bin", "-o", str(coprocessor_factory),
             "--flash-mode", c6_mode, "--flash-size", c6_size,
             "--flash-freq", c6_frequency,
         ]

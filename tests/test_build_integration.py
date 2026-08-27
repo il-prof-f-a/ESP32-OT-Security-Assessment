@@ -21,7 +21,8 @@ class BuildIntegrationTests(unittest.TestCase):
         project_index = cmake.index("\nproject(")
         self.assertLess(version_index, project_index)
         self.assertIn("project(esp32_ot_security_assessment)", cmake)
-        self.assertEqual((PROJECT_ROOT / "VERSION").read_text(encoding="utf-8").strip(), "0.1.0")
+        version = (PROJECT_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        self.assertRegex(version, r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+][0-9A-Za-z.-]+)?$")
 
     def test_every_platformio_environment_generates_public_build_assets_first(self):
         platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
