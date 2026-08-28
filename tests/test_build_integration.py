@@ -113,10 +113,11 @@ class BuildIntegrationTests(unittest.TestCase):
         upload_script = (PROJECT_ROOT / "scripts/p4_upload.py").read_text(encoding="utf-8")
         self.assertIn('ESP32_APP_OFFSET="0x200000"', upload_script)
 
-    def test_p4_upload_builds_littlefs_before_flashing_manifest(self):
+    def test_p4_upload_preserves_littlefs_during_an_ordinary_update(self):
         upload_script = (PROJECT_ROOT / "scripts/p4_upload.py").read_text(encoding="utf-8")
 
         self.assertNotIn("--no-build", upload_script)
+        self.assertNotIn("--include-filesystem", upload_script)
 
     def test_p4_upload_override_runs_after_the_platform_upload_builder(self):
         platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")

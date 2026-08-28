@@ -50,7 +50,6 @@ class FirmwareToolTests(unittest.TestCase):
             (build / "bootloader" / "bootloader.bin").write_bytes(b"bootloader")
             (build / "partition_table" / "partition-table.bin").write_bytes(b"partitions")
             (build / "esp32_ot_security_assessment.bin").write_bytes(b"application")
-            (build / "storage.bin").write_bytes(b"filesystem")
             (build / "flasher_args.json").write_text(
                 json.dumps(
                     {
@@ -93,6 +92,7 @@ class FirmwareToolTests(unittest.TestCase):
             self.assertNotIn("0x690000", command)
             self.assertNotIn(str(build / "storage.bin"), command)
 
+            (build / "storage.bin").write_bytes(b"filesystem")
             factory_command = self.flash.build_flash_command(
                 target="waveshare-esp32p4-eth",
                 port="COM10",

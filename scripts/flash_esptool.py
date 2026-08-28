@@ -138,7 +138,9 @@ def _resolve_flash_file(build_dir: Path, configured: str) -> Path:
     return _artifact(build_dir, aliases.get(basename, basename))
 
 
-def _load_flash_manifest(build_dir: Path) -> tuple[str, str, str, str, list[tuple[int, Path]]]:
+def _load_flash_manifest(
+    build_dir: Path, *, include_filesystem: bool = True
+) -> tuple[str, str, str, str, list[tuple[int, Path]]]:
     manifest_path = build_dir / "flasher_args.json"
     if not manifest_path.is_file():
         raise FileNotFoundError(
@@ -156,6 +158,8 @@ def _load_flash_manifest(build_dir: Path) -> tuple[str, str, str, str, list[tupl
     entries = sorted(
         (int(offset, 0), _resolve_flash_file(build_dir, configured))
         for offset, configured in flash_files.items()
+        if include_filesystem
+        or Path(configured).name not in {"littlefs.bin", "storage.bin"}
     )
     if not entries:
         raise ValueError("flasher_args.json contains no flash files")
@@ -181,7 +185,9 @@ def build_flash_command(
     if not port.strip():
         raise ValueError("A serial port is required (for example COM10 or /dev/ttyUSB0)")
     build_dir = Path(build_dir)
-    chip, mode, size, frequency, entries = _load_flash_manifest(build_dir)
+    chip, mode, size, frequency, entries = _load_flash_manifest(
+        build_dir, include_filesystem=include_filesystem
+    )
     if chip != config.chip:
         raise ValueError(
             f"Build manifest chip {chip!r} does not match target chip {config.chip!r}"

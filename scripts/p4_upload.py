@@ -6,9 +6,10 @@ wrong for the ESP32-P4 (which uses 0x2000). flash_esptool.py reads every
 offset and flash setting from flasher_args.json, including LittleFS, and forces
 UTF-8 so the esptool progress bar does not crash under cp1252.
 
-PlatformIO's upload target does not build LittleFS. Let flash_esptool.py run
-its firmware and buildfs steps so the manifest always has every required
-artifact before the ESP32-P4 is written.
+PlatformIO's upload target does not build LittleFS. Ordinary updates must
+preserve the on-device filesystem, so flash_esptool.py rebuilds the firmware
+but intentionally excludes the LittleFS manifest entry unless a factory
+installation explicitly requests it.
 """
 Import("env")
 
