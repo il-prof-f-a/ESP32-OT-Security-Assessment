@@ -1,26 +1,15 @@
 #include "file_reporter.h"
-#include <sys/stat.h>
-#include <unistd.h>
 #include <cstdio>
-#include <errno.h>
 #include <algorithm>
 #include <cctype>
 #include <cstring>
 #include "cJSON.h"
 #include "../core/async_storage_engine.h"
 #include "../core/logging_system.h"
-#include "../core/filesystem_task_delegate.h"
 #include "../core/psram_allocator.h"
 
 extern "C" {
-    #include "esp_psram.h"
     #include "esp_heap_caps.h"
-}
-
-// Utility function to check if current task is running on PSRAM stack
-static bool isCurrentTaskOnPSRAMStack() {
-    char stack_var = 0;  // Initialize to suppress warning
-    return esp_ptr_external_ram(&stack_var);
 }
 
 // Helper: extract TAG from a plain log line like
@@ -129,65 +118,39 @@ std::string FileReporter::determineLogFileMulti(const psram_string& payload) {
 }
 
 bool FileReporter::rotateIfNeeded(const std::string& file_path, const FileConfig& config) {
-    // CRITICAL: Check memory pressure first to prevent crashes during rotation
     if (PSRAMUtils::isCriticalMemory()) {
-        // Skip rotation silently to avoid recursion via LOG_WARNING
         return false;
     }
 
-    // CRITICAL: Check available stack space - delegate rotation if stack is getting low
-    UBaseType_t stack_remaining = uxTaskGetStackHighWaterMark(nullptr);
-    //LOG_DEBUGF("FileReporter", "rotate check path=%s stack_rem=%u rotate_bytes=%u max=%u", file_path.c_str(), (unsigned)stack_remaining, (unsigned)config.rotate_bytes, (unsigned)config.max_files);
-
-    // If less than 2KB stack remaining, delegate to avoid overflow
-    if (stack_remaining < 2048) {
-        auto result = FilesystemTaskDelegate::getInstance().rotateFileSync(
-            file_path, config.rotate_bytes, config.max_files, 3000);
-        //LOG_DEBUGF("FileReporter", "rotate delegated sync path=%s stack_rem=%u result=%s",file_path.c_str(), (unsigned)stack_remaining,(result == FilesystemTaskDelegate::OperationResult::SUCCESS) ? "SUCCESS" : "FAIL");
-        return (result == FilesystemTaskDelegate::OperationResult::SUCCESS);
+    // FileReporter serializes calls with mtx_; keeping all filesystem operations
+    // on AsyncStorageWorker prevents a delegate rename from racing an append.
+    size_t current_size = 0;
+    if (AsyncStorage::Global::fileSize(file_path, current_size) != ESP_OK ||
+        current_size < config.rotate_bytes) {
+        return true;
     }
 
-    // Sufficient stack space - direct filesystem access
-    struct stat st{};
-    if (stat(file_path.c_str(), &st) == 0) {
-        if (st.st_size >= (off_t)config.rotate_bytes) {
-            //LOG_DEBUGF("FileReporter", "rotate direct path=%s size=%ld threshold=%u",file_path.c_str(), (long)st.st_size, (unsigned)config.rotate_bytes);
-            // rotate: path -> path.1 ... path.max_files-1
-            for (int i = (int)config.max_files - 1; i >= 1; i--) {
-                char oldp[256], newp[256];
-                snprintf(oldp, sizeof(oldp), "%s.%d", file_path.c_str(), i);
-                snprintf(newp, sizeof(newp), "%s.%d", file_path.c_str(), i + 1);
-                rename(oldp, newp);
-            }
-            char p1[256];
-            snprintf(p1, sizeof(p1), "%s.1", file_path.c_str());
-            // Avoid LOG calls here to prevent recursion via reportLogMessage -> FileReporter
-            rename(file_path.c_str(), p1);
-        } else {
-            ///LOG_DEBUGF("FileReporter", "rotate skip path=%s size=%ld threshold=%u",file_path.c_str(), (long)st.st_size, (unsigned)config.rotate_bytes);
+    const uint32_t max_files = std::max<uint32_t>(1, config.max_files);
+    for (uint32_t index = max_files; index > 1; --index) {
+        const std::string destination = file_path + "." + std::to_string(index);
+        const std::string source = file_path + "." + std::to_string(index - 1);
+        if (index == max_files) {
+            (void)AsyncStorage::Global::deleteFile(destination);
         }
-    } else {
-        //LOG_DEBUGF("FileReporter", "rotate stat failed path=%s errno=%d", file_path.c_str(), errno);
+        (void)AsyncStorage::Global::fileRename(source, destination);
     }
-    return true;
+
+    const std::string first_backup = file_path + ".1";
+    if (max_files == 1) {
+        (void)AsyncStorage::Global::deleteFile(first_backup);
+    }
+    return AsyncStorage::Global::fileRename(file_path, first_backup) == ESP_OK;
 }
 
 bool FileReporter::init(const FileConfig& c){ cfg_ = c; return true; }
 
 bool FileReporter::rotate_if_needed(){
-    struct stat st{};
-    if (stat(cfg_.path.c_str(), &st)==0 && st.st_size >= (off_t)cfg_.rotate_bytes) {
-        // rotate: path -> path.1 ... path.max_files-1
-        for (int i=(int)cfg_.max_files-1;i>=1;i--){
-            char oldp[256], newp[256];
-            snprintf(oldp,sizeof(oldp), "%s.%d", cfg_.path.c_str(), i);
-            snprintf(newp,sizeof(newp), "%s.%d", cfg_.path.c_str(), i+1);
-            rename(oldp, newp);
-        }
-        char p1[256]; snprintf(p1,sizeof(p1), "%s.1", cfg_.path.c_str());
-        rename(cfg_.path.c_str(), p1);
-    }
-    return true;
+    return rotateIfNeeded(cfg_.path, cfg_);
 }
 
 bool FileReporter::append(const psram_string& payload){
@@ -226,16 +189,9 @@ bool FileReporter::append(const psram_string& payload){
         target_config.path = target_file;
     }
 
-    // Rotate if needed for this specific file
-    if (!isCurrentTaskOnPSRAMStack()) {
-        // Direct rotation - safe from INTERNAL_RAM stack
-        rotateIfNeeded(target_file, target_config);
-    } else {
-        // Delegate rotation to INTERNAL_RAM task for PSRAM stack safety
-        // Avoid LOG calls here to prevent recursion via reportLogMessage -> FileReporter
-        FilesystemTaskDelegate::getInstance().rotateFileAsync(
-            target_file, target_config.rotate_bytes, target_config.max_files);
-    }
+    // Rotation and the append below are both executed by AsyncStorageWorker.
+    // Keep appending after a transient rotation failure so reports are not lost.
+    (void)rotateIfNeeded(target_file, target_config);
 
     const size_t payload_len = payload.size();
     const size_t total_len = payload_len + 1; // include newline
@@ -269,15 +225,7 @@ bool FileReporter::append(const psram_string& payload){
                     dup_cfg.path = dup_path;
                 }
 
-                if (!isCurrentTaskOnPSRAMStack()) {
-                    // Direct rotation - safe from INTERNAL_RAM stack
-                    rotateIfNeeded(dup_path, dup_cfg);
-                } else {
-                    // Delegate rotation to INTERNAL_RAM task for PSRAM stack safety
-                    // Avoid LOG calls here to prevent recursion
-                    FilesystemTaskDelegate::getInstance().rotateFileAsync(
-                        dup_path, dup_cfg.rotate_bytes, dup_cfg.max_files);
-                }
+                (void)rotateIfNeeded(dup_path, dup_cfg);
                 (void)AsyncStorage::Global::appendFileRaw(dup_path, ps_buf, total_len);
             }
         }

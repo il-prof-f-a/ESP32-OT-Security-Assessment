@@ -35,6 +35,20 @@ class BuildIntegrationTests(unittest.TestCase):
         self.assertIn("esp_efuse_mac_get_default", function)
         self.assertNotIn("ESP_MAC_WIFI_STA", function)
 
+    def test_file_reporter_serializes_rotation_with_async_storage(self):
+        source = (PROJECT_ROOT / "src/reporters/file_reporter.cpp").read_text(
+            encoding="utf-8"
+        )
+        rotation = source.split("bool FileReporter::rotateIfNeeded", 1)[1].split(
+            "bool FileReporter::init", 1
+        )[0]
+
+        self.assertIn("AsyncStorage::Global::fileSize", rotation)
+        self.assertIn("AsyncStorage::Global::deleteFile", rotation)
+        self.assertIn("AsyncStorage::Global::fileRename", rotation)
+        self.assertNotIn("FilesystemTaskDelegate", source)
+        self.assertNotIn("isCurrentTaskOnPSRAMStack", source)
+
     def test_every_platformio_environment_generates_public_build_assets_first(self):
         platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
         sections = re.split(r"(?=^\[env:)", platformio, flags=re.MULTILINE)[1:]
