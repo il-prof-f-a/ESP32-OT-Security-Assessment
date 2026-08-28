@@ -16,6 +16,34 @@ from build_assets import generate_build_assets  # noqa: E402
 
 
 class BuildAssetsTests(unittest.TestCase):
+    def test_all_hardware_targets_wrap_nvs_calls(self):
+        platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
+        environments = {
+            name: platformio.split(f"[env:{name}]", 1)[1].split("[env:", 1)[0]
+            for name in (
+                "t-poe-pro",
+                "esp32-s3-eth",
+                "waveshare-esp32p4-eth",
+                "guition-jc-esp32p4-m3-dev",
+            )
+        }
+        required_wrappers = {
+            "nvs_open",
+            "nvs_close",
+            "nvs_commit",
+            "nvs_get_u8",
+            "nvs_get_u16",
+            "nvs_get_u32",
+            "nvs_set_u8",
+            "nvs_set_u16",
+            "nvs_set_u32",
+        }
+
+        for name, definition in environments.items():
+            with self.subTest(environment=name):
+                for symbol in required_wrappers:
+                    self.assertIn(f"-Wl,--wrap={symbol}", definition)
+
     def test_build_rejects_credentials_in_littlefs_seed_directory(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
