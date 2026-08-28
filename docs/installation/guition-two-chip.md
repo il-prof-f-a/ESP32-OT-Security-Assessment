@@ -19,27 +19,24 @@ Use the two connections simultaneously, with separate COM ports:
 
 - **P4 and board power:** connect the **first USB port nearest the RJ45 Ethernet connector** to the
   host. This is the P4 programming connection and it supplies the board.
+
 - **C6 programming UART:** connect a CH340-class USB-to-UART adapter to the C6-labelled pins:
+  
+  | CH340 adapter pin | Board pin  | Required action              |
+  | ----------------- | ---------- | ---------------------------- |
+  | TXD               | `C6_U0RXD` | Connect (crossed UART TX/RX) |
+  | RXD               | `C6_U0TXD` | Connect (crossed UART TX/RX) |
+  | GND               | GND        | Connect                      |
+  | 3.3 V / VCC       | —          | **Do not connect**           |
+  | 5 V / VCC         | —          | **Do not connect**           |
 
-  | CH340 adapter pin | Board pin | Required action |
-  | --- | --- | --- |
-  | TXD | `C6_U0RXD` | Connect (crossed UART TX/RX) |
-  | RXD | `C6_U0TXD` | Connect (crossed UART TX/RX) |
-  | GND | GND | Connect |
-  | 3.3 V / VCC | — | **Do not connect** |
-  | 5 V / VCC | — | **Do not connect** |
-
-> **Electrical safety warning:** do not connect either CH340 power output. The P4 USB already
-> powers the board; connecting 3.3 V or 5 V from the adapter can back-power the USB circuit and can
-> damage the computer USB port, CH340 adapter or board.
+> **Electrical safety warning:** do not connect either CH340 power output. The P4 USB already powers the board; connecting 3.3 V or 5 V from the adapter can back-power the USB circuit and can damage the computer USB port, CH340 adapter or board.
 
 The board labels needed for this connection are shown below.
 
 ![GUITION C6 UART and boot-control header labels](../assets/hardware/guition-jc-esp32p4-m3-dev-c6-uart-pinout.jpg)
 
-Disconnect the board, list serial ports, connect only the P4 USB and record its port. Then connect
-the CH340 adapter and record its distinct C6 port. The guarded workflow refuses to use one port for
-both chips.
+Disconnect the board, list serial ports, connect only the P4 USB and record its port. Then connect the CH340 adapter and record its distinct C6 port. The guarded workflow refuses to use one port for both chips.
 
 The guarded workflow refuses to use one port for both chips:
 
@@ -58,10 +55,7 @@ Release manifests contain the authoritative offsets and SHA-256 checksums. The G
 
 ## C6 download mode
 
-Normally the C6 uploader resets the coprocessor automatically. If it cannot connect, use the
-board's exposed controls: hold `C6_IO9` at GND, pull `C6_CHIP_PU` low and release it, start the
-upload, then release `C6_IO9` after the serial tool connects. Keep the CH340 power pins
-disconnected throughout this procedure.
+Normally the C6 uploader resets the coprocessor automatically. If it cannot connect, use the board's exposed controls: hold `C6_IO9` at GND, pull `C6_CHIP_PU` low and release it, start the upload, then release `C6_IO9` after the serial tool connects. Keep the CH340 power pins disconnected throughout this procedure.
 
 ## Recovery
 
@@ -70,6 +64,4 @@ disconnected throughout this procedure.
 3. Flash the board-specific factory image from the release manifest.
 4. Power-cycle both chips and capture the complete serial boot log.
 
-Initial Ethernet, remote Wi-Fi, management-isolation and provisioning checks have passed on the
-laboratory board. The Guition target remains experimental until broader network compatibility,
-reconnect behavior, failure recovery and soak testing pass on real hardware.
+Initial Ethernet, remote Wi-Fi, management-isolation and provisioning checks have passed on the laboratory board. The Guition target remains experimental until broader network compatibility, reconnect behavior, failure recovery and soak testing pass on real hardware.

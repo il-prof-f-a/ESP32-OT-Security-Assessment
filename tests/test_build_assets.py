@@ -1,9 +1,11 @@
 import json
+import os
 from pathlib import Path
 import re
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -56,7 +58,9 @@ class BuildAssetsTests(unittest.TestCase):
             self.assertNotIn(forbidden, header)
 
     def test_embedded_json_is_valid_and_has_no_credentials(self):
-        with tempfile.TemporaryDirectory() as temp:
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ, {"ESP32_OT_EMBEDDED_CONFIG": "0"}
+        ):
             result = generate_build_assets(
                 PROJECT_ROOT, Path(temp) / "build", "waveshare-esp32p4-eth"
             )
