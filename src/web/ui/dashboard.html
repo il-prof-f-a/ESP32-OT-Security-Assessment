@@ -510,7 +510,10 @@ function renderPluginsInfo(plugins){
 
   if(Array.isArray(plugins)){
     plugins.forEach((p, idx) => {
-      rows.push(`<div>${esc('Plugin ' + (idx + 1))}</div><div class="ok">${esc(protocolName(p))}</div>`);
+      const name = protocolName(p && typeof p === 'object' ? p.name : p);
+      const events = p && typeof p === 'object' ? p.events : null;
+      const detail = events == null ? '✅ Active' : `${events} events`;
+      rows.push(`<div>${esc(name || 'Plugin ' + (idx + 1))}</div><div class="ok">${esc(detail)}</div>`);
     });
   } else if(plugins && typeof plugins === 'object'){
     Object.entries(plugins).forEach(([k,v]) => {
