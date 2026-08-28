@@ -258,14 +258,16 @@ DetailedReportBuilderBase::DetailedReportBuilderBase()
 DetailedReportBuilderBase::~DetailedReportBuilderBase() = default;
 
 psram_string DetailedReportBuilderBase::getDeviceId() {
-    uint8_t mac[6];
-    if (esp_read_mac(mac, ESP_MAC_WIFI_STA) == ESP_OK) {
+    uint8_t mac[6] = {};
+    // The base MAC comes from eFuse and is available on every supported target,
+    // including ESP32-P4 boards without a native Wi-Fi MAC.
+    if (esp_efuse_mac_get_default(mac) == ESP_OK) {
         char device_id[32];
-        snprintf(device_id, sizeof(device_id), "ESP32-T-POE-PRO-%02X%02X%02X",
+        snprintf(device_id, sizeof(device_id), "ESP32-OT-%02X%02X%02X",
                  mac[3], mac[4], mac[5]);
         return PSRAMUtils::createPSRAMString(device_id);
     }
-    return PSRAMUtils::createPSRAMString("ESP32-T-POE-PRO-UNKNOWN");
+    return PSRAMUtils::createPSRAMString("ESP32-OT-UNKNOWN");
 }
 
 void DetailedReportBuilderBase::setDeviceId(const psram_string& device_id) {

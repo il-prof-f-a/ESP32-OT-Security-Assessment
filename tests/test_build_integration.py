@@ -24,6 +24,17 @@ class BuildIntegrationTests(unittest.TestCase):
         version = (PROJECT_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         self.assertRegex(version, r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+][0-9A-Za-z.-]+)?$")
 
+    def test_detailed_report_device_id_uses_board_neutral_base_mac(self):
+        source = (PROJECT_ROOT / "src/core/detailed_report_builder.cpp").read_text(
+            encoding="utf-8"
+        )
+        function = source.split("psram_string DetailedReportBuilderBase::getDeviceId()", 1)[1].split(
+            "void DetailedReportBuilderBase::setDeviceId", 1
+        )[0]
+
+        self.assertIn("esp_efuse_mac_get_default", function)
+        self.assertNotIn("ESP_MAC_WIFI_STA", function)
+
     def test_every_platformio_environment_generates_public_build_assets_first(self):
         platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
         sections = re.split(r"(?=^\[env:)", platformio, flags=re.MULTILINE)[1:]
