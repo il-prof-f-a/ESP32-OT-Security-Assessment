@@ -36,6 +36,31 @@ class PublicDocumentationTests(unittest.TestCase):
                 continue
             self.assertTrue((PROJECT_ROOT / target).is_file(), target)
 
+    def test_hardware_validation_matrix_has_a_matching_separator_row(self):
+        readme_lines = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8").splitlines()
+        expected_header = [
+            "Test platform",
+            "CPU",
+            "GPIO",
+            "Internal memory / IRAM",
+            "PSRAM / flash",
+            "SD expansion",
+            "Current validation",
+        ]
+        header_index = next(
+            index
+            for index, line in enumerate(readme_lines)
+            if [cell.strip() for cell in line.strip().strip("|").split("|")]
+            == expected_header
+        )
+        header_cells = readme_lines[header_index].strip().strip("|").split("|")
+        separator_cells = readme_lines[header_index + 1].strip().strip("|").split("|")
+
+        self.assertEqual(len(separator_cells), len(header_cells))
+        self.assertTrue(
+            all(re.fullmatch(r"-{3,}", cell.strip().replace(":", "")) for cell in separator_cells)
+        )
+
     def test_public_markdown_is_english(self):
         markdown_files = (
             PROJECT_ROOT / "README.md",
