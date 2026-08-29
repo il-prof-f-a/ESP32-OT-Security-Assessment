@@ -6,8 +6,9 @@
 #include "audit_manager.h"
 #include <algorithm>
 
-bool PluginManager::initialize(ConfigurationManager* cfg, ReportingEngine* rep, NetworkEngine* net) {
-    cfg_=cfg; rep_=rep; net_=net;
+bool PluginManager::initialize(ConfigurationManager* cfg, ReportingEngine* rep, NetworkEngine* net,
+                               SecurityManager* sec) {
+    cfg_=cfg; rep_=rep; net_=net; sec_=sec;
     LOG_INFO("Plugins","PluginManager initialized");
     return true;
 }
@@ -37,6 +38,7 @@ void PluginManager::registerPlugin(std::unique_ptr<BasePlugin> plugin){
     AuditManager::getInstance().logPluginEvent(plugin_name, "registered", "Plugin registered and initialized in PluginManager");
 
     // Initialize plugin with configuration and reporting engine
+    plugin->setSecurityManager(sec_);
     plugin->initialize(cfg_, rep_);
 
     const ProtocolType type = plugin->getProtocolType();

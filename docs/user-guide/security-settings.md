@@ -23,9 +23,12 @@ certificates.
 ## Fuzzing and hardware interlock
 
 The fuzzing switch permits active assessment traffic. The **Effective Status** reflects both
-software permission and, when configured, the GPIO interlock. GPIO number, active level, pull mode
-and enforcement define the physical gate. If enforcement is disabled, the switch state is
-informational only. Verify pin availability against the selected board before wiring an interlock.
+software permission and, when configured, the GPIO interlock. The same global control is also
+available above the tabs on the [Scanner & Fuzzing page](vulnerability-scanner.md). GPIO number,
+active level, pull mode and enforcement define the physical gate. If enforcement is disabled, the
+switch state is informational only. Verify pin availability and the board-specific default pin
+in the [offensive-testing interlock guide](../security/offensive-testing-interlock.md) before
+wiring an interlock.
 
 ## Alert Policy
 

@@ -107,21 +107,18 @@ class BuildAssetsTests(unittest.TestCase):
         self.assertFalse(config["reporting"]["webhook"]["enabled"])
         self.assertFalse(config["reporting"]["email"]["enabled"])
 
-    def test_board_name_does_not_change_public_defaults(self):
+    def test_board_name_selects_board_specific_offensive_gpio(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            headers = {
-                generate_build_assets(PROJECT_ROOT, root / board, board)
-                .header_path.read_bytes()
-                for board in (
-                    "t-poe-pro",
-                    "esp32-s3-eth",
-                    "waveshare-esp32p4-eth",
-                    "guition-jc-esp32p4-m3-dev",
-                )
+            expected = {
+                "t-poe-pro": 15,
+                "esp32-s3-eth": 16,
+                "waveshare-esp32p4-eth": 16,
+                "guition-jc-esp32p4-m3-dev": 1,
             }
-
-        self.assertEqual(len(headers), 1)
+            for board, gpio in expected.items():
+                header = generate_build_assets(PROJECT_ROOT, root / board, board).header_path
+                self.assertIn(f'"gpio":{gpio}', header.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

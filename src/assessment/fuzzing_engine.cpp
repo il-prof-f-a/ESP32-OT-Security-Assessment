@@ -407,8 +407,9 @@ bool FuzzingEngine::runJobInternal(const FuzzJob& j) {
              (unsigned long)j.id, getProtocolName(j.protocol).c_str(),
              (unsigned long)j.max_cases, (unsigned long)j.duration_ms);
 
-    if (sec_ && !sec_->isFuzzingAllowed()) {
-        LOG_WARNINGF(TAG_FUZZ, "fuzzing blocked by SecurityManager: reason=%s", sec_->getFuzzingBlockReason());
+    if (!j.safe_mode && (!sec_ || !sec_->isFuzzingAllowed())) {
+        LOG_WARNINGF(TAG_FUZZ, "fuzzing blocked by SecurityManager: reason=%s",
+                     sec_ ? sec_->getFuzzingBlockReason() : "security_manager_unavailable");
         clear_active();
         return false;
     }
@@ -484,7 +485,17 @@ bool FuzzingEngine::runJobInternal(const FuzzJob& j) {
         // Track execution timing
         uint64_t test_start_time = esp_timer_get_time() / 1000ULL;
         std::string sent_hex, received_hex, status_details;
-        FuzzResult result = plugin->execute(j, fx, sent_hex, received_hex, status_details);
+        FuzzResult result;
+        if (!j.safe_mode && (!sec_ || !sec_->isFuzzingAllowed())) {
+            status_details = "blocked_by_offensive_policy:" +
+                std::string(sec_ ? sec_->getFuzzingBlockReason() : "security_manager_unavailable");
+            LOG_WARNINGF(TAG_FUZZ, "unsafe fuzz case blocked immediately before send: job=%lu reason=%s",
+                         (unsigned long)j.id, status_details.c_str());
+            result = FuzzResult::SEND_FAILED;
+            stop_flag_ = true;
+        } else {
+            result = plugin->execute(j, fx, sent_hex, received_hex, status_details);
+        }
         uint64_t test_execution_time = (esp_timer_get_time() / 1000ULL) - test_start_time;
         bool ok = (result == FuzzResult::SUCCESS);
 

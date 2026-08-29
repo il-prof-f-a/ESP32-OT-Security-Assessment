@@ -12,6 +12,7 @@
 class ConfigurationManager;
 class ReportingEngine;
 class NetworkEngine;
+class SecurityManager;
 #include "../protocols/base_plugin.h"
 
 struct PluginStatus {
@@ -27,7 +28,8 @@ struct ProtocolInfo {
 
 class PluginManager {
 public:
-    bool initialize(ConfigurationManager* cfg, ReportingEngine* rep, NetworkEngine* net);
+    bool initialize(ConfigurationManager* cfg, ReportingEngine* rep, NetworkEngine* net,
+                    SecurityManager* sec = nullptr);
     void shutdown();
 
     void registerPlugin(std::unique_ptr<BasePlugin> plugin);
@@ -38,6 +40,7 @@ public:
         if (!psram_plugin) return;
 
         // Initialize plugin with configuration and reporting engine
+        psram_plugin->setSecurityManager(sec_);
         psram_plugin->initialize(cfg_, rep_);
 
         // Convert to standard unique_ptr with PSRAM-aware deleter preserved
@@ -101,6 +104,7 @@ private:
     ConfigurationManager* cfg_ = nullptr;
     ReportingEngine* rep_ = nullptr;
     NetworkEngine* net_ = nullptr;
+    SecurityManager* sec_ = nullptr;
     std::vector<std::unique_ptr<BasePlugin, std::function<void(BasePlugin*)>>, PSRAMAllocator<std::unique_ptr<BasePlugin, std::function<void(BasePlugin*)>>>> plugins_;
     std::vector<ProtocolInfo, PSRAMAllocator<ProtocolInfo>> protocol_cache_;
 };

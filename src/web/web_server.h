@@ -245,6 +245,8 @@ private:
     // Security configuration endpoints
     static esp_err_t h_security_config_get(httpd_req_t* req);
     static esp_err_t h_security_config_post(httpd_req_t* req);
+    static esp_err_t h_offensive_testing_get(httpd_req_t* req);
+    static esp_err_t h_offensive_testing_post(httpd_req_t* req);
     static esp_err_t h_security_event_ack(httpd_req_t* req);
 
     // Rate limiter endpoints

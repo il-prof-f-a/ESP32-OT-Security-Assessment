@@ -28,7 +28,7 @@
 | RMII MDIO            | 52   | Ethernet management data          |
 | RMII reference clock | 50   | External Ethernet reference clock |
 
-The board uses HTTPS with a per-device self-signed certificate, but it has no separate management transport. Keep the device in a controlled OT test subnet, or place it behind an external firewall or VLAN boundary. See [network isolation and residual exposure](../security/network-isolation.md).
+The board uses HTTPS with a per-device self-signed certificate, but it has no separate management transport. Keep the device in a controlled OT test subnet, or place it behind an external firewall or VLAN boundary. See [network isolation and residual exposure](../security/network-isolation.md) and the [offensive-testing interlock](../security/offensive-testing-interlock.md).
 
 ## Photos, documents and purchase
 

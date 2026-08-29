@@ -43,6 +43,18 @@ inline cJSON* handleSecurityConfigGet(SecurityManager* sec_mgr, const SecurityCo
     cJSON_AddBoolToObject(config, "fuzzing_gpio_active_high", sec_mgr->isFuzzingGpioActiveHigh());
     cJSON_AddNumberToObject(config, "fuzzing_gpio_pull_mode", (double)sec_mgr->getFuzzingGpioPullMode());
     cJSON_AddBoolToObject(config, "fuzzing_gpio_gate_state", sec_mgr->readFuzzingGpioGateState());
+    cJSON* offensive = cJSON_CreateObject();
+    if (offensive) {
+        cJSON_AddBoolToObject(offensive, "software_enabled", sec_mgr->isFuzzingAllowedConfig());
+        cJSON_AddBoolToObject(offensive, "effective", sec_mgr->isFuzzingAllowed());
+        cJSON_AddStringToObject(offensive, "reason", sec_mgr->getFuzzingBlockReason());
+        cJSON_AddStringToObject(offensive, "source", sec_mgr->getOffensiveTestingPolicySource());
+        cJSON_AddBoolToObject(offensive, "gpio_asserted", sec_mgr->readFuzzingGpioGateState());
+        cJSON_AddNumberToObject(offensive, "gpio", sec_mgr->getFuzzingGpioNum());
+        cJSON_AddBoolToObject(offensive, "gpio_enabled", sec_mgr->isFuzzingGpioGateEnabled());
+        cJSON_AddBoolToObject(offensive, "gpio_required", sec_mgr->isFuzzingGpioGateRequired());
+        cJSON_AddItemToObject(config, "offensive_testing", offensive);
+    }
     cJSON_AddBoolToObject(config, "secure_boot_enabled", sec_mgr->isSecureBootEnabled());
     cJSON_AddBoolToObject(config, "flash_encryption_enabled", sec_mgr->isFlashEncryptionEnabled());
     cJSON_AddBoolToObject(config, "temporary_admin_active", sec_mgr->isTemporaryAdminCredentialActive());
@@ -247,18 +259,19 @@ inline cJSON* handleSecurityConfigPost(SecurityManager* sec_mgr, const char* jso
         return make_error(msg);
     };
 
-    // Update fuzzing_allowed if present
+    // Update fuzzing_allowed if present. Enabling offensive actions requires
+    // administrator re-authentication; disabling remains an emergency action.
     cJSON* fuzzing_allowed = cJSON_GetObjectItem(request, "fuzzing_allowed");
     if (fuzzing_allowed && cJSON_IsBool(fuzzing_allowed)) {
         bool allow = cJSON_IsTrue(fuzzing_allowed);
-        sec_mgr->setFuzzingAllowed(allow);
-
-        // Save to NVS for persistence
-        esp_err_t err = AsyncStorage::Global::nvsSet("security", "fuzzing_allowed",
-                                                     static_cast<uint8_t>(allow ? 1 : 0));
-        if (err != ESP_OK) {
-            return cleanup_and_error("Failed to save setting to NVS");
+        if (allow) {
+            cJSON* password = cJSON_GetObjectItem(request, "admin_password");
+            if (!password || !cJSON_IsString(password) || !password->valuestring ||
+                !sec_mgr->verifyAdminPassword(password->valuestring)) {
+                return cleanup_and_error("Administrator password required");
+            }
         }
+        sec_mgr->setFuzzingAllowed(allow);
     }
 
     // Optional physical GPIO gate configuration for unsafe fuzzing
@@ -291,14 +304,22 @@ inline cJSON* handleSecurityConfigPost(SecurityManager* sec_mgr, const char* jso
     }
 
     if (gate_cfg_updated) {
-        sec_mgr->configureFuzzingGpioGate(gate_enabled, gate_gpio_num, gate_active_high, gate_pull_mode, gate_required);
+        cJSON* password = cJSON_GetObjectItem(request, "admin_password");
+        if (!password || !cJSON_IsString(password) || !password->valuestring ||
+            !sec_mgr->verifyAdminPassword(password->valuestring)) {
+            return cleanup_and_error("Administrator password required");
+        }
+        if (!sec_mgr->configureFuzzingGpioGate(gate_enabled, gate_gpio_num,
+                                               gate_active_high, gate_pull_mode,
+                                               gate_required) ||
+            !sec_mgr->persistOffensiveTestingPolicy()) {
+            return cleanup_and_error("Invalid or failed offensive-testing policy");
+        }
+    }
 
-        // Best-effort persistence (we don't fail the whole request if these auxiliary keys fail).
-        AsyncStorage::Global::nvsSet("security", "fuzzing_gpio_gate_enabled", (uint8_t)(gate_enabled ? 1 : 0));
-        AsyncStorage::Global::nvsSet("security", "fuzzing_gpio_gate_required", (uint8_t)(gate_required ? 1 : 0));
-        AsyncStorage::Global::nvsSet("security", "fuzzing_gpio_num", (uint32_t)(gate_gpio_num < 0 ? 0 : (uint32_t)gate_gpio_num));
-        AsyncStorage::Global::nvsSet("security", "fuzzing_gpio_active_high", (uint8_t)(gate_active_high ? 1 : 0));
-        AsyncStorage::Global::nvsSet("security", "fuzzing_gpio_pull_mode", (uint32_t)(gate_pull_mode < 0 ? 0 : (uint32_t)gate_pull_mode));
+    if (fuzzing_allowed && cJSON_IsBool(fuzzing_allowed) &&
+        !sec_mgr->persistOffensiveTestingPolicy()) {
+        return cleanup_and_error("Failed to save offensive-testing policy");
     }
 
     // Update alert policy if provided
@@ -416,49 +437,7 @@ inline cJSON* handleSecurityConfigPost(SecurityManager* sec_mgr, const char* jso
 // Load fuzzing_allowed from NVS on boot
 inline bool loadFuzzingAllowedFromNVS(SecurityManager* sec_mgr) {
     if (!sec_mgr) return false;
-
-    uint8_t value = 0;
-    esp_err_t err = AsyncStorage::Global::nvsGet("security", "fuzzing_allowed", value);
-
-    if (err == ESP_OK) {
-        sec_mgr->setFuzzingAllowed(value != 0);
-    } else {
-        // If not found, use default (false) and save it
-        sec_mgr->setFuzzingAllowed(false);
-        AsyncStorage::Global::nvsSet("security", "fuzzing_allowed", (uint8_t)0);
-    }
-
-    // Optional physical GPIO gate configuration (all keys optional; defaults keep the gate disabled).
-    uint8_t gate_enabled_u8 = 0;
-    uint8_t gate_required_u8 = 0;
-    uint32_t gate_gpio_num_u32 = 0;
-    uint8_t gate_active_high_u8 = 0;
-    uint32_t gate_pull_mode_u32 = 1; // default pull-up
-
-    if (AsyncStorage::Global::nvsGet("security", "fuzzing_gpio_gate_enabled", gate_enabled_u8) != ESP_OK) {
-        gate_enabled_u8 = 0;
-    }
-    if (AsyncStorage::Global::nvsGet("security", "fuzzing_gpio_gate_required", gate_required_u8) != ESP_OK) {
-        gate_required_u8 = 0;
-    }
-    if (AsyncStorage::Global::nvsGet("security", "fuzzing_gpio_num", gate_gpio_num_u32) != ESP_OK) {
-        gate_gpio_num_u32 = 0;
-    }
-    if (AsyncStorage::Global::nvsGet("security", "fuzzing_gpio_active_high", gate_active_high_u8) != ESP_OK) {
-        gate_active_high_u8 = 0;
-    }
-    if (AsyncStorage::Global::nvsGet("security", "fuzzing_gpio_pull_mode", gate_pull_mode_u32) != ESP_OK) {
-        gate_pull_mode_u32 = 1;
-    }
-
-    const bool gate_enabled = (gate_enabled_u8 != 0);
-    const bool gate_required = (gate_required_u8 != 0);
-    const int gpio_num = gate_enabled ? (int)gate_gpio_num_u32 : -1;
-    const bool active_high = (gate_active_high_u8 != 0);
-    const int pull_mode = (int)gate_pull_mode_u32;
-
-    sec_mgr->configureFuzzingGpioGate(gate_enabled, gpio_num, active_high, pull_mode, gate_required);
-    return true;
+    return sec_mgr->loadOffensiveTestingPolicyFromStorage();
 }
 
 // GET /api/security/ratelimit

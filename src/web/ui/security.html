@@ -599,6 +599,14 @@
 
                 const config = data.config || {};
                 document.getElementById('fuzzing-allowed').checked = !!config.fuzzing_allowed;
+                window._fuzzingAllowedInitial = !!config.fuzzing_allowed;
+                window._fuzzingPolicySnapshot = {
+                    gate_enabled: !!config.fuzzing_gpio_gate_enabled,
+                    gate_required: !!config.fuzzing_gpio_gate_required,
+                    gpio: Number(config.fuzzing_gpio_num),
+                    active_high: !!config.fuzzing_gpio_active_high,
+                    pull_mode: Number(config.fuzzing_gpio_pull_mode)
+                };
 
                 // Effective fuzzing status (may be blocked by physical switch gate)
                 if (document.getElementById('fuzzing-effective-status')) {
@@ -743,6 +751,23 @@
                     opcua_enforce_security: opcuaToggle ? opcuaToggle.checked : false
                 };
 
+                const previousPolicy = window._fuzzingPolicySnapshot || {};
+                const policyChanged = config.fuzzing_allowed !== !!window._fuzzingAllowedInitial ||
+                    config.fuzzing_gpio_gate_enabled !== !!previousPolicy.gate_enabled ||
+                    config.fuzzing_gpio_gate_required !== !!previousPolicy.gate_required ||
+                    config.fuzzing_gpio_num !== Number(previousPolicy.gpio) ||
+                    config.fuzzing_gpio_active_high !== !!previousPolicy.active_high ||
+                    config.fuzzing_gpio_pull_mode !== Number(previousPolicy.pull_mode);
+                let adminPassword = '';
+                if (policyChanged && (config.fuzzing_allowed || config.fuzzing_gpio_gate_enabled || config.fuzzing_gpio_gate_required)) {
+                    adminPassword = window.prompt('Administrator password required to change offensive-testing policy:', '') || '';
+                    if (!adminPassword) {
+                        alert('Offensive-testing policy was not changed: administrator password required.');
+                        return;
+                    }
+                    config.admin_password = adminPassword;
+                }
+
                 const recipients = emailRecipients
                     ? emailRecipients.value.split(',').map(r => r.trim()).filter(r => r.length > 0)
                     : [];
@@ -777,15 +802,26 @@
 
                 if (!response.ok) {
                     const text = await response.text();
+                    config.admin_password = '';
                     alert('Error saving security settings: ' + text);
                     return;
                 }
 
                 const data = await response.json();
+                config.admin_password = '';
                 if (data.success === false) {
                     alert('Error: ' + (data.message || 'security update failed'));
                     return;
                 }
+
+                window._fuzzingAllowedInitial = config.fuzzing_allowed;
+                window._fuzzingPolicySnapshot = {
+                    gate_enabled: config.fuzzing_gpio_gate_enabled,
+                    gate_required: config.fuzzing_gpio_gate_required,
+                    gpio: config.fuzzing_gpio_num,
+                    active_high: config.fuzzing_gpio_active_high,
+                    pull_mode: config.fuzzing_gpio_pull_mode
+                };
 
                 document.getElementById('success-text').textContent = 'Security settings saved successfully';
                 document.getElementById('success-message').style.display = 'block';

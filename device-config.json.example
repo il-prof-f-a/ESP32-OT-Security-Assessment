@@ -269,6 +269,17 @@
     }
   },
   "security": {
+    "offensive_testing": {
+      "software_enabled": false,
+      "boot_policy": "seed_if_absent",
+      "gpio_gate": {
+        "enabled": true,
+        "required": true,
+        "gpio": 15,
+        "active_high": false,
+        "pull_mode": 1
+      }
+    },
     "alert_policy": {
       "email": {
         "enabled": false,

@@ -567,7 +567,7 @@ extern "C" void app_main(void) {
     // Plugin manager: initialize and register built-in plugins conditionally
     MemorySnapshot mem_before_plugin_manager = MemoryMonitor::capture();
     static PluginManager pm;
-    pm.initialize(&cfg, &rep, &net);
+    pm.initialize(&cfg, &rep, &net, &sec);
     MemoryMonitor::logDelta("PluginManager::initialize", mem_before_plugin_manager);
 
     // Register plugins only if enabled in configuration
@@ -713,7 +713,7 @@ extern "C" void app_main(void) {
     VulnerabilityScanner* scannerPtr = nullptr;
     if (cfg.isFeatureEnabled("vuln_scanner", false)) {
         static VulnerabilityScanner scanner;
-        scanner.initialize(&pm, &rep, &cfg);
+        scanner.initialize(&pm, &rep, &cfg, &sec);
         scannerPtr = &scanner;
     } else {
         LOG_INFO(TAG, "VulnerabilityScanner disabled by configuration");

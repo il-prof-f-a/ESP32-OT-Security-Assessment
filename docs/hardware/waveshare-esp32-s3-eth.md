@@ -30,7 +30,7 @@
 | SPI MOSI / MISO / SCLK | 11 / 12 / 13 | W5500 SPI data and clock      |
 | W5500 chip select      | 14           | W5500 SPI select              |
 
-Assessment, discovery, fuzzing and IDS traffic use Ethernet only. The management UI is Wi-Fi-only and uses a per-device self-signed HTTPS certificate. The firmware blocks management when the Wi-Fi and Ethernet IPv4 networks overlap. This is application-level isolation, not a substitute for a VLAN or firewall ACL; see [network isolation and residual exposure](../security/network-isolation.md).
+Assessment, discovery, fuzzing and IDS traffic use Ethernet only. The management UI is Wi-Fi-only and uses a per-device self-signed HTTPS certificate. The firmware blocks management when the Wi-Fi and Ethernet IPv4 networks overlap. This is application-level isolation, not a substitute for a VLAN or firewall ACL; see [network isolation and residual exposure](../security/network-isolation.md) and the [offensive-testing interlock](../security/offensive-testing-interlock.md).
 
 ## Photos, documents and purchase
 

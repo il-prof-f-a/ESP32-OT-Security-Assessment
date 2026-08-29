@@ -1,6 +1,6 @@
 # Web Interface User Guide
 
-This guide covers the operational web interface of ESP32 OT Security Assessment `v0.1.0`. It is
+This guide covers the operational web interface of ESP32 OT Security Assessment `v0.1.3`. It is
 based on the interface served by a running test device and on the corresponding HTML, JavaScript
 and HTTP handlers in the firmware source.
 
@@ -20,6 +20,8 @@ and HTTP handlers in the firmware source.
   certificate fingerprint against the value printed on the serial console.
 - Screenshots show the page layout. Runtime counters, feature availability and field values vary
   with hardware, configuration and traffic.
+- The Scanner & Fuzzing screenshots were refreshed from a running `v0.1.3` GUITION
+  JC-ESP32P4-M3-DEV on 2026-08-29. They contain no session URL or credentials.
 
 ## Guide map
 

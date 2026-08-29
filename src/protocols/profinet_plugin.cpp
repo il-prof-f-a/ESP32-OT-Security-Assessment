@@ -1,4 +1,5 @@
 #include "profinet_plugin.h"
+#include "../security/security_manager.h"
 #include "../assessment/fuzzing_engine.h"
 #include "../core/reporting_engine.h"
 #include "../core/logging_system.h"
@@ -1083,7 +1084,13 @@ bool PROFINETPlugin::fixup(const FuzzJob& job, const FuzzTestCase& in, FuzzTestC
 FuzzResult PROFINETPlugin::execute(const FuzzJob& job, const FuzzTestCase& tc,
                                   std::string& sent_hex, std::string& received_hex,
                                   std::string& status_details) {
-    (void)job;
+    if (!job.safe_mode && (!sec_ || !sec_->isFuzzingAllowed())) {
+        status_details = "blocked_by_offensive_policy:" +
+            std::string(sec_ ? sec_->getFuzzingBlockReason() : "security_manager_unavailable");
+        sent_hex.clear();
+        received_hex.clear();
+        return FuzzResult::SEND_FAILED;
+    }
 
     // Convert payload to hex for sent_hex
     psram_string ps_hex;

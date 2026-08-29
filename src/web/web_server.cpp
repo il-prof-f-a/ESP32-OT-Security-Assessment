@@ -3177,9 +3177,13 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     httpd_uri_t sec_cfg_g = { .uri="/api/security/config", .method=HTTP_GET, .handler=&WebServer::h_security_config_get, .user_ctx=nullptr };
     httpd_uri_t sec_cfg_p = { .uri="/api/security/config", .method=HTTP_POST, .handler=&WebServer::h_security_config_post, .user_ctx=nullptr };
     httpd_uri_t sec_ack = { .uri="/api/security/events/ack", .method=HTTP_POST, .handler=&WebServer::h_security_event_ack, .user_ctx=nullptr };
+    httpd_uri_t offensive_g = { .uri="/api/security/offensive-testing", .method=HTTP_GET, .handler=&WebServer::h_offensive_testing_get, .user_ctx=nullptr };
+    httpd_uri_t offensive_p = { .uri="/api/security/offensive-testing", .method=HTTP_POST, .handler=&WebServer::h_offensive_testing_post, .user_ctx=nullptr };
     httpd_register_uri_handler(active_server_, &sec_cfg_g);
     httpd_register_uri_handler(active_server_, &sec_cfg_p);
     httpd_register_uri_handler(active_server_, &sec_ack);
+    httpd_register_uri_handler(active_server_, &offensive_g);
+    httpd_register_uri_handler(active_server_, &offensive_p);
 
     // Rate limiter endpoints
     httpd_uri_t rl_get = { .uri="/api/security/ratelimit", .method=HTTP_GET, .handler=&WebServer::h_ratelimit_get, .user_ctx=nullptr };
@@ -10330,6 +10334,17 @@ esp_err_t WebServer::h_security_config_post(httpd_req_t* req) {
     esp_err_t send_res = httpd_resp_send(req, response_str, HTTPD_RESP_USE_STRLEN);
     free_cjson_str(response_str);
     return send_res;
+}
+
+// Dedicated aliases for clients that only manage the offensive-testing policy.
+// They share the authenticated, password-protected implementation above so the
+// policy cannot diverge between the general Security page and Scanner pages.
+esp_err_t WebServer::h_offensive_testing_get(httpd_req_t* req) {
+    return h_security_config_get(req);
+}
+
+esp_err_t WebServer::h_offensive_testing_post(httpd_req_t* req) {
+    return h_security_config_post(req);
 }
 
 esp_err_t WebServer::h_security_event_ack(httpd_req_t* req) {

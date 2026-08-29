@@ -8,6 +8,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class BuildIntegrationTests(unittest.TestCase):
+    def test_platformio_has_no_malformed_standalone_flag(self):
+        source = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
+        self.assertNotIn("- =1", source)
+
     def test_public_build_output_is_isolated_from_the_private_repository(self):
         platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
 
@@ -222,6 +226,140 @@ class BuildIntegrationTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('masked_hash = std::string(entry.hash.c_str(), 8) + "***" +', security)
+
+    def test_network_presence_renders_all_recognized_protocol_tags(self):
+        page = (PROJECT_ROOT / "src/web/ui/network_presence.html").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("function getVisibleProtocolLabels(device)", page)
+        self.assertIn("const visibleProtocols = getVisibleProtocolLabels(device);", page)
+        self.assertIn(".map(protocol =>", page)
+        self.assertNotIn("const protocolLabel = protocols.length > 0 ? protocols[0] : 'N/A';", page)
+
+    def test_vulnerability_scanner_contracts(self):
+        opcua_tests = (PROJECT_ROOT / "src/protocols/opcua_vulnerability_tests.cpp").read_text(
+            encoding="utf-8"
+        )
+        opcua_plugin = (PROJECT_ROOT / "src/protocols/opcua_plugin.cpp").read_text(
+            encoding="utf-8"
+        )
+        opcua_codec = (PROJECT_ROOT / "src/protocols/opcua_binary_codec.cpp").read_text(
+            encoding="utf-8"
+        )
+        modbus = (PROJECT_ROOT / "src/protocols/modbus_tcp_plugin.cpp").read_text(
+            encoding="utf-8"
+        )
+        scanner = (PROJECT_ROOT / "src/assessment/vulnerability_scanner.cpp").read_text(
+            encoding="utf-8"
+        )
+        page = (PROJECT_ROOT / "src/web/ui/scanner.html").read_text(encoding="utf-8")
+
+        self.assertIn("recvOpcUaFrame", opcua_tests)
+        self.assertIn("recvOpcUaFrame", opcua_plugin)
+        self.assertIn("msg_size < 8 || msg_size > len", opcua_codec)
+        self.assertIn("parseInPSRAM", modbus)
+        self.assertIn('cJSON_GetObjectItem(envelope, "scan_types")', modbus)
+        self.assertIn('"plugin_no_result"', scanner)
+        self.assertIn("1: { // Modbus", page)
+        self.assertIn("scan_types:scanTypes", page)
+
+    def test_modbus_reference_scan_matrix(self):
+        modbus = (PROJECT_ROOT / "src/protocols/modbus_tcp_plugin.cpp").read_text(
+            encoding="utf-8"
+        )
+        page = (PROJECT_ROOT / "src/web/ui/scanner.html").read_text(encoding="utf-8")
+
+        for marker in (
+            "pduDeviceIdentification(uint8_t level, uint8_t object_id)",
+            "object_id <= 5",
+            "device_identification_regular",
+            "device_identification_extended",
+            "device_identification_object",
+            "conformity_level",
+            "unit_id_enumeration",
+            "security_profile",
+            "authentication_capability",
+            "exception_behavior",
+            "cleartext_exposure",
+            "client_allow_list",
+            "cve_correlation",
+            "firmware_age",
+            "TCP/802",
+            "0xFFFF",
+        ):
+            self.assertIn(marker, modbus)
+
+        for marker in (
+            "service_discovery",
+            "device_identification_regular",
+            "device_identification_extended",
+            "device_identification_object",
+            "conformity_level",
+            "unit_id_enumeration",
+            "security_profile",
+            "authentication_capability",
+            "exception_behavior",
+            "cleartext_exposure",
+            "client_allow_list",
+            "cve_correlation",
+            "firmware_age",
+        ):
+            self.assertIn(marker, page)
+        self.assertNotIn("{ id: 'write_capability'", page)
+        self.assertIn('cfg_.enable_test_write && scan_types.empty()', modbus)
+
+    def test_vulnerability_scan_result_polling_waits_for_terminal_result(self):
+        page = (PROJECT_ROOT / "src/web/ui/scanner.html").read_text(encoding="utf-8")
+        scanner = (PROJECT_ROOT / "src/assessment/vulnerability_scanner.cpp").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("const SCAN_RESULT_POLL_ATTEMPTS = 60;", page)
+        self.assertIn("box.dataset.state = 'pending';", page)
+        self.assertIn("const done = await viewJobResult(id, true);", page)
+        self.assertIn("if(!done && attempts < SCAN_RESULT_POLL_ATTEMPTS)", page)
+        self.assertIn("return true;", page)
+        self.assertIn("return false;", page)
+        self.assertNotIn("box.textContent.trim().length>0", page)
+        self.assertIn("last_results_.erase(id);", scanner)
+
+    def test_vulnerability_scanner_protocol_fallback_matches_firmware_enum(self):
+        page = (PROJECT_ROOT / "src/web/ui/scanner.html").read_text(encoding="utf-8")
+
+        self.assertIn("{id:3,key:'opcua',     name:'OPC UA'}", page)
+        self.assertIn("{id:5,key:'profinet',  name:'PROFINET'}", page)
+        self.assertNotIn("{id:3,key:'profinet'", page)
+        self.assertNotIn("{id:5,key:'opcua'", page)
+
+    def test_opcua_manual_assessments_are_reported_as_skipped(self):
+        plugin = (PROJECT_ROOT / "src/protocols/opcua_plugin.cpp").read_text(
+            encoding="utf-8"
+        )
+        page = (PROJECT_ROOT / "src/web/ui/scanner.html").read_text(encoding="utf-8")
+
+        self.assertIn(
+            'append_finding("default_credentials", scanner.testDefaultCredentials(host_ps.c_str(), port), true);',
+            plugin,
+        )
+        self.assertIn(
+            'append_finding("idor_vulnerability", scanner.testIDORVulnerability(host_ps.c_str(), port), true);',
+            plugin,
+        )
+        self.assertIn("Manual: default credentials", page)
+        self.assertIn("Manual: authorization/IDOR", page)
+
+    def test_protocol_scans_emit_text_execution_traces(self):
+        modbus = (PROJECT_ROOT / "src/protocols/modbus_tcp_plugin.cpp").read_text(
+            encoding="utf-8"
+        )
+        opcua = (PROJECT_ROOT / "src/protocols/opcua_plugin.cpp").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("Modbus vulnerability check started", modbus)
+        self.assertIn("Modbus vulnerability check completed", modbus)
+        self.assertIn("OPC UA vulnerability check completed", opcua)
 
     def test_target_transport_policy_is_explicit(self):
         platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")

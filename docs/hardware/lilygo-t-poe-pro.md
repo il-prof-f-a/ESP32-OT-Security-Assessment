@@ -30,7 +30,7 @@
 | RMII MDIO            | 18   | Ethernet management data  |
 | RMII reference clock | 0    | Clock output to the PHY   |
 
-The firmware binds assessment, discovery, fuzzing and IDS traffic to Ethernet. Management is Wi-Fi-only in policy and must not fall back to Ethernet. The server is started only on a non-overlapping Wi-Fi IPv4 network, but this target remains unsuitable for a confidential management network because it uses HTTP. See [network isolation and residual exposure](../security/network-isolation.md).
+The firmware binds assessment, discovery, fuzzing and IDS traffic to Ethernet. Management is Wi-Fi-only in policy and must not fall back to Ethernet. The server is started only on a non-overlapping Wi-Fi IPv4 network, but this target remains unsuitable for a confidential management network because it uses HTTP. See [network isolation and residual exposure](../security/network-isolation.md) and the [offensive-testing interlock](../security/offensive-testing-interlock.md).
 
 ## Photos, documents and purchase
 

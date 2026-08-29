@@ -8,6 +8,7 @@
 #include "../core/types.h"
 #include "api_key_rotation_manager.h"
 #include "password_hasher.h"
+#include "offensive_testing_board_profile.h"
 #include <algorithm>
 #include <cstring>
 #include <cctype>
@@ -23,6 +24,7 @@ extern "C" {
     #include "nvs_flash.h"
     #include "mbedtls/sha256.h"
     #include "esp_random.h"
+    #include "esp_crc.h"
 }
 
 static const char* TAG_SEC = "Security";
@@ -81,35 +83,38 @@ bool SecurityManager::readFuzzingGpioGateState() const {
     return fuzzing_gpio_active_high_ ? raw_on : !raw_on;
 }
 
+OffensiveTestingDecision SecurityManager::evaluateOffensiveTesting() const {
+    OffensiveTestingDecision decision;
+    decision.software_enabled = fuzzing_allowed_;
+    decision.gpio_required = fuzzing_gpio_gate_enabled_ && fuzzing_gpio_gate_required_;
+    decision.gpio_asserted = readFuzzingGpioGateState();
+    decision.source = offensive_policy_source_.c_str();
+    if (!decision.software_enabled) {
+        decision.reason = "disabled_in_security_config";
+        return decision;
+    }
+    if (decision.gpio_required && !decision.gpio_asserted) {
+        decision.reason = "disabled_by_physical_switch";
+        return decision;
+    }
+    decision.allowed = true;
+    decision.reason = "allowed";
+    return decision;
+}
+
 bool SecurityManager::isFuzzingAllowed() const {
-    if (!fuzzing_allowed_) {
-        return false;
-    }
-
-    if (fuzzing_gpio_gate_enabled_ && fuzzing_gpio_gate_required_) {
-        return readFuzzingGpioGateState();
-    }
-
-    return true;
+    return evaluateOffensiveTesting().allowed;
 }
 
 const char* SecurityManager::getFuzzingBlockReason() const {
-    if (!fuzzing_allowed_) {
-        return "disabled_in_security_config";
-    }
-
-    if (fuzzing_gpio_gate_enabled_ && fuzzing_gpio_gate_required_ && !readFuzzingGpioGateState()) {
-        return "disabled_by_physical_switch";
-    }
-
-    return "allowed";
+    return evaluateOffensiveTesting().reason;
 }
 
-void SecurityManager::configureFuzzingGpioGate(bool enabled,
-                                              int gpio_num,
-                                              bool active_high,
-                                              int pull_mode,
-                                              bool require_gate) {
+bool SecurityManager::configureFuzzingGpioGate(bool enabled,
+                                               int gpio_num,
+                                               bool active_high,
+                                               int pull_mode,
+                                               bool require_gate) {
     fuzzing_gpio_gate_enabled_ = enabled;
     fuzzing_gpio_gate_required_ = require_gate;
     fuzzing_gpio_num_ = gpio_num;
@@ -118,15 +123,16 @@ void SecurityManager::configureFuzzingGpioGate(bool enabled,
 
     if (!enabled) {
         LOG_INFO(TAG_SEC, "Fuzzing GPIO gate disabled");
-        return;
+        return true;
     }
 
-    if (gpio_num < 0 || gpio_num >= (int)GPIO_NUM_MAX) {
-        LOG_ERRORF(TAG_SEC, "Fuzzing GPIO gate invalid gpio_num=%d (disabling gate)", gpio_num);
+    if (!isAllowedOffensiveTestingGpio(gpio_num)) {
+        LOG_ERRORF(TAG_SEC, "Fuzzing GPIO gate reserved/invalid gpio_num=%d (fail closed)", gpio_num);
         fuzzing_gpio_gate_enabled_ = false;
-        fuzzing_gpio_gate_required_ = false;
+        fuzzing_gpio_gate_required_ = true;
         fuzzing_gpio_num_ = -1;
-        return;
+        fuzzing_allowed_ = false;
+        return false;
     }
 
     gpio_config_t io{};
@@ -140,9 +146,10 @@ void SecurityManager::configureFuzzingGpioGate(bool enabled,
     if (err != ESP_OK) {
         LOG_ERRORF(TAG_SEC, "Fuzzing GPIO gate gpio_config failed gpio=%d err=%d (disabling gate)", gpio_num, (int)err);
         fuzzing_gpio_gate_enabled_ = false;
-        fuzzing_gpio_gate_required_ = false;
+        fuzzing_gpio_gate_required_ = true;
         fuzzing_gpio_num_ = -1;
-        return;
+        fuzzing_allowed_ = false;
+        return false;
     }
 
     LOG_INFOF(TAG_SEC,
@@ -152,6 +159,112 @@ void SecurityManager::configureFuzzingGpioGate(bool enabled,
               (int)active_high,
               pull_mode,
               (int)readFuzzingGpioGateState());
+    return true;
+}
+
+namespace {
+struct __attribute__((packed)) OffensivePolicyRecordV1 {
+    uint32_t magic;
+    uint8_t version;
+    uint8_t software_enabled;
+    uint8_t gpio_enabled;
+    uint8_t gpio_required;
+    int16_t gpio;
+    uint8_t active_high;
+    uint8_t pull_mode;
+    uint32_t crc32;
+};
+constexpr uint32_t kOffensivePolicyMagic = 0x4F54504CUL; // OTP L
+constexpr char kOffensivePolicyKey[] = "off_policy_v1";
+
+uint32_t offensivePolicyCrc(const OffensivePolicyRecordV1& record) {
+    return esp_crc32_le(0, reinterpret_cast<const uint8_t*>(&record),
+                        offsetof(OffensivePolicyRecordV1, crc32));
+}
+
+bool validOffensivePolicyRecord(const OffensivePolicyRecordV1& record) {
+    return record.magic == kOffensivePolicyMagic && record.version == 1 &&
+           record.software_enabled <= 1 && record.gpio_enabled <= 1 &&
+           record.gpio_required <= 1 && record.active_high <= 1 &&
+           record.pull_mode <= 2 && record.crc32 == offensivePolicyCrc(record);
+}
+}  // namespace
+
+void SecurityManager::getOffensiveTestingConfigSnapshot(OffensiveTestingConfig& out) const {
+    out.software_enabled = fuzzing_allowed_;
+    out.gpio_gate.enabled = fuzzing_gpio_gate_enabled_;
+    out.gpio_gate.required = fuzzing_gpio_gate_required_;
+    out.gpio_gate.gpio = fuzzing_gpio_num_;
+    out.gpio_gate.active_high = fuzzing_gpio_active_high_;
+    out.gpio_gate.pull_mode = fuzzing_gpio_pull_mode_;
+    out.boot_policy = PSRAMUtils::createPSRAMString(offensive_policy_source_ == "config_override"
+                                                        ? "force_config" : "seed_if_absent");
+}
+
+bool SecurityManager::persistOffensiveTestingPolicy() {
+    OffensivePolicyRecordV1 record{};
+    record.magic = kOffensivePolicyMagic;
+    record.version = 1;
+    record.software_enabled = fuzzing_allowed_ ? 1 : 0;
+    record.gpio_enabled = fuzzing_gpio_gate_enabled_ ? 1 : 0;
+    record.gpio_required = fuzzing_gpio_gate_required_ ? 1 : 0;
+    record.gpio = static_cast<int16_t>(fuzzing_gpio_num_);
+    record.active_high = fuzzing_gpio_active_high_ ? 1 : 0;
+    record.pull_mode = static_cast<uint8_t>(fuzzing_gpio_pull_mode_);
+    record.crc32 = offensivePolicyCrc(record);
+    return AsyncStorage::Global::nvsSetBlob("security", kOffensivePolicyKey,
+                                            &record, sizeof(record)) == ESP_OK;
+}
+
+bool SecurityManager::loadOffensiveTestingPolicyFromStorage() {
+    const OffensiveTestingConfig configured = cfg_.offensive_testing;
+    const auto& profile = getOffensiveTestingBoardProfile();
+    const bool force_config = configured.boot_policy == "force_config";
+
+    OffensivePolicyRecordV1 record{};
+    std::vector<uint8_t> raw;
+    bool loaded = false;
+    if (!force_config && AsyncStorage::Global::nvsGetBlob("security", kOffensivePolicyKey, raw) == ESP_OK &&
+        raw.size() == sizeof(record)) {
+        memcpy(&record, raw.data(), sizeof(record));
+        loaded = validOffensivePolicyRecord(record);
+    }
+
+    if (loaded) {
+        fuzzing_allowed_ = record.software_enabled != 0;
+        fuzzing_gpio_gate_enabled_ = record.gpio_enabled != 0;
+        fuzzing_gpio_gate_required_ = record.gpio_required != 0;
+        fuzzing_gpio_num_ = record.gpio;
+        fuzzing_gpio_active_high_ = record.active_high != 0;
+        fuzzing_gpio_pull_mode_ = record.pull_mode;
+        offensive_policy_source_ = "nvs";
+    } else {
+        uint8_t legacy = 0;
+        const bool has_legacy = !force_config &&
+            AsyncStorage::Global::nvsGet("security", "fuzzing_allowed", legacy) == ESP_OK;
+        fuzzing_allowed_ = force_config ? configured.software_enabled
+                                        : (has_legacy ? legacy != 0 : configured.software_enabled);
+        fuzzing_gpio_gate_enabled_ = configured.gpio_gate.enabled;
+        fuzzing_gpio_gate_required_ = configured.gpio_gate.required;
+        fuzzing_gpio_num_ = configured.gpio_gate.gpio >= 0
+                                ? configured.gpio_gate.gpio : profile.default_gpio;
+        fuzzing_gpio_active_high_ = configured.gpio_gate.active_high;
+        fuzzing_gpio_pull_mode_ = configured.gpio_gate.pull_mode;
+        offensive_policy_source_ = force_config ? "config_override"
+                                                : (has_legacy ? "legacy_migration" : "config_seed");
+        if (!force_config && !persistOffensiveTestingPolicy()) {
+            LOG_WARNING(TAG_SEC, "Unable to seed offensive-testing policy; continuing fail-closed");
+        }
+    }
+
+    if (!configureFuzzingGpioGate(fuzzing_gpio_gate_enabled_, fuzzing_gpio_num_,
+                                  fuzzing_gpio_active_high_, fuzzing_gpio_pull_mode_,
+                                  fuzzing_gpio_gate_required_)) {
+        fuzzing_allowed_ = false;
+        offensive_policy_source_ = "invalid_fail_closed";
+        return false;
+    }
+    return true;
 }
 
 bool SecurityManager::initialize(const SecurityConfig& cfg) {
@@ -224,6 +337,8 @@ bool SecurityManager::initialize(const SecurityConfig& cfg) {
     // Load API keys from NVS
     loadApiKeysFromNVS();
     auditApiKeysForRotation();
+
+    loadOffensiveTestingPolicyFromStorage();
 
     LOG_INFOF(TAG_SEC, "SecurityManager initialized with %zu API keys", api_keys_.size());
     return true;

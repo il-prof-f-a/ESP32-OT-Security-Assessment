@@ -142,6 +142,7 @@ psram_string OPCUABinaryCodec::decodeString(const uint8_t* data, size_t& offset,
     // Invalid length
     if (len < 0 || offset + len > max_len) {
         LOG_ERRORF(TAG_OPCUA_CODEC, "decodeString: invalid length %d", len);
+        offset = max_len;
         return PSRAMUtils::createPSRAMString("");
     }
 
@@ -149,7 +150,8 @@ psram_string OPCUABinaryCodec::decodeString(const uint8_t* data, size_t& offset,
     char temp_buf[4096];
     if (len >= sizeof(temp_buf)) {
         LOG_ERRORF(TAG_OPCUA_CODEC, "decodeString: string too long %d", len);
-        len = sizeof(temp_buf) - 1;
+        offset = max_len;
+        return PSRAMUtils::createPSRAMString("");
     }
 
     memcpy(temp_buf, data + offset, len);
@@ -173,6 +175,7 @@ psram_string OPCUABinaryCodec::decodeByteStringAsHex(const uint8_t* data, size_t
 
     if (len < 0 || offset + len > max_len) {
         LOG_ERRORF(TAG_OPCUA_CODEC, "decodeByteStringAsHex: invalid length %d", len);
+        offset = max_len;
         return PSRAMUtils::createPSRAMString("");
     }
 
@@ -633,6 +636,10 @@ bool OPCUABinaryCodec::parseOpenSecureChannelResponse(const uint8_t* data, size_
     msg_type[2] = data[offset++];
     offset++; // chunk_type (not used)
     uint32_t msg_size = decodeUInt32(data, offset);
+    if (msg_size < 8 || msg_size > len || msg_size > 64 * 1024) {
+        out_error = PSRAMUtils::createPSRAMString("Invalid OPC UA message size");
+        return false;
+    }
 
     if (strncmp(msg_type, OPCUA::MSG_OPEN, 3) != 0) {
         // Check for error message
@@ -644,7 +651,10 @@ bool OPCUABinaryCodec::parseOpenSecureChannelResponse(const uint8_t* data, size_
         return false;
     }
 
-    (void)msg_size; // May not match len exactly
+    if (msg_size != len) {
+        out_error = PSRAMUtils::createPSRAMString("Truncated OPC UA message");
+        return false;
+    }
 
     // SecureChannelId
     out_secure_channel_id = decodeUInt32(data, offset);
@@ -724,6 +734,10 @@ bool OPCUABinaryCodec::parseOpenSecureChannelResponse(const uint8_t* data, size_
 
     // Skip StringTable (array)
     int32_t string_table_count = decodeArrayLength(data, offset);
+    if (string_table_count < 0 || string_table_count > 100) {
+        out_error = PSRAMUtils::createPSRAMString("Invalid StringTable length");
+        return false;
+    }
     for (int32_t i = 0; i < string_table_count; ++i) {
         if (!skipByteString(data, offset, len)) {
             out_error = PSRAMUtils::createPSRAMString("Failed to skip StringTable");
@@ -825,7 +839,15 @@ bool OPCUABinaryCodec::parseGetEndpointsResponse(const uint8_t* data, size_t len
     msg_type[1] = data[offset++];
     msg_type[2] = data[offset++];
     offset++; // chunk_type (not used)
-    offset += 4; // msg_size (not validated)
+    uint32_t msg_size = decodeUInt32(data, offset);
+    if (msg_size < 8 || msg_size > len || msg_size > 64 * 1024) {
+        out_error = PSRAMUtils::createPSRAMString("Invalid OPC UA message size");
+        return false;
+    }
+    if (msg_size != len) {
+        out_error = PSRAMUtils::createPSRAMString("Truncated OPC UA message");
+        return false;
+    }
 
     if (strncmp(msg_type, OPCUA::MSG_MESSAGE, 3) != 0) {
         if (strncmp(msg_type, OPCUA::MSG_ERROR, 3) == 0) {
@@ -895,6 +917,10 @@ bool OPCUABinaryCodec::parseGetEndpointsResponse(const uint8_t* data, size_t len
         return false;
     }
     int32_t string_table_count = decodeArrayLength(data, offset);
+    if (string_table_count < 0 || string_table_count > 100) {
+        out_error = PSRAMUtils::createPSRAMString("Invalid StringTable length");
+        return false;
+    }
     for (int32_t i = 0; i < string_table_count; ++i) {
         if (!skipByteString(data, offset, len)) {
             out_error = PSRAMUtils::createPSRAMString("Failed to skip StringTable entry");
@@ -1000,7 +1026,11 @@ bool OPCUABinaryCodec::parseGetEndpointsResponse(const uint8_t* data, size_t len
             return false;
         }
         int32_t discovery_url_count = decodeArrayLength(data, offset);
-        for (int32_t i = 0; i < discovery_url_count && i < 10; ++i) {
+        if (discovery_url_count < 0 || discovery_url_count > 10) {
+            out_error = PSRAMUtils::createPSRAMString("Invalid DiscoveryUrls length");
+            return false;
+        }
+        for (int32_t i = 0; i < discovery_url_count; ++i) {
             psram_string url = decodeString(data, offset, len);
             endpoint.server_discovery_urls.push_back(url);
         }
@@ -1034,12 +1064,16 @@ bool OPCUABinaryCodec::parseGetEndpointsResponse(const uint8_t* data, size_t len
             return false;
         }
         int32_t token_count = decodeArrayLength(data, offset);
+        if (token_count < 0 || token_count > 20) {
+            out_error = PSRAMUtils::createPSRAMString("Invalid UserIdentityTokens length");
+            return false;
+        }
 
         endpoint.allows_anonymous = false;
         endpoint.allows_username_password = false;
         endpoint.allows_certificate = false;
 
-        for (int32_t t = 0; t < token_count && t < 20; ++t) {
+        for (int32_t t = 0; t < token_count; ++t) {
             UserIdentityTokenPolicy token_policy;
 
             // PolicyId (String)

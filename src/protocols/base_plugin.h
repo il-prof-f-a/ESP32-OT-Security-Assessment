@@ -15,6 +15,7 @@ class ConfigurationManager;
 class ReportingEngine;
 class WritersTracker;
 class NetworkPresenceTracker;
+class SecurityManager;
 
 // Forward declarations for fuzzing structures
 struct FuzzTestCase;
@@ -43,6 +44,8 @@ public:
         return true;
     }
     virtual void shutdown() {}
+
+    void setSecurityManager(SecurityManager* sec) { sec_ = sec; }
 
     // Network packet callback for real-time analysis (implemented at base level)
     void onPacket(const NetworkPacket& pkt, bool bypassAuthorization = false);
@@ -254,6 +257,7 @@ protected:
 
     ConfigurationManager* cfg_ = nullptr;
     ReportingEngine* rep_ = nullptr;
+    SecurityManager* sec_ = nullptr;
     std::atomic<uint64_t> events_generated_{0};
 
     /**

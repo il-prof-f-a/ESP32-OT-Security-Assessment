@@ -81,6 +81,8 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <div class="card" id="features">
   <h2>Scanner & Fuzzing</h2>
   <label><input type="checkbox" id="feat_scanner_fuzzing"> Enable Scanner & Fuzzing Module</label>
+  <label style="margin-top:.4rem;display:block;"><input type="checkbox" id="offensive_testing_toggle" onchange="toggleOffensiveTesting(this)"> Enable Offensive Testing (requires administrator password and physical interlock)</label>
+  <small id="offensive_testing_status" style="display:block;margin-top:.25rem;color:#666">Loading offensive-testing policy...</small>
   <label style="margin-top:.4rem;display:block;"><input type="checkbox" id="feat_scanner_scheduling"> Enable Scheduled Scans (Cron)</label>
   <button class="btn" onclick="saveFeatures()">Save</button>
 </div>
@@ -528,7 +530,49 @@ async function loadFeatures(){
     schedulingToggle.checked = schedulingEnabled;
     schedulingToggle.disabled = !scanningEnabled;
     applyFeatureState(f);
+    loadOffensiveTesting();
   }catch(e){ status('Error loading features: '+e.message,true); }
+}
+
+async function loadOffensiveTesting(){
+  const toggle = document.getElementById('offensive_testing_toggle');
+  const statusEl = document.getElementById('offensive_testing_status');
+  if (!toggle || !statusEl) return;
+  try {
+    const response = await fetch('/api/security/config');
+    const payload = await response.json();
+    const policy = payload && payload.config && payload.config.offensive_testing;
+    if (!policy) throw new Error('policy unavailable');
+    toggle.checked = !!policy.software_enabled;
+    statusEl.textContent = `Software: ${policy.software_enabled ? 'ON' : 'OFF'} | Physical gate: ${policy.gpio_asserted ? 'ASSERTED' : 'OPEN'} | Effective: ${policy.effective ? 'ALLOWED' : 'BLOCKED'} (${policy.reason}) | GPIO ${policy.gpio}`;
+    statusEl.style.color = policy.effective ? '#187a2f' : '#8a4b00';
+  } catch (error) {
+    toggle.checked = false;
+    statusEl.textContent = 'Unable to read offensive-testing policy: ' + error.message;
+    statusEl.style.color = '#a00';
+  }
+}
+
+async function toggleOffensiveTesting(toggle){
+  const enable = !!toggle.checked;
+  const body = { fuzzing_allowed: enable };
+  if (enable) {
+    const password = window.prompt('Administrator password required to enable Offensive Testing:');
+    if (!password) { toggle.checked = false; return; }
+    body.admin_password = password;
+  }
+  try {
+    const response = await fetch('/api/security/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const payload = await response.json();
+    if (payload.success === false) throw new Error(payload.message || 'update rejected');
+    status('Offensive-testing policy updated');
+    await loadOffensiveTesting();
+  } catch (error) {
+    toggle.checked = !enable;
+    status('Offensive-testing update failed: ' + error.message, true);
+    await loadOffensiveTesting();
+  }
 }
 function applyFeatureState(f){
   const scanningEnabled = !!(f.vuln_scanner || f.fuzzing || f.scanner_fuzzing);
@@ -648,9 +692,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const fallback = [
       {id:1,key:'modbus',    name:'Modbus TCP'},
       {id:2,key:'s7',        name:'S7 Communication'},
-      {id:3,key:'profinet',  name:'PROFINET'},
+      {id:3,key:'opcua',     name:'OPC UA'},
       {id:4,key:'ethernetip',name:'EtherNet/IP'},
-      {id:5,key:'opcua',     name:'OPC UA'}
+      {id:5,key:'profinet',  name:'PROFINET'}
     ];
     function $(s,root=document){ return root.querySelector(s); }
     function fillSelect(sel, list){
@@ -1269,6 +1313,30 @@ document.getElementById('create_job').style.display='none';
 
 // Protocol-specific vulnerability scan types (safe, non-destructive checks)
 const VULN_SCAN_TYPES = {
+  1: { // Modbus
+    help: 'Modbus TCP reference scans are read-only or observational. Write testing remains separately gated by device configuration and is not exposed here.',
+    types: [
+      { id: 'service_discovery', label: 'Service discovery (TCP/502)', def: true },
+      { id: 'report_slave_id', label: 'Report Slave ID (FC 0x11)', def: true },
+      { id: 'device_identification_basic', label: 'Basic device identification (FC43/14)', def: true },
+      { id: 'device_identification_regular', label: 'Regular device identification (FC43/14)', def: true },
+      { id: 'device_identification_extended', label: 'Extended device identification (FC43/14)', def: true },
+      { id: 'device_identification_object', label: 'Individual identification objects (IDs 0-5)', def: false },
+      { id: 'conformity_level', label: 'Conformity-level check', def: true },
+      { id: 'unit_id_enumeration', label: 'Unit-ID enumeration (max 16)', def: false },
+      { id: 'security_profile', label: 'Security profile (TCP/502 vs TCP/802)', def: true },
+      { id: 'authentication_capability', label: 'Authentication capability assessment', def: true },
+      { id: 'read_coils', label: 'Read coils (FC 0x01)', def: true },
+      { id: 'read_discrete_inputs', label: 'Read discrete inputs (FC 0x02)', def: true },
+      { id: 'read_holding_registers', label: 'Read holding registers (FC 0x03)', def: true },
+      { id: 'read_input_registers', label: 'Read input registers (FC 0x04)', def: true },
+      { id: 'exception_behavior', label: 'Exception behaviour (out-of-range read)', def: false },
+      { id: 'cleartext_exposure', label: 'Cleartext exposure assessment', def: true },
+      { id: 'client_allow_list', label: 'Client allow-list assessment', def: false },
+      { id: 'cve_correlation', label: 'CVE/CPE correlation (metadata only)', def: true },
+      { id: 'firmware_age', label: 'Firmware age/support check (metadata only)', def: true }
+    ]
+  },
   2: { // S7
     help: 'S7 scan supports read-only risk assessment by default. "Proof" checks send control commands and are gated by SecurityManager (lab only).',
     types: [
@@ -1300,8 +1368,8 @@ const VULN_SCAN_TYPES = {
       { id: 'anonymous_access', label: 'Anonymous access', def: true },
       { id: 'weak_security_policies', label: 'Weak security policies', def: true },
       { id: 'certificate_validation', label: 'Certificate validation', def: true },
-      { id: 'default_credentials', label: 'Default credentials', def: true },
-      { id: 'idor_vulnerability', label: 'Authorization/IDOR assessment', def: true },
+      { id: 'default_credentials', label: 'Manual: default credentials (session support required)', def: false },
+      { id: 'idor_vulnerability', label: 'Manual: authorization/IDOR (session support required)', def: false },
       { id: 'certificate_chain_loop', label: 'Certificate chain loop', def: true },
       { id: 'brute_force_resilience', label: 'Brute force resilience', def: false },
       { id: 'condition_refresh_dos', label: 'ConditionRefresh DoS (active)', def: false },
@@ -1400,42 +1468,55 @@ loadJobs();
 }catch(e){status('Error creating job: '+e.message,true);}
 }
 
+const SCAN_RESULT_POLL_ATTEMPTS = 60;
+
 async function runJob(id){
 try{
 var r=await fetch('/api/scanner/run?id='+id,{method:'POST'});
 if(!r.ok)throw new Error('HTTP '+r.status);
 status('Job '+id+' started');
-// Best-effort: fetch result when the scan finishes (poll a few times).
+var box=document.getElementById('scan_result_box');
+if(box){
+  box.textContent='Waiting for scan result...';
+  box.dataset.state = 'pending';
+}
+setSummaryBox('scan_summary', null);
+// Poll for up to one minute. A 404 means that this execution is still in
+// progress, not that the scan failed.
 var attempts=0;
 var poll=async function(){
   attempts++;
-  try{
-    await viewJobResult(id);
-  }catch(_){}
-  // If still empty or failed, retry a few times.
-  var box=document.getElementById('scan_result_box');
-  var has=(box && box.textContent && box.textContent.trim().length>0);
-  if(!has && attempts<8){
-    setTimeout(poll, 700);
+  const done = await viewJobResult(id, true);
+  if(!done && attempts < SCAN_RESULT_POLL_ATTEMPTS){
+    setTimeout(poll, 1000);
+  }else if(!done){
+    if(box){
+      box.textContent='The scan is still running or did not produce a result within 60 seconds.';
+      box.dataset.state='timeout';
+    }
+    status('Scan '+id+' did not finish within 60 seconds',true);
   }
 };
 setTimeout(poll, 500);
 }catch(e){status('Error running job: '+e.message,true);}
 }
 
-async function viewJobResult(id){
+async function viewJobResult(id, silent){
 try{
 var r=await fetch('/api/scanner/result?id='+id,{cache:'no-store'});
+if(r.status===404 && silent) return false;
 if(!r.ok)throw new Error('HTTP '+r.status);
 var txt=await r.text();
 var obj = parseJsonSafe(txt);
 setSummaryBox('scan_summary', buildScannerSummary(obj));
 try{ txt = JSON.stringify(obj || JSON.parse(txt), null, 2); }catch(_){}
 var box=document.getElementById('scan_result_box');
-if(box){ box.textContent = txt; }
+if(box){ box.textContent = txt; box.dataset.state = 'complete'; }
 status('Loaded result for job '+id);
+return true;
 }catch(e){
-status('No result for job '+id+': '+e.message,true);
+if(!silent) status('No result for job '+id+': '+e.message,true);
+return false;
 }
 }
 

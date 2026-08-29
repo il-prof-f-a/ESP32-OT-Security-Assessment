@@ -1,5 +1,6 @@
 #include "ethernetip_plugin.h"
 #include "../assessment/fuzzing_engine.h"
+#include "../security/security_manager.h"
 #include "../network/assessment_interface.h"
 #include "../core/reporting_engine.h"
 #include "../core/logging_system.h"
@@ -627,6 +628,13 @@ bool EtherNetIPPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
     int sock = -1;
     auto send_explicit = [&](uint8_t svc, const psram_vector<uint8_t>& path, const psram_vector<uint8_t>& data, Probe& out) {
         out.attempted = true;
+        const bool state_changing = (svc == CIP_SVC_SET_ATTR_SINGLE || svc == CIP_SVC_RESET);
+        if (state_changing && (!sec_ || !sec_->isFuzzingAllowed())) {
+            out.attempted = false;
+            out.error = PSRAMUtils::createPSRAMString(
+                sec_ ? sec_->getFuzzingBlockReason() : "security_manager_unavailable");
+            return;
+        }
         if (sock < 0 || session_handle == 0) {
             out.error = PSRAMUtils::createPSRAMString("session_not_ready");
             return;
@@ -2344,6 +2352,14 @@ bool EtherNetIPPlugin::fixup(const FuzzJob& job, const FuzzTestCase& in, FuzzTes
 FuzzResult EtherNetIPPlugin::execute(const FuzzJob& job, const FuzzTestCase& tc,
                                     std::string& sent_hex, std::string& received_hex,
                                     std::string& status_details) {
+    if (!job.safe_mode && (!sec_ || !sec_->isFuzzingAllowed())) {
+        status_details = "blocked_by_offensive_policy:" +
+            std::string(sec_ ? sec_->getFuzzingBlockReason() : "security_manager_unavailable");
+        sent_hex.clear();
+        received_hex.clear();
+        return FuzzResult::SEND_FAILED;
+    }
+
     const std::string attack_profile = !tc.attack_type.empty()
         ? tc.attack_type
         : (job.profile.empty() ? std::string("default") : job.profile);

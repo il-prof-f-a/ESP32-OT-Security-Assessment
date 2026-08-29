@@ -39,6 +39,18 @@ struct SecurityAlertPolicy {
     } gpio;
 };
 
+struct OffensiveTestingConfig {
+    bool software_enabled = false;
+    psram_string boot_policy = PSRAMUtils::createPSRAMString("seed_if_absent");
+    struct GpioGate {
+        bool enabled = true;
+        bool required = true;
+        int gpio = -1;
+        bool active_high = false;
+        int pull_mode = 1; // 0=none, 1=pull-up, 2=pull-down
+    } gpio_gate;
+};
+
 struct SecurityConfig {
     psram_string admin_password = PSRAMUtils::createPSRAMString("");
     psram_string_map api_keys;
@@ -46,6 +58,7 @@ struct SecurityConfig {
     bool flash_encryption = false;
     bool certificate_validation = true;
     bool opcua_enforce_security = true;
+    OffensiveTestingConfig offensive_testing{};
     SecurityAlertPolicy alert_policy{};
 };
 

@@ -28,8 +28,18 @@ class BuildAssetsResult:
     header_path: Path
 
 
-def _public_defaults() -> dict:
-    """Return conservative defaults suitable for every supported target."""
+_BOARD_OFFENSIVE_GPIO = {
+    "t-poe-pro": 15,
+    "esp32-s3-eth": 16,
+    "waveshare-esp32p4-eth": 16,
+    "guition-jc-esp32p4-m3-dev": 1,
+}
+
+
+def _public_defaults(board: str | None = None) -> dict:
+    """Return conservative defaults for the selected supported target."""
+
+    default_gpio = _BOARD_OFFENSIVE_GPIO.get(board or "", -1)
 
     return {
         "audit": {
@@ -123,6 +133,17 @@ def _public_defaults() -> dict:
             "certificate_validation": True,
             "flash_encryption": False,
             "opcua_enforce_security": True,
+            "offensive_testing": {
+                "software_enabled": False,
+                "boot_policy": "seed_if_absent",
+                "gpio_gate": {
+                    "enabled": True,
+                    "required": True,
+                    "gpio": default_gpio,
+                    "active_high": False,
+                    "pull_mode": 1,
+                },
+            },
             "policy": {"block_s7_plc_stop": True},
             "secure_boot": False,
         },
@@ -262,6 +283,26 @@ def _embedded_admin_hash(config: dict) -> str:
     return _pbkdf2_hash(password)
 
 
+def _validate_offensive_override(config: dict) -> None:
+    """Reject permissive embedded offensive settings unless explicitly opted in."""
+
+    if os.environ.get("ESP32_OT_ALLOW_OFFENSIVE_CONFIG_OVERRIDE") == "1":
+        return
+    policy = (config.get("security") or {}).get("offensive_testing") or {}
+    gate = policy.get("gpio_gate") or {}
+    if (
+        policy.get("software_enabled") is True
+        or policy.get("boot_policy") not in (None, "seed_if_absent")
+        or gate.get("enabled") is False
+        or gate.get("required") is False
+    ):
+        raise ValueError(
+            "offensive-testing embedded overrides are disabled by default; set "
+            "ESP32_OT_ALLOW_OFFENSIVE_CONFIG_OVERRIDE=1 only for an authorized "
+            "development build"
+        )
+
+
 def _header_bytes(config: dict, admin_hash: str, ethernet_dhcp: bool) -> bytes:
     rendered = json.dumps(
         config, ensure_ascii=True, separators=(",", ":"), sort_keys=True
@@ -305,7 +346,7 @@ def generate_build_assets(
 
     admin_hash = ""
     ethernet_dhcp = True
-    config = _public_defaults()
+    config = _public_defaults(board)
     if _embedded_requested(project_dir, board or ""):
         device_config = _load_device_config(project_dir)
         admin_hash = _embedded_admin_hash(device_config)
@@ -314,7 +355,8 @@ def generate_build_assets(
             for key, value in device_config.items()
             if key not in ("admin_password", "_comment")
         }
-        config = _deep_merge(_public_defaults(), overrides)
+        config = _deep_merge(_public_defaults(board), overrides)
+        _validate_offensive_override(config)
         ethernet_dhcp = bool(config["network"]["ethernet"].get("dhcp", True))
 
     header_path = Path(build_dir).resolve() / "generated" / "esp32_ot_build_assets.h"

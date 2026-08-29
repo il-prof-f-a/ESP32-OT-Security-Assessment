@@ -10,6 +10,7 @@
 #include <optional>
 #include <cstdint>
 #include <mutex>
+#include <string>
 
 extern "C" {
     #include "esp_system.h"
@@ -71,6 +72,15 @@ struct ApiKeyMetrics {
     uint64_t oldest_created_ms = 0;
 };
 
+struct OffensiveTestingDecision {
+    bool allowed = false;
+    bool software_enabled = false;
+    bool gpio_asserted = false;
+    bool gpio_required = false;
+    const char* reason = "disabled_in_security_config";
+    const char* source = "default";
+};
+
 class SecurityManager {
 public:
     // Software toggle persisted via /api/security/config (NVS key: security:fuzzing_allowed).
@@ -81,14 +91,19 @@ public:
     // This is config AND (optional) GPIO physical switch gate.
     bool isFuzzingAllowed() const;
     const char* getFuzzingBlockReason() const;
+    OffensiveTestingDecision evaluateOffensiveTesting() const;
+    const char* getOffensiveTestingPolicySource() const { return offensive_policy_source_.c_str(); }
+    bool loadOffensiveTestingPolicyFromStorage();
+    bool persistOffensiveTestingPolicy();
+    void getOffensiveTestingConfigSnapshot(OffensiveTestingConfig& out) const;
 
     // Optional physical interlock for unsafe fuzzing.
     // pull_mode: 0=none, 1=pullup, 2=pulldown
-    void configureFuzzingGpioGate(bool enabled,
-                                 int gpio_num,
-                                 bool active_high,
-                                 int pull_mode,
-                                 bool require_gate);
+    bool configureFuzzingGpioGate(bool enabled,
+                                  int gpio_num,
+                                  bool active_high,
+                                  int pull_mode,
+                                  bool require_gate);
     bool isFuzzingGpioGateEnabled() const { return fuzzing_gpio_gate_enabled_; }
     bool isFuzzingGpioGateRequired() const { return fuzzing_gpio_gate_required_; }
     int getFuzzingGpioNum() const { return fuzzing_gpio_num_; }
@@ -185,6 +200,7 @@ private:
     int fuzzing_gpio_num_ = -1;
     bool fuzzing_gpio_active_high_ = false; // default active-low (typical switch to GND with pull-up)
     int fuzzing_gpio_pull_mode_ = 1;        // default pull-up
+    std::string offensive_policy_source_ = "default";
 
     SecurityConfig cfg_{};
     SecurityPolicy policy_{};

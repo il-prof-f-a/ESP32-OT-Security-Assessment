@@ -62,7 +62,7 @@ See the [two-chip flashing guide](../installation/guition-two-chip.md) for the c
 - Assessment, discovery, fuzzing and IDS traffic is bound to `ETH_DEF` and fails closed when Ethernet has no address.
 - Management is Wi-Fi-only through the ESP32-C6. The firmware does not fall back to Ethernet.
 - Management is blocked when the Wi-Fi and Ethernet IPv4 ranges overlap.
-- The HTTPS connection gate checks the accepted socket's local destination address. This prevents an application request through Ethernet, but the underlying wildcard listener may still answer a TCP SYN; see [Network isolation and residual exposure](../security/network-isolation.md).
+- The HTTPS connection gate checks the accepted socket's local destination address. This prevents an application request through Ethernet, but the underlying wildcard listener may still answer a TCP SYN; see [Network isolation and residual exposure](../security/network-isolation.md) and the [offensive-testing interlock](../security/offensive-testing-interlock.md).
 
 ## Benchmark record
 

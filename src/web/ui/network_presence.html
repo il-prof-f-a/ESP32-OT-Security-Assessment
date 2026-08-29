@@ -609,6 +609,22 @@ th{background:#f8f9fa; color:#333}
       return labels;
     }
 
+    function getVisibleProtocolLabels(device) {
+      const labels = extractProtocolLabels(device);
+      const visible = [];
+      const seen = new Set();
+
+      labels.forEach(label => {
+        const normalized = normalizeProtocolKey(label);
+        if (!normalized || normalized === 'unknown' || seen.has(normalized)) return;
+        seen.add(normalized);
+        visible.push(label);
+      });
+
+      if (visible.length > 0) return visible;
+      return labels.some(label => normalizeProtocolKey(label) === 'unknown') ? ['Unknown'] : [];
+    }
+
     function deviceMatchesProtocol(device, selectedProtocol) {
       if (selectedProtocol === 'all') return true;
       const labels = extractProtocolLabels(device);
@@ -638,8 +654,10 @@ th{background:#f8f9fa; color:#333}
         const trustedWriter = isTrustedWriterDevice(device);
         const isTrusted = trustedSender || trustedWriter;
         const role = getDeviceOperationRole(device);
-        const protocols = extractProtocolLabels(device);
-        const protocolLabel = protocols.length > 0 ? protocols[0] : 'N/A';
+        const visibleProtocols = getVisibleProtocolLabels(device);
+        const protocolTags = (visibleProtocols.length > 0 ? visibleProtocols : ['N/A'])
+          .map(protocol => `<div class="tag">${protocol}</div>`)
+          .join('');
         const displayIp = ip || 'N/A';
         const scorePercent = Math.round((device.presence_score || 0) * 100);
         const scoreColor = scorePercent >= 75 ? 'var(--ok)' : scorePercent >= 50 ? 'var(--warn)' : 'var(--danger)';
@@ -682,7 +700,7 @@ th{background:#f8f9fa; color:#333}
               <div style="color:var(--muted)">${formatTime(device.last_seen_ms)}</div>
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:6px">
-              <div class="tag">${protocolLabel}</div>
+              ${protocolTags}
               <div class="tag ${role.css}">${role.label}</div>
             </div>
             <div class="device-actions">

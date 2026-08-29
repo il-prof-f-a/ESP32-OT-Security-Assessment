@@ -1,5 +1,6 @@
 
 #include "opcua_plugin.h"
+#include "../security/security_manager.h"
 #include "opcua_binary_codec.h"
 #include "opcua_vulnerability_tests.h"
 #include "opcua_fuzzing_seeds.h"
@@ -37,6 +38,7 @@ extern "C" {
 #include <new>
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
 
 extern ReportingEngine* g_reporting;
 
@@ -48,6 +50,43 @@ struct JsonHookGuard {
 static JsonHookGuard kJsonHookGuard;
 
 namespace {
+constexpr size_t kMaxOpcUaFrameSize = 64 * 1024;
+
+bool recvExact(int sock_fd, uint8_t* buffer, size_t length) {
+    size_t received = 0;
+    while (received < length) {
+        const ssize_t count = ::recv(sock_fd, buffer + received, length - received, 0);
+        if (count < 0 && errno == EINTR) {
+            continue;
+        }
+        if (count <= 0) {
+            return false;
+        }
+        received += static_cast<size_t>(count);
+    }
+    return true;
+}
+
+bool recvOpcUaFrame(int sock_fd, psram_vector<uint8_t>& frame) {
+    uint8_t header[8] = {};
+    if (!recvExact(sock_fd, header, sizeof(header))) {
+        return false;
+    }
+
+    const uint32_t msg_size = static_cast<uint32_t>(header[4]) |
+                              (static_cast<uint32_t>(header[5]) << 8) |
+                              (static_cast<uint32_t>(header[6]) << 16) |
+                              (static_cast<uint32_t>(header[7]) << 24);
+    if (msg_size < sizeof(header) || msg_size > kMaxOpcUaFrameSize) {
+        return false;
+    }
+
+    frame.clear();
+    frame.resize(msg_size);
+    std::memcpy(frame.data(), header, sizeof(header));
+    return recvExact(sock_fd, frame.data() + sizeof(header), msg_size - sizeof(header));
+}
+
     struct SlidingWindowCounter {
         uint32_t count;
         uint32_t window_start_ms;
@@ -894,6 +933,10 @@ bool OPCUAPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
 
     OPCUAVulnerabilityTests::VulnerabilityScanner scanner;
     scanner.setTimeout(timeout_ms);
+    // Aggressive mode is enabled only when the caller explicitly requested
+    // the implemented active chunk-flooding check. It remains off for every
+    // default/baseline scan.
+    scanner.setAggressiveMode(wants("chunk_flooding_dos"));
 
     const bool need_endpoints =
         wants("weak_security_policies") ||
@@ -989,6 +1032,15 @@ bool OPCUAPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
         f += PSRAMUtils::createPSRAMString("}");
         findings.push_back(f);
 
+        const char* execution_status = skipped
+            ? "skipped"
+            : (tr.vulnerable ? "detected" : "not_detected");
+        LOG_INFOF("OPCUA_PLUGIN",
+                  "OPC UA vulnerability check completed: id=%s status=%s vulnerable=%s",
+                  scan_id ? scan_id : "unknown",
+                  execution_status,
+                  (!skipped && tr.vulnerable) ? "yes" : "no");
+
         if (skipped) {
             tests_skipped++;
         }
@@ -1034,27 +1086,47 @@ bool OPCUAPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
     }
     if (wants("default_credentials")) {
         tests_executed++;
-        append_finding("default_credentials", scanner.testDefaultCredentials(host_ps.c_str(), port), false);
+        append_finding("default_credentials", scanner.testDefaultCredentials(host_ps.c_str(), port), true);
     }
     if (wants("idor_vulnerability")) {
         tests_executed++;
-        append_finding("idor_vulnerability", scanner.testIDORVulnerability(host_ps.c_str(), port), false);
+        append_finding("idor_vulnerability", scanner.testIDORVulnerability(host_ps.c_str(), port), true);
     }
     if (wants("brute_force_resilience")) {
         tests_executed++;
-        append_finding("brute_force_resilience", scanner.testBruteForceResilience(host_ps.c_str(), port), false);
+        if (!sec_ || !sec_->isFuzzingAllowed()) {
+            append_finding("brute_force_resilience", make_skipped("Brute Force Resilience Test",
+                "Skipped: offensive-testing policy is not enabled"), true);
+        } else {
+            append_finding("brute_force_resilience", scanner.testBruteForceResilience(host_ps.c_str(), port), false);
+        }
     }
     if (wants("condition_refresh_dos")) {
         tests_executed++;
-        append_finding("condition_refresh_dos", scanner.testConditionRefreshDoS(host_ps.c_str(), port), false);
+        if (!sec_ || !sec_->isFuzzingAllowed()) {
+            append_finding("condition_refresh_dos", make_skipped("ConditionRefresh DoS Test",
+                "Skipped: offensive-testing policy is not enabled"), true);
+        } else {
+            append_finding("condition_refresh_dos", scanner.testConditionRefreshDoS(host_ps.c_str(), port), false);
+        }
     }
     if (wants("chunk_flooding_dos")) {
         tests_executed++;
-        append_finding("chunk_flooding_dos", scanner.testChunkFloodingDoS(host_ps.c_str(), port), false);
+        if (!sec_ || !sec_->isFuzzingAllowed()) {
+            append_finding("chunk_flooding_dos", make_skipped("Chunk Flooding DoS Test",
+                "Skipped: offensive-testing policy is not enabled"), true);
+        } else {
+            append_finding("chunk_flooding_dos", scanner.testChunkFloodingDoS(host_ps.c_str(), port), false);
+        }
     }
     if (wants("browse_loop_dos")) {
         tests_executed++;
-        append_finding("browse_loop_dos", scanner.testBrowseLoopDoS(host_ps.c_str(), port), false);
+        if (!sec_ || !sec_->isFuzzingAllowed()) {
+            append_finding("browse_loop_dos", make_skipped("Browse Loop DoS Test",
+                "Skipped: offensive-testing policy is not enabled"), true);
+        } else {
+            append_finding("browse_loop_dos", scanner.testBrowseLoopDoS(host_ps.c_str(), port), false);
+        }
     }
     if (wants("certificate_chain_loop")) {
         tests_executed++;
@@ -2056,10 +2128,10 @@ bool OPCUAPlugin::discoverEndpoints(const std::string& server_url, OPCUAServer& 
         return false;
     }
 
-    // Receive ACK
-    uint8_t ack_buf[64];
-    int ack_len = recv(sock, ack_buf, sizeof(ack_buf), 0);
-    if (ack_len < 8 || ack_buf[0] != 'A' || ack_buf[1] != 'C' || ack_buf[2] != 'K') {
+    // Receive the complete ACK frame (TCP may fragment even this small message).
+    psram_vector<uint8_t> ack_frame;
+    if (!recvOpcUaFrame(sock, ack_frame) || ack_frame.size() < 8 ||
+        ack_frame[0] != 'A' || ack_frame[1] != 'C' || ack_frame[2] != 'K') {
         close(sock);
         LOG_ERROR("OPCUA_PLUGIN", "Invalid ACK response");
         return false;
@@ -2085,16 +2157,9 @@ bool OPCUAPlugin::discoverEndpoints(const std::string& server_url, OPCUAServer& 
         return false;
     }
 
-    // Receive OpenSecureChannel response
-    PSRAMUtils::ScopedBuffer opn_resp_buf(8192);
-    if (!opn_resp_buf.valid()) {
-        close(sock);
-        LOG_ERROR("OPCUA_PLUGIN", "PSRAM allocation failed");
-        return false;
-    }
-
-    int opn_resp_len = recv(sock, opn_resp_buf.get(), 8192, 0);
-    if (opn_resp_len < 20) {
+    // Receive the complete OpenSecureChannel frame, including any fragmented tail.
+    psram_vector<uint8_t> opn_resp_buf;
+    if (!recvOpcUaFrame(sock, opn_resp_buf) || opn_resp_buf.size() < 20) {
         close(sock);
         LOG_ERROR("OPCUA_PLUGIN", "Invalid OpenSecureChannel response");
         return false;
@@ -2104,8 +2169,8 @@ bool OPCUAPlugin::discoverEndpoints(const std::string& server_url, OPCUAServer& 
     uint32_t security_token_id = 0;
     psram_string opn_error;
 
-    if (!OPCUABinaryCodec::parseOpenSecureChannelResponse((uint8_t*)opn_resp_buf.get(),
-                                                          opn_resp_len,
+    if (!OPCUABinaryCodec::parseOpenSecureChannelResponse(opn_resp_buf.data(),
+                                                          opn_resp_buf.size(),
                                                           secure_channel_id,
                                                           security_token_id,
                                                           opn_error)) {
@@ -2137,16 +2202,10 @@ bool OPCUAPlugin::discoverEndpoints(const std::string& server_url, OPCUAServer& 
         return false;
     }
 
-    // Receive GetEndpoints response (may be large - up to 16KB)
-    PSRAMUtils::ScopedBuffer getep_resp_buf(16384);
-    if (!getep_resp_buf.valid()) {
-        close(sock);
-        LOG_ERROR("OPCUA_PLUGIN", "PSRAM allocation failed for GetEndpoints");
-        return false;
-    }
-
-    int getep_resp_len = recv(sock, getep_resp_buf.get(), 16384, 0);
-    if (getep_resp_len < 20) {
+    // Receive the complete GetEndpoints frame (Siemens servers commonly return
+    // several endpoints and therefore exceed a single TCP read).
+    psram_vector<uint8_t> getep_resp_buf;
+    if (!recvOpcUaFrame(sock, getep_resp_buf) || getep_resp_buf.size() < 20) {
         close(sock);
         LOG_ERROR("OPCUA_PLUGIN", "Invalid GetEndpoints response");
         return false;
@@ -2155,8 +2214,8 @@ bool OPCUAPlugin::discoverEndpoints(const std::string& server_url, OPCUAServer& 
     psram_vector<OPCUAEndpoint> endpoints;
     psram_string getep_error;
 
-    if (!OPCUABinaryCodec::parseGetEndpointsResponse((uint8_t*)getep_resp_buf.get(),
-                                                     getep_resp_len, endpoints,
+    if (!OPCUABinaryCodec::parseGetEndpointsResponse(getep_resp_buf.data(),
+                                                     getep_resp_buf.size(), endpoints,
                                                      getep_error)) {
         close(sock);
         LOG_ERRORF("OPCUA_PLUGIN", "Failed to parse GetEndpoints response: %s",
@@ -2754,6 +2813,14 @@ bool OPCUAPlugin::fixup(const FuzzJob& job, const FuzzTestCase& in, FuzzTestCase
 FuzzResult OPCUAPlugin::execute(const FuzzJob& job, const FuzzTestCase& tc,
                                 std::string& sent_hex, std::string& received_hex,
                                 std::string& status_details) {
+    if (!job.safe_mode && (!sec_ || !sec_->isFuzzingAllowed())) {
+        status_details = "blocked_by_offensive_policy:" +
+            std::string(sec_ ? sec_->getFuzzingBlockReason() : "security_manager_unavailable");
+        sent_hex.clear();
+        received_hex.clear();
+        return FuzzResult::SEND_FAILED;
+    }
+
     sent_hex = bytesToHexWithSpaces(tc.payload);
     received_hex.clear();
     status_details.clear();

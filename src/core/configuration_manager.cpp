@@ -517,6 +517,32 @@ bool ConfigurationManager::parseAndCache(cJSON* root) {
         if (cJSON_IsBool(opcua_enforce)) {
             sec_.opcua_enforce_security = cJSON_IsTrue(opcua_enforce);
         }
+
+        cJSON* offensive = cJSON_GetObjectItem(s, "offensive_testing");
+        if (offensive && cJSON_IsObject(offensive)) {
+            cJSON* software = cJSON_GetObjectItem(offensive, "software_enabled");
+            if (cJSON_IsBool(software)) {
+                sec_.offensive_testing.software_enabled = cJSON_IsTrue(software);
+            }
+            cJSON* boot_policy = cJSON_GetObjectItem(offensive, "boot_policy");
+            if (boot_policy && cJSON_IsString(boot_policy) && boot_policy->valuestring) {
+                sec_.offensive_testing.boot_policy =
+                    PSRAMUtils::createPSRAMString(boot_policy->valuestring);
+            }
+            cJSON* gate = cJSON_GetObjectItem(offensive, "gpio_gate");
+            if (gate && cJSON_IsObject(gate)) {
+                cJSON* enabled = cJSON_GetObjectItem(gate, "enabled");
+                cJSON* required = cJSON_GetObjectItem(gate, "required");
+                cJSON* gpio = cJSON_GetObjectItem(gate, "gpio");
+                cJSON* active_high = cJSON_GetObjectItem(gate, "active_high");
+                cJSON* pull_mode = cJSON_GetObjectItem(gate, "pull_mode");
+                if (cJSON_IsBool(enabled)) sec_.offensive_testing.gpio_gate.enabled = cJSON_IsTrue(enabled);
+                if (cJSON_IsBool(required)) sec_.offensive_testing.gpio_gate.required = cJSON_IsTrue(required);
+                if (cJSON_IsNumber(gpio)) sec_.offensive_testing.gpio_gate.gpio = static_cast<int>(gpio->valuedouble);
+                if (cJSON_IsBool(active_high)) sec_.offensive_testing.gpio_gate.active_high = cJSON_IsTrue(active_high);
+                if (cJSON_IsNumber(pull_mode)) sec_.offensive_testing.gpio_gate.pull_mode = static_cast<int>(pull_mode->valuedouble);
+            }
+        }
         psram_string admin_hash = jsonStringOrEmpty(s, "admin_password_hash");
         if (!admin_hash.empty()) {
             sec_.admin_password = admin_hash;
