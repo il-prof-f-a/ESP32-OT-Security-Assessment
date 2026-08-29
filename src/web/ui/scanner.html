@@ -64,9 +64,11 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 .helpbox strong{display:block;margin-bottom:.2rem}
 .helpbox code{background:rgba(0,0,0,.06);padding:.05rem .3rem;border-radius:4px}
 .result-summary{background:#eef9f0;border:1px solid #cdebd3;color:#123f1a;padding:.6rem .7rem;border-radius:6px;margin:.6rem 0}
- .proto-btns{display:flex;gap:.4rem;flex-wrap:wrap;margin:.4rem 0 .6rem 0}
+.proto-btns{display:flex;gap:.4rem;flex-wrap:wrap;margin:.4rem 0 .6rem 0}
  .proto-btns .btn{margin-right:0}
  .proto-btns .btn.active{background:#014}
+ .discovery-panel{border:1px solid #e1e5ec;border-radius:8px;padding:.8rem;background:#fbfcfe}
+ .discovery-panel[hidden]{display:none}
  </style>
 <div class="card">
 <h1>🔍 Scanner & Fuzzing</h1>
@@ -103,12 +105,15 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
   Select a protocol, check the target format, then start the discovery. Note: PROFINET DCP is L2 and does not require an IP subnet.
 </div>
 <div class="proto-btns">
+  <button class="btn disc-proto-btn" id="disc_btn_general" onclick="showDiscoveryPanel('general', this)">General Discovery</button>
   <button class="btn active disc-proto-btn" id="disc_btn_modbus" onclick="setDiscProto('modbus')">Modbus</button>
   <button class="btn disc-proto-btn" id="disc_btn_s7" onclick="setDiscProto('s7')">S7</button>
   <button class="btn disc-proto-btn" id="disc_btn_profinet" onclick="setDiscProto('profinet')">PROFINET DCP</button>
   <button class="btn disc-proto-btn" id="disc_btn_ethernetip" onclick="setDiscProto('ethernetip')">EtherNet/IP</button>
   <button class="btn disc-proto-btn" id="disc_btn_opcua" onclick="setDiscProto('opcua')">OPC UA Hello</button>
 </div>
+<div class="discovery-panel" id="protocol_discovery_panel">
+<div id="protocol_discovery_controls">
 <div class="form-group">
 <label id="disc_target_label">Target</label>
 <input id="disc_target" placeholder="192.168.1.100:502">
@@ -120,10 +125,8 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 </div>
 <button class="btn" onclick="startDiscovery()">Start Discovery</button>
 </div>
-
 <!-- S7 Protocol Discovery is integrated into the normal S7 discovery flow (Start Discovery). -->
-
-<div class="card">
+<div id="general_discovery_controls" hidden>
 <h3>General Discovery</h3>
 <div class="form-group">
 <label>Mode</label>
@@ -160,6 +163,7 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <input id="general_max_hosts" type="number" placeholder="512">
 </div>
 <button class="btn" onclick="startGeneralDiscovery()">General discovery</button>
+</div>
 </div>
 <div class="card">
 <h3>🕒 Active Discoveries</h3>
@@ -969,12 +973,25 @@ function isLikelyIpOrCidrTarget(s){
   return /^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?(?::\d{1,5})?$/.test(s);
 }
 
+function showDiscoveryPanel(mode, activeButton){
+  const protocolPanel = document.getElementById('protocol_discovery_controls');
+  const generalPanel = document.getElementById('general_discovery_controls');
+  if(!protocolPanel || !generalPanel) return;
+
+  const isGeneral = mode === 'general';
+  protocolPanel.hidden = isGeneral;
+  generalPanel.hidden = !isGeneral;
+
+  document.querySelectorAll('.disc-proto-btn').forEach(btn => btn.classList.remove('active'));
+  const selected = activeButton || document.getElementById('disc_btn_' + mode);
+  if(selected) selected.classList.add('active');
+}
+
 function setDiscProto(p){
   if(!p) return;
   discProto = p;
-  document.querySelectorAll('.disc-proto-btn').forEach(btn => btn.classList.remove('active'));
   const btn = document.getElementById('disc_btn_' + p);
-  if(btn) btn.classList.add('active');
+  showDiscoveryPanel(p, btn);
   updateDiscHints();
 }
 
