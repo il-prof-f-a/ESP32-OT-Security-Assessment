@@ -5,6 +5,7 @@
 #include "../core/plugin_manager.h"
 #include "../assessment/fuzzing_engine.h"
 #include "../network/assessment_interface.h"
+#include "../security/security_manager.h"
 
 #include "../core/psram_allocator.h"
 #include "../core/psram_json_parser.h"
@@ -405,9 +406,14 @@ std::vector<uint8_t> ModbusTCPPlugin::pduReadInput(uint16_t addr, uint16_t qty) 
 std::vector<uint8_t> ModbusTCPPlugin::pduReportSlaveID() {
     return {0x11};
 }
+std::vector<uint8_t> ModbusTCPPlugin::pduDeviceIdentification(uint8_t level, uint8_t object_id) {
+    // FC 0x2B / MEI 0x0E: Read Device Identification (01 basic, 02 regular,
+    // 03 extended, 04 individual object).
+    return {0x2B, 0x0E, level, object_id};
+}
 std::vector<uint8_t> ModbusTCPPlugin::pduDeviceIdentificationBasic() {
     // FC=0x2B MEI=0x0E Read Device ID (basic 0x01, object id 0x00)
-    return {0x2B, 0x0E, 0x01, 0x00};
+    return pduDeviceIdentification(0x01, 0x00);
 }
 std::vector<uint8_t> ModbusTCPPlugin::pduWriteSingleRegister(uint16_t addr, uint16_t value) {
     return {0x06, (uint8_t)(addr>>8), (uint8_t)addr, (uint8_t)(value>>8), (uint8_t)value};
@@ -453,156 +459,340 @@ std::string ModbusTCPPlugin::doVulnerabilityScan(const std::string& target) {
 
 bool ModbusTCPPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
                                                psram_string& out_report) {
-    std::string legacy_target = PSRAMUtils::fromPSRAMString(target);
-    std::string legacy_report = legacyDoVulnerabilityScan(legacy_target);
-    if (legacy_report.empty()) {
-        out_report.clear();
-        return false;
-    }
-    out_report = PSRAMUtils::createPSRAMString(legacy_report.c_str());
-    return true;
-}
-
-std::string ModbusTCPPlugin::legacyDoVulnerabilityScan(const std::string& target) {
-    std::stringstream report;
-    report << "=== Modbus TCP Vulnerability Scan Report ===\n";
-    report << "Target: " << target << "\n\n";
-
-    psram_string target_ps = PSRAMUtils::createPSRAMString(target.c_str());
-    std::string host; uint16_t port=502; int unit_id=-1;
-    if (!parseTarget(target, host, port, unit_id)) {
-        LOG_WARNING(TAG_MB, "Invalid target");
-        return "";  // Empty string = scan failed due to invalid target
-    }
-
-    int sock=-1;
-    if (!modbusConnect(host, port, sock)) {
-        // Return empty string to indicate scan failure (not successful)
-        // The vulnerability is still reported via reportVulnerability() for logging
-        reportVulnerabilityPSRAM(
-            target_ps,
-            PSRAMUtils::createPSRAMString("{\"issue\":\"unreachable\",\"detail\":\"TCP connect failed\"}"),
-            psram_string{},
-            LogLevel::WARNING);
-        scans_fail_++;
-        return "";  // Empty string = scan failed due to connection error
-    }
-
-    report << "? CONNECTION: Successfully connected to " << host << ":" << port << "\n\n";
-
-    bool ok_all = true;
-    uint16_t txid = 1;
-
-    auto sendpdu = [&](const std::vector<uint8_t>& req, const char* name, const char* description) -> bool {
+    std::string requested_target = PSRAMUtils::fromPSRAMString(target);
+    std::vector<std::string> scan_types;
+    if (!requested_target.empty() && requested_target.front() == '{') {
         PSRAMJsonParser::PSRAMContext json_ctx;
-        psram_vector<uint8_t> resp;
-        bool ok = modbusSendRecv(sock, req, resp, unit_id, txid);
-        if (!ok) {
-            report << "? " << description << ": No response\n";
-            cJSON* v = cJSON_CreateObject();
-            cJSON_AddStringToObject(v, "issue", "no_response");
-            cJSON_AddStringToObject(v, "op", name);
-            char* vjson = cJSON_PrintUnformatted(v);
-            if (vjson) {
-                psram_string payload = PSRAMUtils::createPSRAMString(vjson);
-                reportVulnerabilityPSRAM(target_ps, payload, psram_string{}, LogLevel::WARNING);
-                free(vjson);
+        cJSON* envelope = PSRAMJsonParser::parseInPSRAM(requested_target.c_str(), requested_target.size());
+        if (!envelope) { out_report.clear(); return false; }
+        cJSON* target_item = cJSON_GetObjectItem(envelope, "target");
+        if (!cJSON_IsString(target_item) || !target_item->valuestring) {
+            cJSON_Delete(envelope); out_report.clear(); return false;
+        }
+        requested_target = target_item->valuestring;
+        cJSON* types = cJSON_GetObjectItem(envelope, "scan_types");
+        if (cJSON_IsArray(types)) {
+            cJSON* item = nullptr;
+            cJSON_ArrayForEach(item, types) {
+                if (cJSON_IsString(item) && item->valuestring) scan_types.emplace_back(item->valuestring);
             }
-            cJSON_Delete(v);
-            ok_all = false;
+        }
+        cJSON_Delete(envelope);
+    }
+
+    std::string host;
+    uint16_t port = 502;
+    int unit_id = -1;
+    const bool target_valid = parseTarget(requested_target, host, port, unit_id);
+    const uint64_t started_ms = (uint64_t)(esp_timer_get_time() / 1000ULL);
+
+    PSRAMJsonParser::PSRAMContext json_ctx;
+    cJSON* root = cJSON_CreateObject();
+    cJSON* scan = cJSON_AddObjectToObject(root, "scan");
+    cJSON_AddStringToObject(scan, "protocol", "modbus_tcp");
+    cJSON_AddStringToObject(scan, "target", requested_target.c_str());
+    cJSON_AddStringToObject(scan, "host", target_valid ? host.c_str() : "");
+    cJSON_AddNumberToObject(scan, "port", target_valid ? (double)port : 502.0);
+    cJSON_AddNumberToObject(scan, "timestamp_ms", (double)started_ms);
+    cJSON_AddNumberToObject(scan, "timeout_ms", (double)cfg_.io_timeout_ms);
+    cJSON_AddBoolToObject(scan, "connection_ok", false);
+
+    cJSON* asset = cJSON_AddObjectToObject(root, "asset");
+    cJSON_AddStringToObject(asset, "vendor", "Unknown");
+    cJSON_AddStringToObject(asset, "product", "Modbus TCP Server");
+    cJSON* requested = cJSON_AddArrayToObject(root, "scan_types_requested");
+    for (const auto& type : scan_types) cJSON_AddItemToArray(requested, cJSON_CreateString(type.c_str()));
+    cJSON* findings = cJSON_AddArrayToObject(root, "findings");
+
+    uint32_t critical = 0, high = 0, medium = 0, low = 0, info = 0;
+    uint32_t vulnerabilities = 0, tests_executed = 0, tests_skipped = 0;
+    float highest_cvss = 0.0f;
+    std::string highest_id;
+
+    auto add_finding = [&](const char* id, const char* name, const char* severity,
+                           const char* status, const char* description,
+                           const char* recommendation, const char* scan_type,
+                           const char* category, const char* risk_domain,
+                           bool active_test, bool vulnerable, float cvss,
+                           const char* evidence) {
+        cJSON* item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "id", id ? id : "modbus_check");
+        cJSON_AddStringToObject(item, "name", name ? name : "Modbus check");
+        cJSON_AddStringToObject(item, "severity", severity ? severity : "INFO");
+        cJSON_AddStringToObject(item, "status", status ? status : "not_detected");
+        cJSON_AddStringToObject(item, "description", description ? description : "");
+        cJSON_AddStringToObject(item, "recommendation", recommendation ? recommendation : "");
+        cJSON_AddStringToObject(item, "scan_type", scan_type ? scan_type : "");
+        cJSON_AddStringToObject(item, "category", category ? category : "protocol");
+        cJSON_AddStringToObject(item, "risk_domain", risk_domain ? risk_domain : "protocol_security");
+        cJSON_AddBoolToObject(item, "active_test", active_test);
+        cJSON_AddBoolToObject(item, "vulnerable", vulnerable);
+        cJSON_AddNumberToObject(item, "cvss_score", cvss);
+        cJSON_AddArrayToObject(item, "cwe");
+        cJSON_AddArrayToObject(item, "references");
+        if (evidence && *evidence) {
+            cJSON* evidence_array = cJSON_AddArrayToObject(item, "evidence");
+            cJSON_AddItemToArray(evidence_array, cJSON_CreateString(evidence));
+        }
+        cJSON_AddItemToArray(findings, item);
+        if (status && strcmp(status, "not_tested") == 0) ++tests_skipped; else ++tests_executed;
+        if (severity && strcmp(severity, "CRITICAL") == 0) ++critical;
+        else if (severity && strcmp(severity, "HIGH") == 0) ++high;
+        else if (severity && strcmp(severity, "MEDIUM") == 0) ++medium;
+        else if (severity && strcmp(severity, "LOW") == 0) ++low;
+        else ++info;
+        if (vulnerable) ++vulnerabilities;
+        if (cvss > highest_cvss) {
+            highest_cvss = cvss;
+            highest_id = id ? id : "";
+        }
+    };
+
+    auto finish_report = [&](bool success) -> bool {
+        const uint64_t finished_ms = (uint64_t)(esp_timer_get_time() / 1000ULL);
+        cJSON_AddNumberToObject(scan, "duration_ms", (double)(finished_ms - started_ms));
+        cJSON_AddNumberToObject(scan, "tests_executed", tests_executed);
+        cJSON* risk = cJSON_AddObjectToObject(root, "risk_assessment");
+        const char* overall = critical ? "critical" : (high ? "high" : (medium ? "medium" : (low ? "low" : "info")));
+        cJSON_AddStringToObject(risk, "overall_risk", overall);
+        cJSON_AddNumberToObject(risk, "highest_cvss", highest_cvss);
+        cJSON_AddStringToObject(risk, "highest_risk_finding", highest_id.c_str());
+        cJSON* summary = cJSON_AddObjectToObject(root, "summary");
+        cJSON_AddNumberToObject(summary, "critical", critical);
+        cJSON_AddNumberToObject(summary, "high", high);
+        cJSON_AddNumberToObject(summary, "medium", medium);
+        cJSON_AddNumberToObject(summary, "low", low);
+        cJSON_AddNumberToObject(summary, "info", info);
+        cJSON_AddNumberToObject(summary, "vulnerabilities_detected", vulnerabilities);
+        cJSON_AddNumberToObject(summary, "tests_executed", tests_executed);
+        cJSON_AddNumberToObject(summary, "tests_skipped", tests_skipped);
+        char* json = cJSON_PrintUnformatted(root);
+        out_report = json ? PSRAMUtils::createPSRAMString(json) : psram_string{};
+        if (json) free(json);
+        cJSON_Delete(root);
+        if (success) ++scans_ok_; else ++scans_fail_;
+        return success && !out_report.empty();
+    };
+
+    if (!target_valid) {
+        cJSON_AddStringToObject(scan, "status", "invalid_target");
+        add_finding("modbus_invalid_target", "Invalid Modbus target", "INFO", "error",
+                    "The target is not a valid host[:port][?uid=N] value.",
+                    "Provide an IPv4 address or hostname and an optional Modbus TCP port.",
+                    "service_discovery", "input_validation", "availability", false, false, 0.0f, "target_parse_failed");
+        return finish_report(false);
+    }
+
+    int sock = -1;
+    if (!modbusConnect(host, port, sock)) {
+        cJSON_AddStringToObject(scan, "status", "connection_failed");
+        add_finding("modbus_connection_failed", "Modbus TCP connection", "INFO", "error",
+                    "The target did not accept a Modbus TCP connection.",
+                    "Verify network reachability, TCP port 502, and the target unit configuration.",
+                    "service_discovery", "availability", "network_exposure", false, false, 0.0f, "TCP connect failed");
+        reportVulnerabilityPSRAM(PSRAMUtils::createPSRAMString(requested_target.c_str()),
+                                 PSRAMUtils::createPSRAMString("{\"issue\":\"unreachable\",\"detail\":\"TCP connect failed\"}"),
+                                 psram_string{}, LogLevel::WARNING);
+        return finish_report(false);
+    }
+
+    cJSON_AddBoolToObject(scan, "connection_ok", true);
+    cJSON_AddStringToObject(scan, "status", "completed");
+    uint16_t txid = 1;
+    auto wants = [&scan_types](const char* name) {
+        return scan_types.empty() || std::find(scan_types.begin(), scan_types.end(), name) != scan_types.end();
+    };
+    auto send_check = [&](const std::vector<uint8_t>& pdu, const char* id, const char* name, const char* type) -> bool {
+        LOG_INFOF(TAG_MB, "Modbus vulnerability check started: id=%s target=%s:%u unit_id=%d",
+                  id ? id : "unknown", host.c_str(), (unsigned)port, unit_id);
+        psram_vector<uint8_t> response;
+        if (!modbusSendRecv(sock, pdu, response, unit_id, txid)) {
+            add_finding(id, name, "INFO", "error", "The request received no valid response.",
+                        "Check target availability and protocol compatibility.", type,
+                        "availability", "network_exposure", false, false, 0.0f, "no_response");
+            LOG_INFOF(TAG_MB, "Modbus vulnerability check completed: id=%s status=no_response", id ? id : "unknown");
             return false;
         }
-        if (isException(resp)) {
-            uint8_t exc_code = (resp.size() > 1) ? resp[1] : 0;
-            report << "??  " << description << ": Exception " << (int)exc_code << "\n";
-            cJSON* v = cJSON_CreateObject();
-            cJSON_AddStringToObject(v, "issue", "exception");
-            cJSON_AddStringToObject(v, "op", name);
-            cJSON_AddNumberToObject(v, "code", (int)exc_code);
-            char* vjson = cJSON_PrintUnformatted(v);
-            if (vjson) {
-                psram_string payload = PSRAMUtils::createPSRAMString(vjson);
-                reportVulnerabilityPSRAM(target_ps, payload, psram_string{}, LogLevel::INFO);
-                free(vjson);
-            }
-            cJSON_Delete(v);
+        if (isException(response)) {
+            char evidence[64];
+            snprintf(evidence, sizeof(evidence), "Modbus exception code %u", response.size() > 1 ? (unsigned)response[1] : 0U);
+            add_finding(id, name, "INFO", "not_detected", "The server rejected this probe with a Modbus exception.",
+                        "Keep unsupported function codes disabled and restrict TCP/502 to authorized hosts.", type,
+                        "protocol_behavior", "access_control", false, false, 0.0f, evidence);
+            LOG_INFOF(TAG_MB, "Modbus vulnerability check completed: id=%s status=exception", id ? id : "unknown");
             return false;
         }
-        report << "? " << description << ": Success (FC=" << (int)getFunctionCode(resp) << ", " << resp.size() << " bytes)\n";
+        char evidence[96];
+        snprintf(evidence, sizeof(evidence), "Function code %u; response bytes %u",
+                 (unsigned)getFunctionCode(response), (unsigned)response.size());
+        add_finding(id, name, "INFO", "not_detected", "The server accepted the non-destructive probe.",
+                    "Keep TCP/502 restricted to authorized hosts.", type,
+                    "protocol_behavior", "access_control", false, false, 0.0f, evidence);
+        LOG_INFOF(TAG_MB, "Modbus vulnerability check completed: id=%s status=success response_bytes=%u",
+                  id ? id : "unknown", (unsigned)response.size());
         return true;
     };
 
-    // 1) Device Identification
-    report << "--- Device Identification ---\n";
-    sendpdu(pduReportSlaveID(), "report_slave_id", "Report Slave ID");
-    sendpdu(pduDeviceIdentificationBasic(), "device_identification", "Device Identification");
-
-    // 2) Read Operations Test
-    report << "\n--- Read Operations ---\n";
-    sendpdu(pduReadCoils(0, 16), "read_coils", "Read Coils (0-15)");
-    sendpdu(pduReadDiscrete(0, 16), "read_discrete_inputs", "Read Discrete Inputs (0-15)");
-    sendpdu(pduReadHolding(0, 4), "read_holding_0_4", "Read Holding Registers (0-3)");
-    sendpdu(pduReadInput(0, 4), "read_input_0_4", "Read Input Registers (0-3)");
-
-    // 3) Write Permission Test
-    if (cfg_.enable_test_write) {
-        report << "\n--- Write Permission Test ---\n";
-        uint16_t reg = (uint16_t)cfg_.test_write_register;
-
-        // Read current value first
-        psram_vector<uint8_t> rresp;
-        bool rok = modbusSendRecv(sock, pduReadHolding(reg, 1), rresp, unit_id, txid);
-        if (rok && !isException(rresp) && rresp.size()>=3) {
-            uint8_t nbytes = rresp[1];
-            uint16_t value = 0;
-            if (nbytes>=2) value = ((uint16_t)rresp[2]<<8) | (nbytes>=3?(uint8_t)rresp[3]:0);
-
-            // Write same value back
-            psram_vector<uint8_t> wresp;
-            bool wok = modbusSendRecv(sock, pduWriteSingleRegister(reg, value), wresp, unit_id, txid);
-            if (wok && !isException(wresp)) {
-                report << "??  Write Single Register " << reg << ": WRITE ALLOWED (value=" << value << ")\n";
-                cJSON* v = cJSON_CreateObject();
-                cJSON_AddStringToObject(v, "issue", "write_allowed");
-                cJSON_AddNumberToObject(v, "register", reg);
-                cJSON_AddStringToObject(v, "note", "write single register succeeded");
-                char* vjson = cJSON_PrintUnformatted(v);
-                if (vjson) {
-                    psram_string payload = PSRAMUtils::createPSRAMString(vjson);
-                    reportVulnerabilityPSRAM(target_ps, payload, psram_string{}, LogLevel::WARNING);
-                    free(vjson);
-                }
-                cJSON_Delete(v);
-            } else {
-                report << "? Write Single Register " << reg << ": Write protected\n";
-            }
-        } else {
-            report << "? Write test skipped: Cannot read register " << reg << "\n";
-            reportVulnerabilityPSRAM(
-                target_ps,
-                PSRAMUtils::createPSRAMString("{\"issue\":\"write_test_skipped\",\"reason\":\"read failed\"}"),
-                psram_string{},
-                LogLevel::INFO);
+    if (wants("service_discovery")) {
+        add_finding("modbus_service_discovery", "Modbus TCP service discovery", "INFO", "detected",
+                    "A Modbus-compatible service is exposed on the target TCP port.",
+                    "Restrict TCP/502 to authorized engineering hosts and isolate the OT segment.",
+                    "service_discovery", "discovery", "network_exposure", false, false, 0.0f, "TCP connection succeeded");
+    }
+    if (wants("device_identification_basic") || wants("device_identification")) send_check(
+        pduDeviceIdentification(0x01), "modbus_device_identification_basic",
+        "Basic device identification (FC43/14)", "device_identification_basic");
+    if (wants("report_slave_id")) send_check(pduReportSlaveID(), "modbus_report_slave_id", "Report Slave ID (FC11)", "report_slave_id");
+    if (wants("device_identification_regular")) send_check(
+        pduDeviceIdentification(0x02), "modbus_device_identification_regular",
+        "Regular device identification (FC43/14)", "device_identification_regular");
+    if (wants("device_identification_extended")) send_check(
+        pduDeviceIdentification(0x03), "modbus_device_identification_extended",
+        "Extended device identification (FC43/14)", "device_identification_extended");
+    if (wants("device_identification_object")) {
+        for (uint8_t object_id = 0; object_id <= 5; ++object_id) {
+            char id[64];
+            snprintf(id, sizeof(id), "modbus_device_identification_object_%u", (unsigned)object_id);
+            send_check(pduDeviceIdentification(0x04, object_id), id,
+                       "Individual device-identification object", "device_identification_object");
         }
-    } else {
-        report << "\n--- Write Permission Test ---\n";
-        report << "??  Write testing disabled in configuration\n";
+    }
+    if (wants("conformity_level")) {
+        psram_vector<uint8_t> response;
+        const bool received = modbusSendRecv(sock, pduDeviceIdentification(0x01), response, unit_id, txid);
+        char evidence[80];
+        if (received && response.size() >= 4 && !isException(response))
+            snprintf(evidence, sizeof(evidence), "Conformity level %u", (unsigned)response[3]);
+        else
+            snprintf(evidence, sizeof(evidence), "Conformity level unavailable");
+        add_finding("modbus_conformity_level", "Device-identification conformity level", "INFO",
+                    received ? "not_detected" : "not_tested",
+                    "The FC43/14 conformity level describes the device-identification information class.",
+                    "Expose only the metadata required for controlled asset inventory.", "conformity_level",
+                    "fingerprinting", "information_disclosure", false, false, 0.0f, evidence);
+    }
+    if (wants("unit_id_enumeration")) {
+        const size_t max_units = std::min<size_t>(cfg_.discovery_unit_ids.size(), 16);
+        for (size_t i = 0; i < max_units; ++i) {
+            const int candidate = cfg_.discovery_unit_ids[i];
+            psram_vector<uint8_t> response;
+            if (modbusSendRecv(sock, pduDeviceIdentification(0x01), response, candidate, txid)) {
+                char evidence[96];
+                snprintf(evidence, sizeof(evidence), "Unit-ID %d responded (%u bytes)", candidate, (unsigned)response.size());
+                add_finding("modbus_unit_id_response", "Unit-ID enumeration", "LOW", "detected",
+                            "An additional Modbus unit identifier responded to device identification.",
+                            "Restrict gateway unit IDs and document every reachable downstream device.",
+                            "unit_id_enumeration", "discovery", "network_exposure", false, true, 3.7f, evidence);
+            }
+        }
+    }
+    if (wants("security_profile")) {
+        int security_sock = -1;
+        const bool secure_port_open = modbusConnect(host, 802, security_sock);
+        if (secure_port_open) ::close(security_sock);
+        add_finding("modbus_security_profile", "Modbus transport security profile",
+                    secure_port_open ? "INFO" : "LOW", secure_port_open ? "not_detected" : "detected",
+                    secure_port_open ? "TCP/802 is reachable as a possible secure Modbus endpoint."
+                                      : "Only the legacy cleartext Modbus TCP endpoint was reachable.",
+                    "Prefer a secure Modbus Security deployment where supported and segment legacy TCP/502.",
+                    "security_profile", "transport_security", "transport_security", false,
+                    !secure_port_open, secure_port_open ? 0.0f : 5.0f,
+                    secure_port_open ? "TCP/802 reachable; TLS handshake not attempted" : "TCP/802 not reachable");
+    }
+    if (wants("authentication_capability")) {
+        add_finding("modbus_authentication_capability", "Modbus application-layer authentication", "LOW", "detected",
+                    "The server accepted a Modbus request without application-layer credentials.",
+                    "Use network ACLs, secure Modbus where available, and isolate TCP/502 from untrusted hosts.",
+                    "authentication_capability", "authentication", "access_control", false, true, 5.0f,
+                    "Request accepted without credentials");
+    }
+    if (wants("read_coils")) send_check(pduReadCoils(0, 16), "modbus_read_coils", "Read Coils (0-15)", "read_coils");
+    if (wants("read_discrete_inputs")) send_check(pduReadDiscrete(0, 16), "modbus_read_discrete_inputs", "Read Discrete Inputs (0-15)", "read_discrete_inputs");
+    if (wants("read_holding_registers")) send_check(pduReadHolding(0, 4), "modbus_read_holding_registers", "Read Holding Registers (0-3)", "read_holding_registers");
+    if (wants("read_input_registers")) send_check(pduReadInput(0, 4), "modbus_read_input_registers", "Read Input Registers (0-3)", "read_input_registers");
+    if (wants("exception_behavior")) {
+        psram_vector<uint8_t> response;
+        const bool received = modbusSendRecv(sock, pduReadHolding(0xFFFF, 1), response, unit_id, txid);
+        const bool unsafe = received && !isException(response);
+        add_finding("modbus_exception_behavior", "Out-of-range address exception behavior",
+                    unsafe ? "MEDIUM" : "INFO",
+                    received ? (unsafe ? "detected" : "not_detected") : "error",
+                    unsafe ? "The server returned data for an out-of-range FC03 probe."
+                           : "The server returned an exception for the out-of-range FC03 probe.",
+                    "Validate register addresses and return Illegal Data Address for invalid ranges.",
+                    "exception_behavior", "protocol_validation", "input_validation", false, unsafe,
+                    unsafe ? 6.5f : 0.0f,
+                    received ? (unsafe ? "Unexpected data response" : "Modbus exception response") : "no_response");
+    }
+    if (wants("cleartext_exposure")) {
+        add_finding("modbus_cleartext_exposure", "Cleartext Modbus/TCP transport", "LOW", "detected",
+                    "Modbus/TCP ADUs are transported without confidentiality or integrity protection.",
+                    "Use secure Modbus where available and protect TCP/502 with OT segmentation and ACLs.",
+                    "cleartext_exposure", "transport_security", "transport_security", false, true, 5.0f,
+                    "Legacy Modbus TCP has no cryptographic protection");
+    }
+    if (wants("client_allow_list")) {
+        add_finding("modbus_client_allow_list", "Modbus client allow-list assessment", "INFO", "not_tested",
+                    "The assessment client reached TCP/502; server-side ACLs cannot be verified remotely.",
+                    "Verify that only authorized engineering hosts can reach TCP/502.", "client_allow_list",
+                    "access_control", "network_exposure", false, false, 0.0f, "Remote ACL verification unavailable");
+    }
+    if (wants("cve_correlation")) {
+        add_finding("modbus_cve_correlation", "Modbus CVE/CPE correlation", "INFO", "not_tested",
+                    "Vendor, product, and revision metadata can be correlated with external advisories.",
+                    "Perform an external CPE/NVD/vendor advisory lookup using the collected asset metadata.",
+                    "cve_correlation", "vulnerability_management", "asset_inventory", false, false, 0.0f, "External lookup required");
+    }
+    if (wants("firmware_age")) {
+        add_finding("modbus_firmware_age", "Firmware age and support check", "INFO", "not_tested",
+                    "Firmware age and support status cannot be established without a vendor advisory lookup.",
+                    "Compare the reported revision with the vendor lifecycle and security advisories.",
+                    "firmware_age", "vulnerability_management", "asset_inventory", false, false, 0.0f, "External lifecycle lookup required");
+    }
+
+    if (cfg_.enable_test_write && scan_types.empty()) {
+        if (!sec_ || !sec_->isFuzzingAllowed()) {
+            add_finding("write_test_blocked", "Write capability assessment", "INFO", "not_tested",
+                        "The write probe was blocked by the offensive-testing interlock.",
+                        "Enable offensive testing only on an isolated lab device and explicitly authorize the probe.",
+                        "write_capability", "authorization", "access_control", true, false, 0.0f,
+                        sec_ ? sec_->getFuzzingBlockReason() : "security_manager_unavailable");
+        } else {
+            const uint16_t reg = (uint16_t)cfg_.test_write_register;
+            psram_vector<uint8_t> read_response;
+            const bool read_ok = modbusSendRecv(sock, pduReadHolding(reg, 1), read_response, unit_id, txid);
+            const bool value_available = read_ok && !isException(read_response) &&
+                                         read_response.size() >= 4 && read_response[1] >= 2;
+            if (value_available) {
+                const uint16_t value = (uint16_t)(((uint16_t)read_response[2] << 8) | read_response[3]);
+                psram_vector<uint8_t> write_response;
+                const bool write_ok = modbusSendRecv(sock, pduWriteSingleRegister(reg, value), write_response, unit_id, txid);
+                char evidence[96];
+                snprintf(evidence, sizeof(evidence), "Register %u, value %u", (unsigned)reg, (unsigned)value);
+                const bool allowed = write_ok && !isException(write_response);
+                add_finding("modbus_write_capability", "Write capability assessment",
+                            allowed ? "HIGH" : "INFO", allowed ? "detected" : "not_detected",
+                            allowed ? "The server accepted a write-back to a holding register."
+                                    : "The holding register write was rejected.",
+                            "Disable unauthorized writes and restrict write-capable clients to an allow-list.",
+                            "write_capability", "authorization", "access_control", true, allowed,
+                            allowed ? 7.5f : 0.0f, evidence);
+            } else {
+                add_finding("modbus_write_capability", "Write capability assessment", "INFO", "not_tested",
+                            "The write probe could not read the configured holding register first.",
+                            "Configure a safe test register and run active checks only in a controlled lab.",
+                            "write_capability", "authorization", "access_control", true, false, 0.0f,
+                            "Initial register read failed");
+            }
+        }
     }
 
     ::close(sock);
-
-    report << "\n=== Scan Summary ===\n";
-    if (ok_all) {
-        report << "? Scan completed successfully\n";
-        scans_ok_++;
-    } else {
-        report << "??  Scan completed with issues\n";
-        scans_fail_++;
-    }
-
-    return report.str();
+    cJSON_AddStringToObject(asset, "firmware", "Unknown");
+    return finish_report(true);
 }
 
+/* The vulnerability scanner contract is JSON-only; no text compatibility report is retained. */
 // Helpers per MBAP e Device ID
 static std::vector<uint8_t> makeMBAP(uint16_t tid, uint8_t unit, uint16_t pdu_len) {
     std::vector<uint8_t> mbap(7);
@@ -1751,6 +1941,15 @@ FuzzResult ModbusTCPPlugin::execute(const FuzzJob& job, const FuzzTestCase& tc,
         port = std::stoi(job.target.substr(colon + 1));
     } else {
         host = job.target;
+    }
+
+    const bool unsafe_operation = !job.safe_mode ||
+        job.profile == "unauthorized_writes" || job.profile == "dos_listen_only" ||
+        job.profile == "broadcast_attacks" || job.profile == "vulnerability_exploits";
+    if (unsafe_operation && (!sec_ || !sec_->isFuzzingAllowed())) {
+        status_details = "blocked_by_offensive_policy:" +
+            std::string(sec_ ? sec_->getFuzzingBlockReason() : "security_manager_unavailable");
+        return FuzzResult::SEND_FAILED;
     }
 
     // Try to connect and send the test case

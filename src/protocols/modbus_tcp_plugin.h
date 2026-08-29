@@ -157,6 +157,7 @@ private:
     static std::vector<uint8_t> pduReadHolding(uint16_t addr, uint16_t qty);
     static std::vector<uint8_t> pduReadInput(uint16_t addr, uint16_t qty);
     static std::vector<uint8_t> pduReportSlaveID();
+    static std::vector<uint8_t> pduDeviceIdentification(uint8_t level, uint8_t object_id = 0);
     static std::vector<uint8_t> pduDeviceIdentificationBasic(); // FC 0x2B/0x0E basic
     static std::vector<uint8_t> pduWriteSingleRegister(uint16_t addr, uint16_t value);
 
@@ -182,6 +183,5 @@ private:
     // Writers tracking for this protocol
     NetworkPresenceTracker network_presence_tracker_;
 
-    std::string legacyDoVulnerabilityScan(const std::string& target);
     std::string legacyDoNetworkDiscovery(const std::string& target_network, uint32_t timeout_ms);
 };
