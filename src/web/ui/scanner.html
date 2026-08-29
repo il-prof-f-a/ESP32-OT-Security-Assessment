@@ -131,7 +131,7 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <div class="form-group">
 <label>Mode</label>
 <select id="general_mode">
-<option value="ping">Ping sweep</option>
+<option value="ping">ICMP ping sweep</option>
 <option value="ports">Port scan</option>
 </select>
 </div>
@@ -149,6 +149,7 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <div class="form-group">
 <label>Port list (comma separated)</label>
 <input id="general_ports" placeholder="502,102,44818,4840">
+<small>ICMP ping sweep sends Echo Requests; Port scan uses TCP connections to the selected ports.</small>
 </div>
 <div class="form-group">
 <label>Per host timeout (ms)</label>
@@ -212,6 +213,10 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <label>Scan types</label>
 <div id="job_scan_types" style="display:flex;gap:.6rem;flex-wrap:wrap"></div>
 <small id="job_scan_types_help">Optional: select which checks to run for this protocol.</small>
+<div id="job_scan_types_legend" style="margin-top:.55rem;font-size:.85rem;color:#555">
+  <span style="display:inline-block;background:#fff3e0;border:1px solid #f0b35a;border-radius:999px;padding:.15rem .5rem;margin-right:.35rem">Orange tests</span>
+  <span>Require Offensive Testing authorization and the physical interlock. Unchecked tests are optional; they are not automatically unsafe.</span>
+</div>
 </div>
 <div class="form-group">
 <label>Interval (seconds)</label>
@@ -1328,7 +1333,8 @@ function hideCreateJob(){
 document.getElementById('create_job').style.display='none';
 }
 
-// Protocol-specific vulnerability scan types (safe, non-destructive checks)
+// Protocol-specific vulnerability scan types. `def` controls selection by
+// default; `requires_offensive_testing` is the explicit safety classification.
 const VULN_SCAN_TYPES = {
   1: { // Modbus
     help: 'Modbus TCP reference scans are read-only or observational. Write testing remains separately gated by device configuration and is not exposed here.',
@@ -1364,8 +1370,8 @@ const VULN_SCAN_TYPES = {
       { id: 'protection_level', label: 'CPU protection level', def: true },
       { id: 'unauthenticated_info', label: 'Unauthenticated info access', def: true },
       { id: 'stop_capability_assessment', label: 'STOP capability (risk assessment)', def: false },
-      { id: 'proof_plc_stop', label: 'PROOF: send STOP (OFFENSIVE)', def: false },
-      { id: 'proof_plc_start', label: 'PROOF: send START/Restart (OFFENSIVE)', def: false }
+      { id: 'proof_plc_stop', label: 'PROOF: send STOP (OFFENSIVE)', def: false, requires_offensive_testing: true, risk: 'unsafe' },
+      { id: 'proof_plc_start', label: 'PROOF: send START/Restart (OFFENSIVE)', def: false, requires_offensive_testing: true, risk: 'unsafe' }
     ]
   },
   5: { // PROFINET
@@ -1388,10 +1394,10 @@ const VULN_SCAN_TYPES = {
       { id: 'default_credentials', label: 'Manual: default credentials (session support required)', def: false },
       { id: 'idor_vulnerability', label: 'Manual: authorization/IDOR (session support required)', def: false },
       { id: 'certificate_chain_loop', label: 'Certificate chain loop', def: true },
-      { id: 'brute_force_resilience', label: 'Brute force resilience', def: false },
-      { id: 'condition_refresh_dos', label: 'ConditionRefresh DoS (active)', def: false },
-      { id: 'chunk_flooding_dos', label: 'Chunk flooding DoS (active)', def: false },
-      { id: 'browse_loop_dos', label: 'Browse loop DoS (active)', def: false }
+      { id: 'brute_force_resilience', label: 'Brute force resilience', def: false, requires_offensive_testing: true, risk: 'unsafe' },
+      { id: 'condition_refresh_dos', label: 'ConditionRefresh DoS (active)', def: false, requires_offensive_testing: true, risk: 'unsafe' },
+      { id: 'chunk_flooding_dos', label: 'Chunk flooding DoS (active)', def: false, requires_offensive_testing: true, risk: 'unsafe' },
+      { id: 'browse_loop_dos', label: 'Browse loop DoS (active)', def: false, requires_offensive_testing: true, risk: 'unsafe' }
     ]
   },
   4: { // EtherNet/IP
@@ -1402,12 +1408,21 @@ const VULN_SCAN_TYPES = {
       { id: 'cip_security_advertisement', label: 'CIP Security advertisement', def: true },
       { id: 'list_services_consistency', label: 'ListServices consistency', def: true },
       { id: 'io_channel_exposure', label: 'I/O channel exposure (UDP/2222)', def: true },
-      { id: 'explicit_write_capability_assessment', label: 'Write capability assessment (active)', def: false },
-      { id: 'reset_capability_assessment', label: 'Reset capability assessment (active)', def: false },
-      { id: 'forward_open_risk_assessment', label: 'ForwardOpen risk assessment (active)', def: false }
+      { id: 'explicit_write_capability_assessment', label: 'Write capability assessment (active)', def: false, requires_offensive_testing: true, risk: 'unsafe' },
+      { id: 'reset_capability_assessment', label: 'Reset capability assessment (active)', def: false, requires_offensive_testing: true, risk: 'unsafe' },
+      { id: 'forward_open_risk_assessment', label: 'ForwardOpen risk assessment (active)', def: false, requires_offensive_testing: true, risk: 'unsafe' }
     ]
   }
 };
+
+// Ensure every entry has an explicit, serializable classification while
+// retaining the compact catalog above for safe/observational checks.
+Object.keys(VULN_SCAN_TYPES).forEach(function(key){
+  (VULN_SCAN_TYPES[key].types || []).forEach(function(test){
+    if (typeof test.requires_offensive_testing !== 'boolean') test.requires_offensive_testing = false;
+    if (!test.risk) test.risk = test.requires_offensive_testing ? 'unsafe' : 'safe';
+  });
+});
 
 function updateJobScanTypesUI(){
   var protoEl = document.getElementById('job_protocol');
@@ -1433,10 +1448,14 @@ function updateJobScanTypesUI(){
     wrap.style.display = 'inline-flex';
     wrap.style.alignItems = 'center';
     wrap.style.gap = '.35rem';
-    wrap.style.background = '#f2f6ff';
-    wrap.style.border = '1px solid #cfe0ff';
+    const requiresOffensive = t.requires_offensive_testing === true;
+    wrap.style.background = requiresOffensive ? '#fff3e0' : '#f2f6ff';
+    wrap.style.border = requiresOffensive ? '1px solid #f0b35a' : '1px solid #cfe0ff';
     wrap.style.borderRadius = '999px';
     wrap.style.padding = '.25rem .55rem';
+    wrap.title = requiresOffensive
+      ? 'Requires Offensive Testing authorization and physical interlock'
+      : 'Optional observational check; not classified as unsafe';
 
     var cb = document.createElement('input');
     cb.type = 'checkbox';
@@ -1445,7 +1464,7 @@ function updateJobScanTypesUI(){
     wrap.appendChild(cb);
 
     var span = document.createElement('span');
-    span.textContent = t.label;
+    span.textContent = requiresOffensive ? t.label + ' ⚠' : t.label;
     wrap.appendChild(span);
 
     box.appendChild(wrap);

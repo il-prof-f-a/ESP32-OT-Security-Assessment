@@ -5,6 +5,7 @@
 #include "../core/plugin_manager.h"
 #include "../network/eth_l2_adapter.h"
 #include "../network/assessment_interface.h"
+#include "../network/icmp_ping.h"
 #include "../assessment/discovery_manager.h"
 #include "../core/psram_json_parser.h"
 
@@ -639,8 +640,6 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
         connect_timeout_ms = per_host_timeout_ms;
     }
 
-    const uint16_t ping_tcp_port = (cfg.ping_tcp_port == 0) ? 80 : cfg.ping_tcp_port;
-
     LOG_INFOF(TAG_GENERAL,
               "Starting general discovery: mode=%s target=%s hosts=%u port_scan=%s per_host_timeout=%u connect_timeout=%u batch=%u delay_ms=%u bound_ip=%s",
               mode_label,
@@ -842,7 +841,6 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
             } else {
                 SocketResult job{};
                 job.host = &host_infos.back();
-                job.port = ping_tcp_port;
                 job.timeout_ms = per_host_timeout_ms;
                 job.sock = -1;
                 job.latency_ms = -1;
@@ -1000,128 +998,34 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
                 }
             }
         } else {
-            // Ping mode: apri tutti i socket del batch contemporaneamente (solo 1 porta)
-            size_t pending_count = 0;
-            for (size_t i = 0; i < socket_jobs.size(); ++i) {
-                if (!socket_jobs[i].pending) {
-                    continue;
-                }
-                beginSocket(socket_jobs[i]);
-                if (socket_jobs[i].pending) {
-                    pending_count++;
-                }
-            }
-
-            while (pending_count > 0) {
-                feedGeneralDiscoveryWatchdog();
-
-                fd_set wfds, rfds;
-                FD_ZERO(&wfds);
-                FD_ZERO(&rfds);
-                int max_fd = -1;
-                uint64_t now_us = esp_timer_get_time();
-                uint64_t min_wait_us = MAX_SELECT_SLICE_US;
-
-                for (size_t i = 0; i < socket_jobs.size(); ++i) {
-                    SocketResult& job = socket_jobs[i];
-                    if (!job.pending) {
-                        continue;
-                    }
-                    uint64_t elapsed = now_us - job.start_us;
-                    uint64_t deadline = (uint64_t)job.timeout_ms * 1000ULL;
-                    if (elapsed >= deadline) {
-                        job.pending = false;
-                        job.code = SocketResultCode::Timeout;
-                        job.latency_ms = -1;
-                        job.errno_code = ETIMEDOUT;
-                        closeSocket(job);
-                        if (pending_count > 0) {
-                            pending_count--;
-                        }
-                        continue;
-                    }
-                    uint64_t remaining = deadline - elapsed;
-                    if (remaining < min_wait_us) {
-                        min_wait_us = remaining;
-                    }
-                    if (job.sock >= 0) {
-                        FD_SET(job.sock, &wfds);
-                        FD_SET(job.sock, &rfds);
-                        if (job.sock > max_fd) {
-                            max_fd = job.sock;
-                        }
-                    }
-                }
-
-                if (pending_count == 0) {
-                    break;
-                }
-                if (max_fd < 0) {
-                    continue;
-                }
-                if (min_wait_us == 0) {
-                    min_wait_us = 5000ULL;
-                }
-
-                struct timeval tv{};
-                tv.tv_sec = (long)(min_wait_us / 1000000ULL);
-                tv.tv_usec = (long)(min_wait_us % 1000000ULL);
-
-                int sel = select(max_fd + 1, &rfds, &wfds, NULL, &tv);
-                if (sel < 0) {
-                    int sel_err = errno;
-                    LOG_WARNINGF(TAG_GENERAL, "select failed in batch: errno=%d", sel_err);
-                    for (size_t i = 0; i < socket_jobs.size(); ++i) {
-                        SocketResult& job = socket_jobs[i];
-                        if (!job.pending) {
-                            continue;
-                        }
-                        job.pending = false;
-                        job.code = SocketResultCode::Error;
-                        job.errno_code = sel_err;
-                        job.latency_ms = -1;
-                        closeSocket(job);
-                    }
-                    pending_count = 0;
-                    break;
-                }
-                if (sel == 0) {
-                    continue;
-                }
-
-                uint64_t after_us = esp_timer_get_time();
-                for (size_t i = 0; i < socket_jobs.size(); ++i) {
-                    SocketResult& job = socket_jobs[i];
-                    if (!job.pending || job.sock < 0) {
-                        continue;
-                    }
-                    if (!FD_ISSET(job.sock, &wfds) && !FD_ISSET(job.sock, &rfds)) {
-                        continue;
-                    }
-                    int soerr = 0;
-                    socklen_t slen = sizeof(soerr);
-                    getsockopt(job.sock, SOL_SOCKET, SO_ERROR, &soerr, &slen);
-                    job.pending = false;
-                    job.errno_code = soerr;
-                    if (soerr == 0) {
+            // Ping mode uses real ICMP Echo Requests. Keep the same bounded
+            // batch loop and result representation used by the TCP path, but
+            // execute probes sequentially to keep raw-socket/task usage bounded.
+            for (size_t i = 0; i < host_infos.size(); ++i) {
+                SocketResult& job = socket_jobs[i];
+                const HostBatchInfo& info = host_infos[i];
+                job.pending = false;
+                job.sock = -1;
+                if (!info.valid_ip) {
+                    job.code = SocketResultCode::InvalidIP;
+                    job.latency_ms = -1;
+                } else {
+                    IcmpPing::Result ping_result{};
+                    const bool replied = IcmpPing::probe(info.addr.s_addr,
+                                                         netif,
+                                                         per_host_timeout_ms,
+                                                         ping_result);
+                    job.latency_ms = ping_result.time_ms;
+                    if (replied && ping_result.status == IcmpPing::Status::Success) {
                         job.code = SocketResultCode::Open;
-                        job.latency_ms = (int32_t)((after_us - job.start_us) / 1000ULL);
-                    } else if (soerr == ECONNREFUSED) {
-                        job.code = SocketResultCode::Refused;
-                        job.latency_ms = (int32_t)((after_us - job.start_us) / 1000ULL);
+                    } else if (ping_result.status == IcmpPing::Status::Timeout) {
+                        job.code = SocketResultCode::Timeout;
+                        job.errno_code = ETIMEDOUT;
                     } else {
                         job.code = SocketResultCode::Error;
-                        job.latency_ms = -1;
-                    }
-                    closeSocket(job);
-                    if (pending_count > 0) {
-                        pending_count--;
                     }
                 }
-            }
-
-            for (size_t i = 0; i < socket_jobs.size(); ++i) {
-                closeSocket(socket_jobs[i]);
+                feedGeneralDiscoveryWatchdog();
             }
         }
 
@@ -1246,7 +1150,7 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
                         cJSON_AddStringToObject(summary, "status", "host_up_port_closed");
                     }
                 } else {
-                    cJSON_AddStringToObject(summary, "method", "ping");
+                    cJSON_AddStringToObject(summary, "method", "icmp_ping");
                     cJSON_AddNumberToObject(summary, "latency_ms", summary_latency_ms);
                     cJSON_AddStringToObject(summary, "status", summary_latency_ms >= 0 ? "reachable" : "unknown");
                 }
@@ -1333,7 +1237,7 @@ std::string BasePlugin::runGeneralDiscovery(const GeneralDiscoveryConfig& cfg,
         cJSON_AddItemToObject(params, "ports_requested", ports_cfg);
         cJSON_AddStringToObject(root, "method", "tcp_connect");
     } else {
-        cJSON_AddStringToObject(root, "method", "tcp_ping");
+        cJSON_AddStringToObject(root, "method", "icmp_ping");
     }
     cJSON_AddItemToObject(root, "params", params);
 

@@ -182,7 +182,6 @@ public:
         uint32_t batch_size = 4;
         uint32_t batch_delay_ms = 250;
         uint32_t max_hosts = 512;
-        uint16_t ping_tcp_port = 80;
         uint32_t total_timeout_ms = 0;
         psram_vector<uint16_t> ports;
     };

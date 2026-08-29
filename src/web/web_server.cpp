@@ -27,6 +27,7 @@
 #include "../core/log_retention.h"
 #include "../network/ethernet_manager.h"
 #include "../network/assessment_interface.h"
+#include "../network/icmp_ping.h"
 #include "../network/network_policy.h"
 #include "../network/management_interface_controller.h"
 #include "../core/audit_manager.h"
@@ -1269,7 +1270,6 @@ bool WebServer::build_page_bootstrap_json(StaticJsonBuffer& cache, const char* p
             if (!json_append_cstr(tmp, l, "],")) return false;
             if (!json_append_cstr(tmp, l, "\"default_per_host_timeout_ms\":500,")) return false;
             if (!json_append_cstr(tmp, l, "\"default_connect_timeout_ms\":400,")) return false;
-            if (!json_append_cstr(tmp, l, "\"default_ping_port\":80,")) return false;
             if (!json_append_cstr(tmp, l, "\"default_batch_size\":4,")) return false;
             if (!json_append_cstr(tmp, l, "\"default_batch_delay_ms\":250,")) return false;
             if (!json_append_cstr(tmp, l, "\"default_max_hosts\":512")) return false;
@@ -9160,7 +9160,7 @@ esp_err_t WebServer::h_network_ping(httpd_req_t* req) {
 
     cJSON_Delete(json);
 
-    // Perform ping using raw sockets (ICMP)
+    // Perform real ICMP Echo Requests on the Ethernet assessment interface.
     cJSON* response = cJSON_CreateObject();
     cJSON* results = cJSON_CreateArray();
 
@@ -9179,55 +9179,30 @@ esp_err_t WebServer::h_network_ping(httpd_req_t* req) {
         }
     }
 
-    if (!can_ping) {
+    struct in_addr target_addr{};
+    const bool valid_target = inet_aton(target.c_str(), &target_addr) != 0;
+    if (!valid_target) {
+        cJSON_AddStringToObject(response, "error", "Invalid IPv4 target");
+        cJSON_AddStringToObject(response, "status", "failed");
+    } else if (!can_ping) {
         cJSON_AddStringToObject(response, "error", "No network interface available");
         cJSON_AddStringToObject(response, "status", "failed");
     } else {
-        // For now, simulate ping by attempting TCP connection (simplified ping)
+        cJSON_AddStringToObject(response, "method", "icmp_ping");
         for (int i = 0; i < count; i++) {
             cJSON* ping_result = cJSON_CreateObject();
             cJSON_AddNumberToObject(ping_result, "sequence", i + 1);
-
-            // Create socket for connectivity test
-            int s = AssessmentInterface::openBoundSocket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-            if (s < 0) {
-                cJSON_AddStringToObject(ping_result, "status", "socket_error");
-                cJSON_AddNumberToObject(ping_result, "time_ms", -1);
+            IcmpPing::Result ping{};
+            const bool replied = IcmpPing::probe(target_addr.s_addr, netif, 1000U, ping);
+            if (replied && ping.status == IcmpPing::Status::Success) {
+                cJSON_AddStringToObject(ping_result, "status", "success");
+            } else if (ping.status == IcmpPing::Status::Timeout) {
+                cJSON_AddStringToObject(ping_result, "status", "timeout");
             } else {
-                struct timeval tv = {.tv_sec = 1, .tv_usec = 0};
-                setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-                setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-
-                sockaddr_in sa = {};
-                sa.sin_family = AF_INET;
-                sa.sin_port = htons(80); // Try common port
-
-                uint64_t start_time = esp_timer_get_time();
-
-                if (inet_aton(target.c_str(), &sa.sin_addr)) {
-                    if (connect(s, (sockaddr*)&sa, sizeof(sa)) == 0) {
-                        uint64_t end_time = esp_timer_get_time();
-                        cJSON_AddStringToObject(ping_result, "status", "success");
-                        cJSON_AddNumberToObject(ping_result, "time_ms", (end_time - start_time) / 1000);
-                    } else {
-                        int connect_errno = errno;
-                        if (connect_errno == 111) { // Connection refused - host is up but port closed
-                            uint64_t end_time = esp_timer_get_time();
-                            cJSON_AddStringToObject(ping_result, "status", "host_up_port_closed");
-                            cJSON_AddNumberToObject(ping_result, "time_ms", (end_time - start_time) / 1000);
-                        } else {
-                            cJSON_AddStringToObject(ping_result, "status", "timeout_or_unreachable");
-                            cJSON_AddNumberToObject(ping_result, "time_ms", -1);
-                            cJSON_AddNumberToObject(ping_result, "errno", connect_errno);
-                        }
-                    }
-                } else {
-                    cJSON_AddStringToObject(ping_result, "status", "invalid_ip");
-                    cJSON_AddNumberToObject(ping_result, "time_ms", -1);
-                }
-
-                close(s);
+                cJSON_AddStringToObject(ping_result, "status", "error");
             }
+            cJSON_AddNumberToObject(ping_result, "time_ms", ping.time_ms);
+            cJSON_AddNumberToObject(ping_result, "replies", ping.replies);
 
             cJSON_AddItemToArray(results, ping_result);
 
@@ -12546,7 +12521,6 @@ esp_err_t WebServer::h_discovery_general_start(httpd_req_t* req) {
     cJSON* timeout_item = cJSON_GetObjectItem(json, "timeout_ms");
     cJSON* per_timeout_item = cJSON_GetObjectItem(json, "per_host_timeout_ms");
     cJSON* connect_item = cJSON_GetObjectItem(json, "connect_timeout_ms");
-    cJSON* ping_port_item = cJSON_GetObjectItem(json, "ping_port");
     cJSON* batch_size_item = cJSON_GetObjectItem(json, "batch_size");
     cJSON* batch_delay_item = cJSON_GetObjectItem(json, "batch_delay_ms");
     cJSON* max_hosts_item = cJSON_GetObjectItem(json, "max_hosts");
@@ -12639,10 +12613,6 @@ esp_err_t WebServer::h_discovery_general_start(httpd_req_t* req) {
     if (connect_timeout < 100U) connect_timeout = 100U;
     if (connect_timeout > per_host) connect_timeout = per_host;
     cfg.connect_timeout_ms = connect_timeout;
-
-    uint16_t ping_port = ping_port_item && cJSON_IsNumber(ping_port_item) ? (uint16_t)cJSON_GetNumberValue(ping_port_item) : 80U;
-    if (ping_port == 0) ping_port = 80;
-    cfg.ping_tcp_port = ping_port;
 
     uint32_t batch_size = batch_size_item && cJSON_IsNumber(batch_size_item) ? (uint32_t)cJSON_GetNumberValue(batch_size_item) : 4U;
     if (batch_size < 1U) batch_size = 1U;
@@ -12803,7 +12773,6 @@ esp_err_t WebServer::h_discovery_general_defaults(httpd_req_t* req) {
     cJSON_AddItemToObject(response, "ports", ports);
     cJSON_AddNumberToObject(response, "default_per_host_timeout_ms", 500);
     cJSON_AddNumberToObject(response, "default_connect_timeout_ms", 400);
-    cJSON_AddNumberToObject(response, "default_ping_port", 80);
     cJSON_AddNumberToObject(response, "default_batch_size", 4);
     cJSON_AddNumberToObject(response, "default_batch_delay_ms", 250);
     cJSON_AddNumberToObject(response, "default_max_hosts", 512);
