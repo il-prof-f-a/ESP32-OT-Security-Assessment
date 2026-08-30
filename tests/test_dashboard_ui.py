@@ -56,6 +56,24 @@ class DashboardUiTests(unittest.TestCase):
         dashboard = (PROJECT_ROOT / "src/web/ui/dashboard.html").read_text(encoding="utf-8")
         self.assertIn('<a href="/discovery" class="nav-btn">🔍 Protocol Discovery</a>', dashboard)
 
+    def test_offensive_scanner_page_does_not_duplicate_discovery_navigation(self):
+        scanner = (PROJECT_ROOT / "src/web/ui/scanner.html").read_text(encoding="utf-8")
+        self.assertNotIn('href="/discovery"', scanner)
+
+    def test_audit_live_monitor_normalizes_events_envelope(self):
+        audit = (PROJECT_ROOT / "src/web/ui/audit.html").read_text(encoding="utf-8")
+        self.assertIn("normalizeAuditEvents", audit)
+        self.assertIn("Array.isArray(payload.events)", audit)
+        self.assertIn("const events = normalizeAuditEvents", audit)
+
+    def test_audit_analytics_normalizes_api_envelope_and_has_refresh(self):
+        audit = (PROJECT_ROOT / "src/web/ui/audit.html").read_text(encoding="utf-8")
+        self.assertIn("normalizeAuditAnalytics", audit)
+        self.assertIn("payload.analytics", audit)
+        self.assertIn("event_types", audit)
+        self.assertIn("id=\"analytics_refresh\"", audit)
+        self.assertIn("loadAnalytics()", audit)
+
     def test_dashboard_hides_redundant_cards_and_links_configuration(self):
         dashboard = (PROJECT_ROOT / "src/web/ui/dashboard.html").read_text(encoding="utf-8")
         self.assertIn('href="/configuration"', dashboard)
@@ -71,6 +89,32 @@ class DashboardUiTests(unittest.TestCase):
         for token in ("Load current", "Load saved", "Load defaults", "Import JSON",
                       "Validate", "Save to device", "Save as", "/api/config/editor/schema",
                       "secrets_present", "restart_required_paths"):
+            self.assertIn(token, page)
+
+    def test_configuration_dashboard_link_preserves_session_token(self):
+        page = (PROJECT_ROOT / "src/web/ui/configuration.html").read_text(encoding="utf-8")
+        self.assertIn("querySelectorAll('.nav-btn')", page)
+        self.assertIn("window.__sidToken", page)
+        self.assertIn("sid=", page)
+
+    def test_dashboard_orders_configuration_after_network_tools(self):
+        dashboard = (PROJECT_ROOT / "src/web/ui/dashboard.html").read_text(encoding="utf-8")
+        network_pos = dashboard.index('href="/network"')
+        config_pos = dashboard.index('href="/configuration"')
+        diagnostics_pos = dashboard.index('href="/diagnostics"')
+        self.assertLess(network_pos, config_pos)
+        self.assertLess(config_pos, diagnostics_pos)
+
+    def test_configuration_page_uses_shared_page_chrome(self):
+        page = (PROJECT_ROOT / "src/web/ui/configuration.html").read_text(encoding="utf-8")
+        for token in ("class=\"navbar\"", "class=\"container\"", "class=\"nav-brand\"",
+                      "class=\"btn nav-btn\"", "--surface:", "--border:"):
+            self.assertIn(token, page)
+
+    def test_configuration_groups_fields_by_subsection(self):
+        page = (PROJECT_ROOT / "src/web/ui/configuration.html").read_text(encoding="utf-8")
+        for token in ("groupFieldsBySubsection", "subsection-card", "subsection-title",
+                      "network.wifi", "network.ethernet", "General"):
             self.assertIn(token, page)
 
     def test_discovery_start_status_is_inside_configuration_card_before_active_jobs(self):

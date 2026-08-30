@@ -205,6 +205,7 @@ th{background:#f8f9fa; font-weight:600}
 <option value="7d">Last 7 Days</option>
 <option value="30d">Last 30 Days</option>
 </select>
+<button class="btn" id="analytics_refresh" type="button" onclick="loadAnalytics()">🔄 Refresh Analytics</button>
 </div>
 
 <h3>Event Type Distribution</h3>
@@ -398,7 +399,8 @@ async function refreshEvents() {
   try {
     const response = await fetch('/api/audit/events?limit=50');
     if (response.ok) {
-      const events = await response.json();
+      const payload = await response.json();
+      const events = normalizeAuditEvents(payload);
       updateEventsTable(events);
     } else {
       document.getElementById('events_tbody').innerHTML = '<tr><td colspan="5">Failed to load events</td></tr>';
@@ -408,8 +410,17 @@ async function refreshEvents() {
   }
 }
 
+// The current API returns {events: [...], status, total}; older firmware may
+// return the array directly. Normalize both forms before rendering.
+function normalizeAuditEvents(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (payload && Array.isArray(payload.events)) return payload.events;
+  return [];
+}
+
 function updateEventsTable(events) {
   const tbody = document.getElementById('events_tbody');
+  events = normalizeAuditEvents(events);
   if (!events || events.length === 0) {
     tbody.innerHTML = '<tr><td colspan="5">No recent events</td></tr>';
     return;
@@ -478,49 +489,85 @@ async function clearEventLog() {
 // Analytics functions
 async function loadAnalytics() {
   const period = document.getElementById('analytics_period').value;
+  const refreshButton = document.getElementById('analytics_refresh');
+  if (refreshButton) refreshButton.disabled = true;
   try {
-    const response = await fetch(`/api/audit/analytics?period=${period}`);
+    const response = await fetch(`/api/audit/analytics?period=${period}`, { cache: 'no-store' });
     if (response.ok) {
-      const analytics = await response.json();
-      updateAnalytics(analytics);
+      const payload = await response.json();
+      updateAnalytics(normalizeAuditAnalytics(payload));
     } else {
       showAnalyticsError('Failed to load analytics');
     }
   } catch (error) {
     showAnalyticsError('Error loading analytics: ' + error.message);
+  } finally {
+    if (refreshButton) refreshButton.disabled = false;
   }
+}
+
+// The API currently wraps the data in {analytics: {...}} and names the
+// distribution field "event_types". Normalize that response while retaining
+// compatibility with the flatter schema used by older firmware.
+function normalizeAuditAnalytics(payload) {
+  const source = payload && payload.analytics && typeof payload.analytics === 'object'
+    ? payload.analytics
+    : (payload && typeof payload === 'object' ? payload : {});
+  const distribution = source.distribution && typeof source.distribution === 'object'
+    ? source.distribution
+    : (source.event_types && typeof source.event_types === 'object' ? source.event_types : {});
+  const totalEvents = Number.isFinite(Number(source.total_events))
+    ? Number(source.total_events)
+    : Object.values(distribution).reduce((total, count) => total + (Number(count) || 0), 0);
+  const topEvents = Array.isArray(source.top_events) ? source.top_events : [];
+  const timeline = Array.isArray(source.timeline) ? source.timeline : [];
+  return {
+    ...source,
+    distribution,
+    total_events: totalEvents,
+    top_events: topEvents,
+    timeline
+  };
 }
 
 function updateAnalytics(analytics) {
   // Event distribution
-  if (analytics.distribution) {
+  if (analytics.distribution && Object.keys(analytics.distribution).length > 0) {
     let distributionHtml = '<div style="margin-top:.5rem;">';
     Object.entries(analytics.distribution).forEach(([type, count]) => {
-      const percentage = ((count / analytics.total_events) * 100).toFixed(1);
+      const percentage = analytics.total_events > 0
+        ? ((count / analytics.total_events) * 100).toFixed(1)
+        : '0.0';
       distributionHtml += `<div style="margin-bottom:.3rem;"><strong>${type}:</strong> ${count} (${percentage}%)</div>`;
     });
     distributionHtml += '</div>';
     document.getElementById('event_distribution').innerHTML = distributionHtml;
+  } else {
+    document.getElementById('event_distribution').textContent = 'No event distribution data available.';
   }
 
   // Top events
-  if (analytics.top_events) {
+  if (Array.isArray(analytics.top_events) && analytics.top_events.length > 0) {
     let topEventsHtml = '<table style="margin-top:.5rem;"><thead><tr><th>Event</th><th>Count</th></tr></thead><tbody>';
     analytics.top_events.forEach(event => {
       topEventsHtml += `<tr><td>${event.event}</td><td>${event.count}</td></tr>`;
     });
     topEventsHtml += '</tbody></table>';
     document.getElementById('top_events').innerHTML = topEventsHtml;
+  } else {
+    document.getElementById('top_events').textContent = 'No top security events available.';
   }
 
   // Activity timeline would require a chart library - for now show simple summary
-  if (analytics.timeline) {
+  if (Array.isArray(analytics.timeline) && analytics.timeline.length > 0) {
     let timelineHtml = '<div style="margin-top:.5rem;">Activity peaks:<br>';
     analytics.timeline.forEach(peak => {
       timelineHtml += `<div>${peak.hour}:00 - ${peak.events} events</div>`;
     });
     timelineHtml += '</div>';
     document.getElementById('activity_timeline').innerHTML = timelineHtml;
+  } else {
+    document.getElementById('activity_timeline').textContent = 'No activity timeline data available.';
   }
 }
 
@@ -593,6 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await loadConfig();
         await refreshMetrics();
       }
+      await loadAnalytics();
     } catch (err) {
       console.error('Audit page initial load failed:', err);
     }
