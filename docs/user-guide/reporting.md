@@ -37,6 +37,30 @@ select JSON/CEE/LEEF/CEF format, select Reports Only or Verbose output, enable f
 case sensitivity. Include filters admit matching events; exclude filters suppress matches. File
 reporting also offers log download.
 
+### Channel-specific endpoint settings
+
+The MQTT, Webhook and Email tabs include an endpoint panel below the common channel options.
+Use the dedicated **Save ... configuration** button to persist only that channel while retaining
+all other reporting sections. Password inputs are intentionally blank: leaving a password blank
+preserves the value already stored on the device.
+
+* **MQTT**: broker host and port, client ID, topic prefix, credentials, QoS, retain flag,
+  timeouts, reconnect interval and optional CA PEM.
+* **Webhook**: URL, timeout and request headers as a JSON object.
+* **Email / SMTP**: server and port, credentials, sender, recipients, subject prefix, SSL/TLS
+  switches, timeout and retry attempts. Recipients may be entered one per line or comma-separated.
+* **Serial** and **Audit** have no endpoint-specific fields; use their common options and filters.
+* **FILE** and **GPIO** are light-blue navigation tabs. They open the dedicated `/logging` and
+  `/gpio` pages so their storage and pin mappings are not duplicated here.
+
+The endpoint editor remains hidden for compatibility with existing installations. The channel
+panels use the same `/api/report/endpoints` persistence path and apply network endpoint changes
+immediately when the backend accepts the request.
+
+The panel reflects the complete endpoint schema. A field is persisted even when the selected
+reporter build does not currently consume it (for example optional webhook headers or retry
+metadata); those values remain available for compatible reporter implementations.
+
 ## Reporting Endpoints
 
 **Load** displays endpoint JSON and **Save** validates/applies it. Endpoint data can contain broker

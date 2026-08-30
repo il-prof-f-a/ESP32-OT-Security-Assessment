@@ -330,6 +330,16 @@
 .suggestion-list{display:flex;flex-wrap:wrap;gap:.3rem;margin:.35rem 0 .15rem}
 .suggestion-chip{border:1px solid #b7d8c0;background:#effaf1;color:#245d30;border-radius:999px;padding:.2rem .45rem;font-family:Consolas,monospace;font-size:.72rem;cursor:pointer}
 .endpoint-hint{font-size:.78rem;color:#58677a;margin:.45rem 0;padding:.45rem .6rem;background:#f0f4f8;border-radius:4px}
+.report-channel-tab-link{background:#e7f6ff;color:#155b8f;border-color:#9bd7f5;text-decoration:none;display:inline-block}
+.report-channel-tab-link:hover{background:#d6efff;color:#10486f}
+.channel-specific-config{margin-top:1rem;padding:.8rem;border:1px solid #b9e0f5;border-radius:6px;background:#f4fbff}
+.channel-specific-config h3{margin:.1rem 0 .55rem;color:#155b8f;font-size:1rem}
+.channel-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.7rem}
+.channel-form-grid .control-group input[type="text"],.channel-form-grid .control-group input[type="number"],.channel-form-grid .control-group input[type="url"],.channel-form-grid .control-group input[type="password"],.channel-form-grid .control-group textarea,.channel-form-grid .control-group select{width:100%;box-sizing:border-box;padding:.4rem;border:1px solid #b9c8d4;border-radius:4px;font:inherit;background:#fff}
+.channel-form-grid .control-group textarea{min-height:76px;resize:vertical;font-family:Consolas,monospace;font-size:.82rem}
+.channel-form-grid .checkbox-line{display:flex;align-items:center;gap:.45rem;padding-top:1.4rem}
+.secret-field-note{font-size:.72rem;color:#536070;margin-top:.25rem}
+.channel-link-note{font-size:.78rem;color:#536070;margin:.35rem 0 .75rem}
 </style>
 <div class="card"><h1>📊 Reporting Configuration</h1><a href="/" class="btn nav-btn">← Dashboard</a></div>
 <div id="status"></div>
@@ -395,7 +405,7 @@
 <h2>Reporting Channels</h2>
 <div id="report-save-status" class="report-save-status" role="status" aria-live="polite"></div>
 <button class="btn" onclick="loadChannels()">Reload Channels</button>
-<p class="report-help">Each tab controls one output channel. Include patterns are evaluated first; an exclude match vetoes delivery. File persistence is configured on the <a class="nav-btn" style="padding:.25rem .5rem" href="/logging">Logging</a> page.</p>
+<p class="report-help">Each tab controls one output channel. Include patterns are evaluated first; an exclude match vetoes delivery. File settings are intentionally owned by /logging and are configured on the <a class="nav-btn" style="padding:.25rem .5rem" href="/logging">Logging</a> page.</p>
 <div id="report-channel-tabs" class="report-channel-tabs" role="tablist" aria-label="Reporting channels"></div>
 <div id="channelsConfig" style="margin-top: 1rem;">
     <!-- Channels will be populated here -->
@@ -456,6 +466,9 @@
 function status(msg,err){var s=document.getElementById('status');s.className='status '+(err?'err':'ok');s.textContent=msg;setTimeout(()=>s.innerHTML='',3000);}
 
 let reportStreamSource = null;
+// Full endpoint document cached in memory so per-channel edits can be merged
+// without dropping unrelated channels or secrets left unchanged by the user.
+let reportingEndpointDraft = {};
 const REPORT_STREAM_ALL_KEY = '__all_stream__';
 const REPORT_STREAM_MAX_ROWS = 700;
 const reportStreamStats = {
@@ -965,6 +978,7 @@ try{
    var endpointsResp=await fetch('/api/report/endpoints', { cache: 'no-store' });
    endpoints=await endpointsResp.json();
  }
+ reportingEndpointDraft = deepCloneReporting(endpoints || {});
  
  renderChannelsUI(channels, endpoints);
  updateReportStreamChannelOptions(channels);
@@ -972,73 +986,155 @@ try{
 }catch(e){status('Error: '+e.message,true);}
 }
 
+function deepCloneReporting(value){
+    try { return JSON.parse(JSON.stringify(value || {})); }
+    catch (e) { return {}; }
+}
+
+function endpointConfiguration(channelName){
+    const section = reportingEndpointDraft && reportingEndpointDraft[channelName];
+    return section && typeof section === 'object' && section.configuration && typeof section.configuration === 'object'
+        ? section.configuration : {};
+}
+
+function renderChannelSpecificConfig(channelName){
+    if (channelName === 'mqtt') return `
+        <div class="channel-specific-config"><h3>MQTT endpoint</h3>
+        <p class="report-help">Connection settings used by the MQTT reporter. Leave secret fields blank to keep the stored value unchanged.</p>
+        <div class="channel-form-grid">
+            <div class="control-group"><label for="mqtt_broker">Broker host</label><input type="text" id="mqtt_broker" autocomplete="off"></div>
+            <div class="control-group"><label for="mqtt_port">Broker port</label><input type="number" id="mqtt_port" min="1" max="65535"></div>
+            <div class="control-group"><label for="mqtt_client_id">Client ID</label><input type="text" id="mqtt_client_id" autocomplete="off"></div>
+            <div class="control-group"><label for="mqtt_topic_prefix">Topic prefix</label><input type="text" id="mqtt_topic_prefix" autocomplete="off"></div>
+            <div class="control-group"><label for="mqtt_username">Username</label><input type="text" id="mqtt_username" autocomplete="off"></div>
+            <div class="control-group"><label for="mqtt_password">Password</label><input type="password" id="mqtt_password" autocomplete="new-password" placeholder="Leave unchanged"></div>
+            <div class="control-group"><label for="mqtt_qos">QoS</label><select id="mqtt_qos"><option value="0">0 - At most once</option><option value="1">1 - At least once</option><option value="2">2 - Exactly once</option></select></div>
+            <label class="checkbox-line"><input type="checkbox" id="mqtt_retain"> Retain published events</label>
+            <div class="control-group"><label for="mqtt_timeout_ms">Timeout (ms)</label><input type="number" id="mqtt_timeout_ms" min="100" step="100"></div>
+            <div class="control-group"><label for="mqtt_reconnect_interval_ms">Reconnect interval (ms)</label><input type="number" id="mqtt_reconnect_interval_ms" min="0" step="100"></div>
+            <div class="control-group" style="grid-column:1/-1"><label for="mqtt_ca_pem">TLS CA certificate (PEM, optional)</label><textarea id="mqtt_ca_pem" placeholder="Leave blank to keep the configured CA"></textarea></div>
+        </div><div class="secret-field-note" id="mqtt_password_note"></div>
+        <div class="stream-actions"><button type="button" class="btn" onclick="saveChannelConfiguration('mqtt')">Save MQTT configuration</button></div></div>`;
+    if (channelName === 'email') return `
+        <div class="channel-specific-config"><h3>Email / SMTP endpoint</h3>
+        <p class="report-help">SMTP settings used for report delivery. Enter one recipient per line (or comma-separated).</p>
+        <div class="channel-form-grid">
+            <div class="control-group"><label for="email_smtp_server">SMTP server</label><input type="text" id="email_smtp_server" autocomplete="off"></div>
+            <div class="control-group"><label for="email_smtp_port">SMTP port</label><input type="number" id="email_smtp_port" min="1" max="65535"></div>
+            <div class="control-group"><label for="email_username">Username</label><input type="text" id="email_username" autocomplete="off"></div>
+            <div class="control-group"><label for="email_password">Password</label><input type="password" id="email_password" autocomplete="new-password" placeholder="Leave unchanged"></div>
+            <div class="control-group"><label for="email_from_address">From address</label><input type="text" id="email_from_address" autocomplete="off"></div>
+            <div class="control-group"><label for="email_subject_prefix">Subject prefix</label><input type="text" id="email_subject_prefix" autocomplete="off"></div>
+            <div class="control-group" style="grid-column:1/-1"><label for="email_to_addresses">Recipients</label><textarea id="email_to_addresses" placeholder="security@example.com"></textarea></div>
+            <label class="checkbox-line"><input type="checkbox" id="email_use_ssl"> Use implicit SSL</label>
+            <label class="checkbox-line"><input type="checkbox" id="email_use_tls"> Use STARTTLS</label>
+            <div class="control-group"><label for="email_timeout_ms">Timeout (ms)</label><input type="number" id="email_timeout_ms" min="100" step="100"></div>
+            <div class="control-group"><label for="email_retry_attempts">Retry attempts</label><input type="number" id="email_retry_attempts" min="0" max="10"></div>
+        </div><div class="secret-field-note" id="email_password_note"></div>
+        <div class="stream-actions"><button type="button" class="btn" onclick="saveChannelConfiguration('email')">Save Email configuration</button></div></div>`;
+    if (channelName === 'webhook') return `
+        <div class="channel-specific-config"><h3>Webhook endpoint</h3>
+        <p class="report-help">HTTP endpoint settings for webhook delivery. Headers must be a JSON object.</p>
+        <div class="channel-form-grid">
+            <div class="control-group" style="grid-column:1/-1"><label for="webhook_url">URL</label><input type="url" id="webhook_url" autocomplete="off"></div>
+            <div class="control-group"><label for="webhook_timeout_ms">Timeout (ms)</label><input type="number" id="webhook_timeout_ms" min="100" step="100"></div>
+            <div class="control-group" style="grid-column:1/-1"><label for="webhook_headers">Headers (JSON)</label><textarea id="webhook_headers" placeholder='{"Authorization":"Bearer …"}'></textarea></div>
+        </div>
+        <div class="stream-actions"><button type="button" class="btn" onclick="saveChannelConfiguration('webhook')">Save Webhook configuration</button></div></div>`;
+    if (channelName === 'serial' || channelName === 'audit') return `<div class="channel-specific-config"><h3>${channelName.toUpperCase()} channel</h3><p class="report-help">This channel has no network endpoint-specific settings. Configure its common channel options and filters above.</p></div>`;
+    return '';
+}
+
+function setInputValue(id, value){ const el=document.getElementById(id); if (el && value !== undefined && value !== null) el.value=String(value); }
+function setInputChecked(id, value){ const el=document.getElementById(id); if (el) el.checked=!!value; }
+
+function populateChannelSpecificConfig(channelName){
+    const cfg=endpointConfiguration(channelName);
+    if(channelName==='mqtt'){
+        setInputValue('mqtt_broker',cfg.broker); setInputValue('mqtt_port',cfg.port ?? 1883); setInputValue('mqtt_client_id',cfg.client_id); setInputValue('mqtt_topic_prefix',cfg.topic_prefix); setInputValue('mqtt_username',cfg.username); setInputValue('mqtt_qos',cfg.qos ?? 1); setInputChecked('mqtt_retain',cfg.retain); setInputValue('mqtt_timeout_ms',cfg.timeout_ms ?? 5000); setInputValue('mqtt_reconnect_interval_ms',cfg.reconnect_interval_ms ?? 10000); setInputValue('mqtt_ca_pem',cfg.ca_pem);
+        const note=document.getElementById('mqtt_password_note'); if(note && cfg.password) note.textContent='A password is configured and will be preserved when the field is left blank.';
+    } else if(channelName==='email'){
+        setInputValue('email_smtp_server',cfg.smtp_server); setInputValue('email_smtp_port',cfg.smtp_port ?? 465); setInputValue('email_username',cfg.username); setInputValue('email_from_address',cfg.from_address); setInputValue('email_subject_prefix',cfg.subject_prefix); setInputValue('email_to_addresses',Array.isArray(cfg.to_addresses)?cfg.to_addresses.join('\n'):cfg.to_addresses); setInputChecked('email_use_ssl',cfg.use_ssl); setInputChecked('email_use_tls',cfg.use_tls); setInputValue('email_timeout_ms',cfg.timeout_ms ?? 10000); setInputValue('email_retry_attempts',cfg.retry_attempts ?? 1);
+        const note=document.getElementById('email_password_note'); if(note && cfg.password) note.textContent='A password is configured and will be preserved when the field is left blank.';
+    } else if(channelName==='webhook'){
+        setInputValue('webhook_url',cfg.url); setInputValue('webhook_timeout_ms',cfg.timeout_ms ?? 5000); setInputValue('webhook_headers',cfg.headers ? JSON.stringify(cfg.headers,null,2) : (cfg.header ? JSON.stringify({'Authorization':cfg.header}) : ''));
+    }
+}
+
 function renderChannelsUI(channels, endpoints){
     const container = document.getElementById('channelsConfig');
     const tabs = document.getElementById('report-channel-tabs');
-    container.innerHTML = '';
-    tabs.innerHTML = '';
-
-    // File settings are intentionally owned by /logging; keep it available to
-    // stream preview but do not expose a second configuration editor here.
-    const known = ['mqtt','webhook','email','serial','audit'];
-    const runtime = channels && typeof channels === 'object'
-        ? Object.keys(channels).filter(name => /^[a-z0-9_-]+$/i.test(name))
-        : [];
-    const reporters = Array.from(new Set(known.concat(runtime))).filter(name => name !== 'file').sort();
+    const oldNote = document.getElementById('report-channel-link-note');
+    if (oldNote) oldNote.remove();
+    container.innerHTML = ''; tabs.innerHTML = '';
+    reportingEndpointDraft = deepCloneReporting(endpoints || reportingEndpointDraft);
+    const known = ['mqtt','webhook','email','serial','audit','file','gpio'];
+    const runtime = channels && typeof channels === 'object' ? Object.keys(channels).filter(name => /^[a-z0-9_-]+$/i.test(name)) : [];
+    const names = Array.from(new Set(known.concat(runtime))).sort();
+    const linkTargets = {file:'/logging',gpio:'/gpio'};
+    const reporters = names.filter(name => !Object.prototype.hasOwnProperty.call(linkTargets,name));
     let firstPanel = null;
-
-    reporters.forEach((channelName, index) => {
-        const channel = channels[channelName] || {enabled:false,format:0,verbosity:0};
-        const endpoint = endpoints && endpoints[channelName];
+    names.forEach(name => {
+        if (linkTargets[name]) {
+            const link=document.createElement('a'); link.className='report-channel-tab report-channel-tab-link'; link.id=`report-tab-${name}`; link.href=linkTargets[name] + (window.__sidToken ? `?sid=${encodeURIComponent(window.__sidToken)}` : ''); link.textContent=name.toUpperCase(); link.title=`Open dedicated ${name.toUpperCase()} configuration page`; tabs.appendChild(link); return;
+        }
+        const channel = channels[name] || {enabled:false,format:0,verbosity:0};
+        const endpoint = reportingEndpointDraft[name];
         const endpointConfigured = endpoint && typeof endpoint === 'object' && Object.keys(endpoint).length > 0;
-        const tab = document.createElement('button');
-        tab.type = 'button';
-        tab.className = 'report-channel-tab';
-        tab.id = `report-tab-${channelName}`;
-        tab.setAttribute('role','tab');
-        tab.setAttribute('aria-controls',`report-panel-${channelName}`);
-        tab.setAttribute('aria-selected', index === 0 ? 'true' : 'false');
-        tab.textContent = channelName.toUpperCase();
-        tab.addEventListener('click', () => selectReportChannel(channelName));
-        tabs.appendChild(tab);
-
-        const panel = document.createElement('section');
-        panel.className = 'channel-item report-channel-panel';
-        panel.id = `report-panel-${channelName}`;
-        panel.setAttribute('role','tabpanel');
-        panel.setAttribute('aria-labelledby',tab.id);
-        if (index !== 0) panel.hidden = true;
-        if (!firstPanel) firstPanel = panel;
-        panel.innerHTML = `
-            <div class="channel-name">📡 ${channelName.toUpperCase()}</div>
-            <p class="endpoint-hint">${endpointConfigured ? 'Endpoint configured and available.' : 'No endpoint-specific settings are configured; use the channel controls below.'}</p>
-            <div class="channel-controls">
-                <div class="control-group"><label for="enabled_${channelName}">Enabled</label><input type="checkbox" id="enabled_${channelName}" ${channel.enabled?'checked':''}></div>
-                <div class="control-group"><label for="format_${channelName}">Format</label><select id="format_${channelName}"><option value="0" ${channel.format==0?'selected':''}>JSON</option><option value="1" ${channel.format==1?'selected':''}>CEE</option><option value="2" ${channel.format==2?'selected':''}>LEEF</option><option value="3" ${channel.format==3?'selected':''}>CEF</option></select></div>
-                <div class="control-group"><label for="verbosity_${channelName}">Verbosity</label><select id="verbosity_${channelName}"><option value="0" ${channel.verbosity==0?'selected':''}>Reports Only</option><option value="1" ${channel.verbosity==1?'selected':''}>Verbose</option></select><div class="verbosity-info">${channel.verbosity==1?'Shows logs + reports with delimiters':'Only tool-generated events'}</div></div>
-            </div>
-            <div class="stream-actions"><button type="button" class="btn" onclick="updateChannel('${channelName}')">Save Channel</button></div>
-            <div class="filters-section" id="filters_${channelName}">
-                <div class="filters-header">🔍 Regex Filters</div>
-                <p class="report-help">Include patterns are evaluated first. If the include list is non-empty, at least one must match; exclude patterns veto a matching line afterward. Patterns are regular expressions.</p>
-                <div class="filter-controls"><div class="control-group"><label for="filters_enabled_${channelName}">Filters Enabled</label><input type="checkbox" id="filters_enabled_${channelName}"></div><div class="control-group"><label for="case_sensitive_${channelName}">Case Sensitive</label><input type="checkbox" id="case_sensitive_${channelName}"></div></div>
-                <div class="filter-list"><strong>Include Patterns:</strong><div id="include_filters_${channelName}"></div><div class="filter-add-controls"><input type="text" id="include_input_${channelName}" class="filter-add-input" list="include_pattern_list_${channelName}" placeholder="Regex, e.g. intrusion|signature"><datalist id="include_pattern_list_${channelName}" class="reporting-pattern-suggestions"></datalist><button type="button" class="filter-add-btn" onclick="addFilter('${channelName}','include')">Add Include</button></div><div id="include_suggestions_${channelName}" class="suggestion-list" aria-label="Include suggestions"></div></div>
-                <div class="filter-list"><strong>Exclude Patterns:</strong><div id="exclude_filters_${channelName}"></div><div class="filter-add-controls"><input type="text" id="exclude_input_${channelName}" class="filter-add-input" list="exclude_pattern_list_${channelName}" placeholder="Regex, e.g. debug|trace"><datalist id="exclude_pattern_list_${channelName}" class="reporting-pattern-suggestions"></datalist><button type="button" class="filter-add-btn" onclick="addFilter('${channelName}','exclude')">Add Exclude</button></div><div id="exclude_suggestions_${channelName}" class="suggestion-list" aria-label="Exclude suggestions"></div></div>
-                <div class="stream-actions"><button type="button" class="btn" onclick="updateChannelFilters('${channelName}')">Save Filters</button></div>
-            </div>`;
-        container.appendChild(panel);
-        populatePatternDatalist(channelName,'include');
-        populatePatternDatalist(channelName,'exclude');
-        attachPatternSuggestions(channelName,'include');
-        attachPatternSuggestions(channelName,'exclude');
-        loadChannelFilters(channelName);
+        const tab=document.createElement('button'); tab.type='button'; tab.className='report-channel-tab'; tab.id=`report-tab-${name}`; tab.setAttribute('role','tab'); tab.setAttribute('aria-controls',`report-panel-${name}`); tab.setAttribute('aria-selected', firstPanel ? 'false' : 'true'); tab.textContent=name.toUpperCase(); tab.addEventListener('click',()=>selectReportChannel(name)); tabs.appendChild(tab);
+        const panel=document.createElement('section'); panel.className='channel-item report-channel-panel'; panel.id=`report-panel-${name}`; panel.setAttribute('role','tabpanel'); panel.setAttribute('aria-labelledby',tab.id); if(firstPanel) panel.hidden=true; if(!firstPanel) firstPanel=panel;
+        panel.innerHTML=`<div class="channel-name">📡 ${name.toUpperCase()}</div><p class="endpoint-hint">${endpointConfigured?'Endpoint configured and available.':'No endpoint-specific settings are configured; use the channel controls below.'}</p><div class="channel-controls"><div class="control-group"><label for="enabled_${name}">Enabled</label><input type="checkbox" id="enabled_${name}" ${channel.enabled?'checked':''}></div><div class="control-group"><label for="format_${name}">Format</label><select id="format_${name}"><option value="0" ${channel.format==0?'selected':''}>JSON</option><option value="1" ${channel.format==1?'selected':''}>CEE</option><option value="2" ${channel.format==2?'selected':''}>LEEF</option><option value="3" ${channel.format==3?'selected':''}>CEF</option></select></div><div class="control-group"><label for="verbosity_${name}">Verbosity</label><select id="verbosity_${name}"><option value="0" ${channel.verbosity==0?'selected':''}>Reports Only</option><option value="1" ${channel.verbosity==1?'selected':''}>Verbose</option></select><div class="verbosity-info">${channel.verbosity==1?'Shows logs + reports with delimiters':'Only tool-generated events'}</div></div></div><div class="stream-actions"><button type="button" class="btn" onclick="updateChannel('${name}')">Save Channel</button></div>${renderChannelSpecificConfig(name)}<div class="filters-section" id="filters_${name}"><div class="filters-header">🔍 Regex Filters</div><p class="report-help">Include patterns are evaluated first. If the include list is non-empty, at least one must match; exclude patterns veto a matching line afterward. Patterns are regular expressions.</p><div class="filter-controls"><div class="control-group"><label for="filters_enabled_${name}">Filters Enabled</label><input type="checkbox" id="filters_enabled_${name}"></div><div class="control-group"><label for="case_sensitive_${name}">Case Sensitive</label><input type="checkbox" id="case_sensitive_${name}"></div></div><div class="filter-list"><strong>Include Patterns:</strong><div id="include_filters_${name}"></div><div class="filter-add-controls"><input type="text" id="include_input_${name}" class="filter-add-input" list="include_pattern_list_${name}" placeholder="Regex, e.g. intrusion|signature"><datalist id="include_pattern_list_${name}" class="reporting-pattern-suggestions"></datalist><button type="button" class="filter-add-btn" onclick="addFilter('${name}','include')">Add Include</button></div><div id="include_suggestions_${name}" class="suggestion-list" aria-label="Include suggestions"></div></div><div class="filter-list"><strong>Exclude Patterns:</strong><div id="exclude_filters_${name}"></div><div class="filter-add-controls"><input type="text" id="exclude_input_${name}" class="filter-add-input" list="exclude_pattern_list_${name}" placeholder="Regex, e.g. debug|trace"><datalist id="exclude_pattern_list_${name}" class="reporting-pattern-suggestions"></datalist><button type="button" class="filter-add-btn" onclick="addFilter('${name}','exclude')">Add Exclude</button></div><div id="exclude_suggestions_${name}" class="suggestion-list" aria-label="Exclude suggestions"></div></div><div class="stream-actions"><button type="button" class="btn" onclick="updateChannelFilters('${name}')">Save Filters</button></div></div>`;
+        container.appendChild(panel); populateChannelSpecificConfig(name); populatePatternDatalist(name,'include'); populatePatternDatalist(name,'exclude'); attachPatternSuggestions(name,'include'); attachPatternSuggestions(name,'exclude'); loadChannelFilters(name);
     });
-    if (!firstPanel) container.textContent = 'No reporting channels are available.';
+    const note=document.createElement('div'); note.id='report-channel-link-note'; note.className='channel-link-note'; note.textContent='FILE and GPIO use dedicated configuration pages; select their light-blue tabs to open them.'; tabs.insertAdjacentElement('afterend',note);
+    if(!firstPanel) container.textContent='No reporting channels are available.';
 }
 
 function selectReportChannel(channelName){
     document.querySelectorAll('.report-channel-tab').forEach(tab => tab.setAttribute('aria-selected', tab.id === `report-tab-${channelName}` ? 'true' : 'false'));
     document.querySelectorAll('.report-channel-panel').forEach(panel => { panel.hidden = panel.id !== `report-panel-${channelName}`; });
+}
+
+function channelFormatName(value){ return ['JSON','CEE','LEEF','CEF'][Number(value)] || 'JSON'; }
+
+function channelConfigValue(id){ const el=document.getElementById(id); return el ? el.value.trim() : ''; }
+function channelConfigNumber(id, fallback){ const raw=channelConfigValue(id); const value=Number(raw); return Number.isFinite(value) && raw !== '' ? value : fallback; }
+
+function saveChannelConfiguration(channelName){
+    try {
+        const draft=deepCloneReporting(reportingEndpointDraft);
+        const section=(draft[channelName] && typeof draft[channelName]==='object') ? draft[channelName] : {};
+        const cfg=(section.configuration && typeof section.configuration==='object') ? section.configuration : {};
+        const enabledEl=document.getElementById(`enabled_${channelName}`);
+        const formatEl=document.getElementById(`format_${channelName}`);
+        const verbosityEl=document.getElementById(`verbosity_${channelName}`);
+        if(enabledEl) section.enabled=!!enabledEl.checked;
+        if(formatEl) section.format=channelFormatName(formatEl.value);
+        if(verbosityEl) section.verbosity=Number(verbosityEl.value)===1?'VERBOSE':'REPORTS_ONLY';
+
+        if(channelName==='mqtt'){
+            cfg.broker=channelConfigValue('mqtt_broker'); cfg.port=channelConfigNumber('mqtt_port',1883); cfg.client_id=channelConfigValue('mqtt_client_id'); cfg.topic_prefix=channelConfigValue('mqtt_topic_prefix'); cfg.username=channelConfigValue('mqtt_username');
+            const password=channelConfigValue('mqtt_password'); if(password) cfg.password=password;
+            cfg.qos=Math.max(0,Math.min(2,channelConfigNumber('mqtt_qos',1))); cfg.retain=!!document.getElementById('mqtt_retain')?.checked; cfg.timeout_ms=channelConfigNumber('mqtt_timeout_ms',5000); cfg.reconnect_interval_ms=channelConfigNumber('mqtt_reconnect_interval_ms',10000);
+            const ca=channelConfigValue('mqtt_ca_pem'); if(ca) cfg.ca_pem=ca;
+        } else if(channelName==='email'){
+            cfg.smtp_server=channelConfigValue('email_smtp_server'); cfg.smtp_port=channelConfigNumber('email_smtp_port',465); cfg.username=channelConfigValue('email_username');
+            const password=channelConfigValue('email_password'); if(password) cfg.password=password;
+            cfg.from_address=channelConfigValue('email_from_address'); cfg.subject_prefix=channelConfigValue('email_subject_prefix');
+            const recipients=channelConfigValue('email_to_addresses'); if(recipients) cfg.to_addresses=recipients.split(/[\\n,]+/).map(v=>v.trim()).filter(Boolean);
+            cfg.use_ssl=!!document.getElementById('email_use_ssl')?.checked; cfg.use_tls=!!document.getElementById('email_use_tls')?.checked; cfg.timeout_ms=channelConfigNumber('email_timeout_ms',10000); cfg.retry_attempts=channelConfigNumber('email_retry_attempts',1);
+        } else if(channelName==='webhook'){
+            cfg.url=channelConfigValue('webhook_url'); cfg.timeout_ms=channelConfigNumber('webhook_timeout_ms',5000);
+            const headersText=channelConfigValue('webhook_headers');
+            if(headersText){ const parsed=JSON.parse(headersText); if(!parsed || typeof parsed!=='object' || Array.isArray(parsed)) throw new Error('Webhook headers must be a JSON object'); cfg.headers=parsed; }
+        } else { status(`${channelName} has no endpoint-specific settings`, false); return; }
+        section.configuration=cfg; draft[channelName]=section;
+        reportingEndpointDraft=draft;
+        fetch('/api/report/endpoints',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(draft)})
+            .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status); return r.text();})
+            .then(result=>{status(`${channelName} configuration saved: ${result}`); showReportSaveStatus(`${channelName.toUpperCase()} endpoint configuration saved successfully.`,false);})
+            .catch(error=>{status(`Error saving ${channelName} configuration: ${error.message}`,true); showReportSaveStatus(`Unable to save ${channelName.toUpperCase()} endpoint configuration: ${error.message}`,true);});
+    } catch(e){ status(`Error preparing ${channelName} configuration: ${e.message}`,true); showReportSaveStatus(`Unable to prepare ${channelName.toUpperCase()} endpoint configuration: ${e.message}`,true); }
 }
 
 async function updateChannel(channelName){
@@ -1086,6 +1182,7 @@ try{
    var r=await fetch('/api/report/endpoints', { cache: 'no-store' });
    endpoints=await r.json();
  }
+ reportingEndpointDraft = deepCloneReporting(endpoints || {});
  document.getElementById('endpoints').value=JSON.stringify(endpoints,null,2);
  status('Endpoints loaded');
 }catch(e){status('Error: '+e.message,true);}
@@ -1096,6 +1193,7 @@ var text=document.getElementById('endpoints').value;
 var endpoints=JSON.parse(text);
 var r=await fetch('/api/report/endpoints',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(endpoints)});
 if(!r.ok)throw new Error('HTTP '+r.status);
+reportingEndpointDraft=deepCloneReporting(endpoints);
 status('Endpoints saved');
 }catch(e){status('Error: '+e.message,true);}
 }

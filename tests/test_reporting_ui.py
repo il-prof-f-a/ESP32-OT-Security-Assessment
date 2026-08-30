@@ -28,6 +28,29 @@ class ReportingUiContractTests(unittest.TestCase):
         self.assertIn("email", self.html)
         self.assertIn("serial", self.html)
 
+    def test_channel_specific_configuration_contract(self):
+        self.assertIn("renderChannelSpecificConfig", self.html)
+        for field in (
+            "mqtt_broker", "mqtt_port", "mqtt_client_id", "mqtt_topic_prefix",
+            "mqtt_username", "mqtt_password", "mqtt_qos", "mqtt_retain",
+            "mqtt_timeout_ms", "mqtt_reconnect_interval_ms",
+            "email_smtp_server", "email_smtp_port", "email_username", "email_password",
+            "email_from_address", "email_to_addresses", "email_subject_prefix",
+            "email_use_ssl", "email_use_tls", "email_timeout_ms", "email_retry_attempts",
+            "webhook_url", "webhook_headers", "webhook_timeout_ms",
+        ):
+            self.assertIn(field, self.html)
+        self.assertIn("saveChannelConfiguration", self.html)
+        self.assertIn("/api/report/endpoints", self.html)
+        self.assertIn("reportingEndpointDraft", self.html)
+
+    def test_file_and_gpio_are_dedicated_light_blue_links(self):
+        self.assertIn("report-channel-tab-link", self.html)
+        self.assertIn("/logging", self.html)
+        self.assertIn("/gpio", self.html)
+        self.assertIn("FILE", self.html)
+        self.assertIn("GPIO", self.html)
+
     def test_endpoints_and_file_editor_are_hidden(self):
         self.assertRegex(self.html, r'id="reporting-endpoints-panel"[^>]*hidden')
         self.assertIn("display:none", self.html)
