@@ -148,6 +148,54 @@ class BuildIntegrationTests(unittest.TestCase):
         )
         self.assertIn("pre:scripts/fix_esp32p4_toolchain_path.py", p4)
 
+    def test_s7_szl_queries_use_standard_snap7_indexes(self):
+        source = (PROJECT_ROOT / "src/protocols/s7_plugin.cpp").read_text(
+            encoding="utf-8"
+        )
+
+        for szl_id in ("SZL_MODULE_IDENTIFICATION", "SZL_COMPONENT_IDENTIFICATION"):
+            self.assertRegex(
+                source,
+                rf"readSZL\([^;]*{szl_id},\s*0x0000\s*,",
+                msg=f"{szl_id} must use index 0 according to Snap7/Moka7",
+            )
+        self.assertNotRegex(
+            source,
+            r"readSZL\([^;]*SZL_(?:MODULE|COMPONENT)_IDENTIFICATION,\s*0x0001\s*,",
+        )
+        self.assertIn("SZL_CPU_CHARACTERISTICS, 0x0001", source)
+
+    def test_s7_cpu_info_uses_fixed_offsets_and_rejects_heuristic_serials(self):
+        source = (PROJECT_ROOT / "src/protocols/s7_plugin.cpp").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("copySZLField", source)
+        self.assertIn("138, 24", source)   # Moka7/Snap7 record-only serial offset
+        self.assertIn("172, 32", source)   # Moka7/Snap7 record-only module offset
+        self.assertIn("104, 26", source)   # Moka7/Snap7 record-only copyright offset
+        self.assertNotIn("extract_ascii_tokens", source)
+        self.assertIn("looksLikeOrderCode", source)
+        self.assertIn("Snap7/Moka7-compatible first SZL telegram", source)
+        self.assertIn("0x00,0x08,0x00,0x08", source)
+        self.assertIn("first ? 12U : 8U", source)
+        self.assertIn("params[9] == 0x00", source)
+
+    def test_s7_stop_proof_uses_job_and_reports_response_state(self):
+        source = (PROJECT_ROOT / "src/protocols/s7_plugin.cpp").read_text(
+            encoding="utf-8"
+        )
+
+        stop_function = source.split("static bool s7_plc_control", 1)[1].split(
+            "bool S7Plugin::clientOpsPSRAM", 1
+        )[0]
+        self.assertIn("PDU_TYPE_JOB", stop_function)
+        self.assertIn("P_PROGRAM", stop_function)
+        self.assertNotIn("s7_userdata_exchange(sock, pdu_ref", stop_function)
+        self.assertIn("command_sent", source)
+        self.assertIn("response_accepted", source)
+        self.assertIn("plc_state_verified", source)
+
     def test_p4_combined_image_uses_the_partition_table_application_offset(self):
         upload_script = (PROJECT_ROOT / "scripts/p4_upload.py").read_text(encoding="utf-8")
         self.assertIn('ESP32_APP_OFFSET="0x200000"', upload_script)

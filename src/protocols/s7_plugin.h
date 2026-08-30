@@ -33,6 +33,9 @@ namespace S7 {
     constexpr uint16_t SZL_CPU_CHARACTERISTICS = 0x0131;
     constexpr uint16_t SZL_CPU_PROTECTION = 0x0232;
     constexpr uint16_t SZL_COMPONENT_IDENTIFICATION = 0x001C;
+    constexpr uint16_t SZL_PLC_STATUS = 0x0424;
+    constexpr uint8_t CPU_STATUS_STOP = 0x04;
+    constexpr uint8_t CPU_STATUS_RUN = 0x08;
 
     // Protection Levels
     constexpr uint8_t PROTECTION_NONE = 0;
@@ -49,6 +52,8 @@ struct S7DeviceInfo {
     char serial_number[24];      // "S C-X4U421302009"
     char plant_id[32];           // Plant/location identifier
     char copyright_info[64];     // Copyright string from SZL
+    char module_name[32];        // Module name from SZL 0x001C
+    uint8_t plc_status;           // 0x04 STOP, 0x08 RUN (SZL 0x0424)
 
     uint16_t asdu_length;        // Max PDU size negotiated
     uint16_t max_jobs_calling;   // Max parallel jobs (calling)
@@ -63,7 +68,7 @@ struct S7DeviceInfo {
     bool szl_read_success;
     bool setup_comm_success;
 
-    S7DeviceInfo() : asdu_length(0), max_jobs_calling(0), max_jobs_called(0),
+    S7DeviceInfo() : plc_status(0), asdu_length(0), max_jobs_calling(0), max_jobs_called(0),
                      protection_level(S7::PROTECTION_NONE),
                      supports_password(false), supports_encryption(false),
                      is_online(false), szl_read_success(false),
@@ -74,6 +79,7 @@ struct S7DeviceInfo {
         serial_number[0] = '\0';
         plant_id[0] = '\0';
         copyright_info[0] = '\0';
+        module_name[0] = '\0';
     }
 };
 
