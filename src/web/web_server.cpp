@@ -66,6 +66,8 @@
 #include <mutex>
 #include <list>
 #include <utility>
+#include <cctype>
+#include <cmath>
 
 #ifndef ESP32_OT_WEB_HTTP_ONLY
 #define ESP32_OT_WEB_HTTP_ONLY 0
@@ -103,6 +105,25 @@ static inline void report_event_ps(ReportingEngine* rep, const char* type, const
 
 static inline void report_event_ps(ReportingEngine* rep, const char* type, const std::string& payload) {
     report_event_ps(rep, type, payload.c_str());
+}
+
+// GPIO API values are user supplied. Keep them bounded and JSON-safe before
+// embedding them in the compact audit event emitted by the web handlers.
+static void copy_safe_gpio_token(const char* source, char* destination, size_t capacity) {
+    if (!destination || capacity == 0) return;
+    size_t out = 0;
+    if (source) {
+        while (source[out] != '\0' && out + 1 < capacity) {
+            const unsigned char ch = static_cast<unsigned char>(source[out]);
+            if (std::isalnum(ch) || ch == '_' || ch == '-' || ch == '.') {
+                destination[out] = static_cast<char>(ch);
+            } else {
+                destination[out] = '_';
+            }
+            ++out;
+        }
+    }
+    destination[out] = '\0';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1181,8 +1202,10 @@ bool WebServer::build_page_bootstrap_json(StaticJsonBuffer& cache, const char* p
     const bool is_dashboard = (strcmp(page_name, "dashboard") == 0);
     const bool is_serial_monitor = (strcmp(page_name, "serial_monitor") == 0);
 
-    // Common: full config is only needed for IDS bootstrap for now.
-    if (is_ids || is_dashboard) {
+    // The full configuration is needed only by the dedicated IDS page.
+    // Dashboard bootstrap deliberately omits it so secrets never reach the
+    // general dashboard payload; use /configuration for redacted editing.
+    if (is_ids) {
         cfg_buf = cfg_->getRawConfigInPSRAM(&cfg_len);
         if (!cfg_buf || cfg_len == 0) {
             if (cfg_buf) heap_caps_free(cfg_buf);
@@ -1867,7 +1890,6 @@ bool WebServer::build_page_bootstrap_json(StaticJsonBuffer& cache, const char* p
                 if (!json_append_field_raw(cache, len, first, "status", g_status_json.buf)) goto fail;
             }
         }
-        if (!json_append_field_raw(cache, len, first, "config", cfg_buf ? cfg_buf : "{}")) goto fail;
         {
             std::lock_guard<std::mutex> guard(g_wifi_status_json.mutex);
             if (!build_wifi_status_json(g_wifi_status_json) || !g_wifi_status_json.buf || g_wifi_status_json.length == 0) {
@@ -2865,6 +2887,10 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
         httpd_uri_t u_cfg_p  = { .uri="/api/config", .method=HTTP_POST, .handler=&WebServer::h_config_post, .user_ctx=nullptr };
         httpd_uri_t u_cfg_update = { .uri="/api/config/update", .method=HTTP_POST, .handler=&WebServer::h_config_update, .user_ctx=nullptr };
         httpd_uri_t u_cfg_reset = { .uri="/api/config/reset-to-defaults", .method=HTTP_POST, .handler=&WebServer::h_config_reset_defaults, .user_ctx=nullptr };
+        httpd_uri_t u_editor_schema = { .uri="/api/config/editor/schema", .method=HTTP_GET, .handler=&WebServer::h_config_editor_schema, .user_ctx=nullptr };
+        httpd_uri_t u_editor_snapshot = { .uri="/api/config/editor/snapshot", .method=HTTP_GET, .handler=&WebServer::h_config_editor_snapshot, .user_ctx=nullptr };
+        httpd_uri_t u_editor_validate = { .uri="/api/config/editor/validate", .method=HTTP_POST, .handler=&WebServer::h_config_editor_validate, .user_ctx=nullptr };
+        httpd_uri_t u_editor_save = { .uri="/api/config/editor/save", .method=HTTP_POST, .handler=&WebServer::h_config_editor_save, .user_ctx=nullptr };
         httpd_uri_t u_feat_g = { .uri="/api/features", .method=HTTP_GET, .handler=&WebServer::h_features_get, .user_ctx=nullptr };
         httpd_uri_t u_feat_p = { .uri="/api/features", .method=HTTP_POST, .handler=&WebServer::h_features_post, .user_ctx=nullptr };
         httpd_uri_t u_bootstrap = { .uri="/api/page/bootstrap", .method=HTTP_GET, .handler=&WebServer::h_page_bootstrap_get, .user_ctx=nullptr };
@@ -2877,6 +2903,10 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
         httpd_register_uri_handler(active_server_, &u_cfg_p);
         httpd_register_uri_handler(active_server_, &u_cfg_update);
         httpd_register_uri_handler(active_server_, &u_cfg_reset);
+        httpd_register_uri_handler(active_server_, &u_editor_schema);
+        httpd_register_uri_handler(active_server_, &u_editor_snapshot);
+        httpd_register_uri_handler(active_server_, &u_editor_validate);
+        httpd_register_uri_handler(active_server_, &u_editor_save);
         httpd_register_uri_handler(active_server_, &u_feat_g);
         httpd_register_uri_handler(active_server_, &u_feat_p);
         httpd_register_uri_handler(active_server_, &u_bootstrap);
@@ -2900,6 +2930,10 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     httpd_uri_t u_cfg_p  = { .uri="/api/config", .method=HTTP_POST, .handler=&WebServer::h_config_post, .user_ctx=nullptr };
     httpd_uri_t u_cfg_update = { .uri="/api/config/update", .method=HTTP_POST, .handler=&WebServer::h_config_update, .user_ctx=nullptr };
     httpd_uri_t u_cfg_reset = { .uri="/api/config/reset-to-defaults", .method=HTTP_POST, .handler=&WebServer::h_config_reset_defaults, .user_ctx=nullptr };
+    httpd_uri_t u_editor_schema = { .uri="/api/config/editor/schema", .method=HTTP_GET, .handler=&WebServer::h_config_editor_schema, .user_ctx=nullptr };
+    httpd_uri_t u_editor_snapshot = { .uri="/api/config/editor/snapshot", .method=HTTP_GET, .handler=&WebServer::h_config_editor_snapshot, .user_ctx=nullptr };
+    httpd_uri_t u_editor_validate = { .uri="/api/config/editor/validate", .method=HTTP_POST, .handler=&WebServer::h_config_editor_validate, .user_ctx=nullptr };
+    httpd_uri_t u_editor_save = { .uri="/api/config/editor/save", .method=HTTP_POST, .handler=&WebServer::h_config_editor_save, .user_ctx=nullptr };
     httpd_uri_t u_feat_g = { .uri="/api/features", .method=HTTP_GET, .handler=&WebServer::h_features_get, .user_ctx=nullptr };
     httpd_uri_t u_feat_p = { .uri="/api/features", .method=HTTP_POST, .handler=&WebServer::h_features_post, .user_ctx=nullptr };
     httpd_uri_t u_bootstrap = { .uri="/api/page/bootstrap", .method=HTTP_GET, .handler=&WebServer::h_page_bootstrap_get, .user_ctx=nullptr };
@@ -2950,6 +2984,10 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     httpd_register_uri_handler(active_server_, &u_cfg_p);
     httpd_register_uri_handler(active_server_, &u_cfg_update);
     httpd_register_uri_handler(active_server_, &u_cfg_reset);
+    httpd_register_uri_handler(active_server_, &u_editor_schema);
+    httpd_register_uri_handler(active_server_, &u_editor_snapshot);
+    httpd_register_uri_handler(active_server_, &u_editor_validate);
+    httpd_register_uri_handler(active_server_, &u_editor_save);
     httpd_register_uri_handler(active_server_, &u_feat_g);
     httpd_register_uri_handler(active_server_, &u_feat_p);
     httpd_register_uri_handler(active_server_, &u_bootstrap);
@@ -2998,6 +3036,10 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     httpd_uri_t config_import = { .uri="/api/config/import", .method=HTTP_POST, .handler=&WebServer::h_config_import, .user_ctx=nullptr };
     httpd_uri_t config_metadata = { .uri="/api/config/metadata", .method=HTTP_GET, .handler=&WebServer::h_config_metadata_get, .user_ctx=nullptr };
     httpd_uri_t config_reset = { .uri="/api/config/reset", .method=HTTP_POST, .handler=&WebServer::h_config_reset_post, .user_ctx=nullptr };
+    httpd_uri_t config_editor_schema = { .uri="/api/config/editor/schema", .method=HTTP_GET, .handler=&WebServer::h_config_editor_schema, .user_ctx=nullptr };
+    httpd_uri_t config_editor_snapshot = { .uri="/api/config/editor/snapshot", .method=HTTP_GET, .handler=&WebServer::h_config_editor_snapshot, .user_ctx=nullptr };
+    httpd_uri_t config_editor_validate = { .uri="/api/config/editor/validate", .method=HTTP_POST, .handler=&WebServer::h_config_editor_validate, .user_ctx=nullptr };
+    httpd_uri_t config_editor_save = { .uri="/api/config/editor/save", .method=HTTP_POST, .handler=&WebServer::h_config_editor_save, .user_ctx=nullptr };
     httpd_register_uri_handler(active_server_, &lg_g);
     httpd_register_uri_handler(active_server_, &lg_p);
     httpd_register_uri_handler(active_server_, &lg_r);
@@ -3073,6 +3115,10 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     httpd_uri_t ids_stats  = { .uri="/api/ids/advanced/stats", .method=HTTP_GET, .handler=&WebServer::h_ids_adv_stats, .user_ctx=nullptr };
     httpd_register_uri_handler(active_server_, &ids_cfg_g);
     httpd_register_uri_handler(active_server_, &ids_cfg_p);
+    httpd_uri_t passive_cfg_g = { .uri="/api/passive-detection/config", .method=HTTP_GET, .handler=&WebServer::h_passive_config_get, .user_ctx=nullptr };
+    httpd_uri_t passive_cfg_p = { .uri="/api/passive-detection/config", .method=HTTP_POST, .handler=&WebServer::h_passive_config_post, .user_ctx=nullptr };
+    httpd_register_uri_handler(active_server_, &passive_cfg_g);
+    httpd_register_uri_handler(active_server_, &passive_cfg_p);
     httpd_register_uri_handler(active_server_, &ids_stats);
 
     // IDS API aliases for simplified paths
@@ -3356,6 +3402,7 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     httpd_uri_t page_network = { .uri="/network", .method=HTTP_GET, .handler=&WebServer::h_page_network, .user_ctx=nullptr };
     httpd_uri_t page_diagnostics = { .uri="/diagnostics", .method=HTTP_GET, .handler=&WebServer::h_page_diagnostics, .user_ctx=nullptr };
     httpd_uri_t page_logging = { .uri="/logging", .method=HTTP_GET, .handler=&WebServer::h_page_logging, .user_ctx=nullptr };
+    httpd_uri_t page_configuration = { .uri="/configuration", .method=HTTP_GET, .handler=&WebServer::h_page_configuration, .user_ctx=nullptr };
     httpd_uri_t page_gpio = { .uri="/gpio", .method=HTTP_GET, .handler=&WebServer::h_page_gpio, .user_ctx=nullptr };
     httpd_uri_t page_audit = { .uri="/audit", .method=HTTP_GET, .handler=&WebServer::h_page_audit, .user_ctx=nullptr };
     httpd_uri_t page_style = { .uri="/static/style.css", .method=HTTP_GET, .handler=&WebServer::h_page_style, .user_ctx=nullptr };
@@ -3375,6 +3422,7 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     httpd_register_uri_handler(active_server_, &page_network);
     httpd_register_uri_handler(active_server_, &page_diagnostics);
     httpd_register_uri_handler(active_server_, &page_logging);
+    httpd_register_uri_handler(active_server_, &page_configuration);
     httpd_register_uri_handler(active_server_, &page_gpio);
     httpd_register_uri_handler(active_server_, &page_audit);
     httpd_register_uri_handler(active_server_, &page_style);
@@ -3511,12 +3559,20 @@ void WebServer::registerHTTPSHandlers() {
     httpd_uri_t u_telem = { .uri = "/api/telemetry", .method = HTTP_GET, .handler = h_telemetry, .user_ctx = nullptr };
     httpd_uri_t u_cfg_g = { .uri = "/api/config", .method = HTTP_GET, .handler = h_config_get, .user_ctx = nullptr };
     httpd_uri_t u_cfg_p = { .uri = "/api/config", .method = HTTP_POST, .handler = h_config_post, .user_ctx = nullptr };
+    httpd_uri_t u_editor_schema = { .uri = "/api/config/editor/schema", .method = HTTP_GET, .handler = h_config_editor_schema, .user_ctx = nullptr };
+    httpd_uri_t u_editor_snapshot = { .uri = "/api/config/editor/snapshot", .method = HTTP_GET, .handler = h_config_editor_snapshot, .user_ctx = nullptr };
+    httpd_uri_t u_editor_validate = { .uri = "/api/config/editor/validate", .method = HTTP_POST, .handler = h_config_editor_validate, .user_ctx = nullptr };
+    httpd_uri_t u_editor_save = { .uri = "/api/config/editor/save", .method = HTTP_POST, .handler = h_config_editor_save, .user_ctx = nullptr };
 
     httpd_register_uri_handler(active_server_, &u_root);
     httpd_register_uri_handler(active_server_, &u_stat);
     httpd_register_uri_handler(active_server_, &u_telem);
     httpd_register_uri_handler(active_server_, &u_cfg_g);
     httpd_register_uri_handler(active_server_, &u_cfg_p);
+    httpd_register_uri_handler(active_server_, &u_editor_schema);
+    httpd_register_uri_handler(active_server_, &u_editor_snapshot);
+    httpd_register_uri_handler(active_server_, &u_editor_validate);
+    httpd_register_uri_handler(active_server_, &u_editor_save);
 
     // TODO: Register all other handlers (this is a minimal implementation)
     LOG_INFO(TAG_WEB, "✅ Essential HTTPS handlers registered");
@@ -3885,6 +3941,342 @@ esp_err_t WebServer::h_protocols_get_details(httpd_req_t* req) {
         "{\"id\":5,\"key\":\"PROFINET\",\"name\":\"PROFINET\"}"
         "]";
     return httpd_resp_send(req, kProtocolsDetailsJson, HTTPD_RESP_USE_STRLEN);
+}
+
+namespace {
+bool editor_sensitive_key(const char* key) {
+    if (!key) return false;
+    const char* sensitive[] = {"password", "token", "private_key", "secret", "hash", "credential"};
+    for (const char* marker : sensitive) {
+        char lower[96] = {0};
+        size_t i = 0;
+        for (; key[i] && i + 1 < sizeof(lower); ++i) {
+            lower[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(key[i])));
+        }
+        lower[i] = '\0';
+        if (strstr(lower, marker)) return true;
+    }
+    return false;
+}
+
+void editor_redact(cJSON* node, const char* key = nullptr) {
+    if (!node) return;
+    if (key && editor_sensitive_key(key)) {
+        if (cJSON_IsString(node)) {
+            cJSON_SetValuestring(node, "[configured]");
+        }
+        return;
+    }
+    if (cJSON_IsObject(node)) {
+        for (cJSON* child = node->child; child;) {
+            cJSON* next = child->next;
+            if (editor_sensitive_key(child->string)) {
+                cJSON_ReplaceItemInObjectCaseSensitive(node, child->string, cJSON_CreateString("[configured]"));
+            } else {
+                editor_redact(child, child->string);
+            }
+            child = next;
+        }
+    } else if (cJSON_IsArray(node)) {
+        for (cJSON* child = node->child; child; child = child->next) editor_redact(child, nullptr);
+    }
+}
+
+const char* editor_value_type(const cJSON* value) {
+    if (cJSON_IsBool(value)) return "boolean";
+    if (cJSON_IsNumber(value)) return "number";
+    if (cJSON_IsArray(value)) return "array";
+    if (cJSON_IsObject(value)) return "object";
+    return "string";
+}
+
+void editor_schema_walk(const cJSON* node, const std::string& prefix, cJSON* fields) {
+    if (!node || !fields) return;
+    if (cJSON_IsObject(node)) {
+        for (const cJSON* child = node->child; child; child = child->next) {
+            std::string path = prefix.empty() ? (child->string ? child->string : "") : prefix + "." + (child->string ? child->string : "");
+            if (cJSON_IsObject(child) && child->child) {
+                editor_schema_walk(child, path, fields);
+            } else {
+                cJSON* field = cJSON_CreateObject();
+                if (!field) continue;
+                cJSON_AddStringToObject(field, "path", path.c_str());
+                cJSON_AddStringToObject(field, "label", child->string ? child->string : path.c_str());
+                cJSON_AddStringToObject(field, "type", editor_value_type(child));
+                cJSON_AddBoolToObject(field, "secret", editor_sensitive_key(child->string));
+                cJSON_AddBoolToObject(field, "read_only", false);
+                cJSON_AddStringToObject(field, "help", "Value read from the validated device configuration.");
+                cJSON_AddItemToArray(fields, field);
+            }
+        }
+    } else {
+        cJSON* field = cJSON_CreateObject();
+        if (!field) return;
+        cJSON_AddStringToObject(field, "path", prefix.c_str());
+        cJSON_AddStringToObject(field, "label", prefix.c_str());
+        cJSON_AddStringToObject(field, "type", editor_value_type(node));
+        cJSON_AddBoolToObject(field, "secret", false);
+        cJSON_AddBoolToObject(field, "read_only", false);
+        cJSON_AddItemToArray(fields, field);
+    }
+}
+
+void editor_merge(cJSON* target, const cJSON* updates) {
+    if (!target || !updates || !cJSON_IsObject(target) || !cJSON_IsObject(updates)) return;
+    for (const cJSON* item = updates->child; item; item = item->next) {
+        if (!item->string || editor_sensitive_key(item->string) ||
+            (cJSON_IsString(item) && strcmp(item->valuestring, "[configured]") == 0)) continue;
+        cJSON* existing = cJSON_GetObjectItemCaseSensitive(target, item->string);
+        if (existing && cJSON_IsObject(existing) && cJSON_IsObject(item)) {
+            editor_merge(existing, item);
+        } else {
+            cJSON* copy = cJSON_Duplicate(item, true);
+            if (copy) {
+                if (existing) cJSON_ReplaceItemInObjectCaseSensitive(target, item->string, copy);
+                else cJSON_AddItemToObject(target, item->string, copy);
+            }
+        }
+    }
+}
+
+static char* editor_copy_buffer(const char* data, size_t len, size_t* out_len) {
+    if (out_len) *out_len = 0;
+    if (!data || len == 0 || !out_len) return nullptr;
+    char* copy = static_cast<char*>(heap_caps_malloc(len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!copy && len < 4096) {
+        copy = static_cast<char*>(heap_caps_malloc(len + 1, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    }
+    if (!copy) return nullptr;
+    memcpy(copy, data, len);
+    copy[len] = '\0';
+    *out_len = len;
+    return copy;
+}
+
+static bool editor_load_source(ConfigurationManager* cfg, const char* source,
+                               char** out_raw, size_t* out_len, bool* defaults_preview) {
+    if (!cfg || !out_raw || !out_len) return false;
+    *out_raw = nullptr;
+    *out_len = 0;
+    if (defaults_preview) *defaults_preview = false;
+    const char* selected = (source && *source) ? source : "current";
+
+    if (strcmp(selected, "defaults") == 0) {
+        *out_raw = cfg->getEmbeddedConfigInPSRAM(out_len);
+        if (defaults_preview) *defaults_preview = true;
+        return *out_raw != nullptr;
+    }
+    if (strcmp(selected, "saved") == 0) {
+        std::string saved;
+        if (AsyncStorage::Global::readFile(ConfigurationManager::kCONFIG_PATH, saved) != ESP_OK || saved.empty()) {
+            return false;
+        }
+        *out_raw = editor_copy_buffer(saved.data(), saved.size(), out_len);
+        return *out_raw != nullptr;
+    }
+    *out_raw = cfg->getRawConfigInPSRAM(out_len);
+    return *out_raw != nullptr;
+}
+
+static void editor_add_error(cJSON* errors, const std::string& path, const char* message) {
+    if (!errors) return;
+    cJSON* item = cJSON_CreateObject();
+    if (!item) return;
+    cJSON_AddStringToObject(item, "path", path.c_str());
+    cJSON_AddStringToObject(item, "message", message ? message : "invalid value");
+    cJSON_AddItemToArray(errors, item);
+}
+
+static void editor_validate_updates(const cJSON* updates, const cJSON* current,
+                                    const std::string& prefix, cJSON* errors) {
+    if (!updates || !current || !cJSON_IsObject(updates) || !cJSON_IsObject(current)) return;
+    for (const cJSON* item = updates->child; item; item = item->next) {
+        const char* key = item->string;
+        if (!key) continue;
+        const std::string path = prefix.empty() ? key : prefix + "." + key;
+        if (editor_sensitive_key(key)) {
+            if (!(cJSON_IsString(item) && strcmp(item->valuestring, "[configured]") == 0)) {
+                editor_add_error(errors, path, "secret fields are not editable through the generic editor");
+            }
+            continue;
+        }
+        const cJSON* existing = cJSON_GetObjectItemCaseSensitive(current, key);
+        if (!existing) {
+            editor_add_error(errors, path, "unknown configuration field");
+            continue;
+        }
+        if (cJSON_IsObject(item)) {
+            if (!cJSON_IsObject(existing)) editor_add_error(errors, path, "expected a scalar value");
+            else editor_validate_updates(item, existing, path, errors);
+            continue;
+        }
+        const bool compatible =
+            (cJSON_IsBool(item) && cJSON_IsBool(existing)) ||
+            (cJSON_IsNumber(item) && cJSON_IsNumber(existing)) ||
+            (cJSON_IsString(item) && cJSON_IsString(existing)) ||
+            (cJSON_IsArray(item) && cJSON_IsArray(existing));
+        if (!compatible) editor_add_error(errors, path, "value type does not match the saved configuration");
+        if (cJSON_IsNumber(item) && !std::isfinite(item->valuedouble)) {
+            editor_add_error(errors, path, "numeric value must be finite");
+        }
+    }
+}
+
+static void editor_collect_paths(const cJSON* updates, const std::string& prefix,
+                                 cJSON* applied, cJSON* restart_required) {
+    if (!updates || !cJSON_IsObject(updates)) return;
+    for (const cJSON* item = updates->child; item; item = item->next) {
+        if (!item->string || editor_sensitive_key(item->string)) continue;
+        const std::string path = prefix.empty() ? item->string : prefix + "." + item->string;
+        if (cJSON_IsObject(item)) {
+            editor_collect_paths(item, path, applied, restart_required);
+            continue;
+        }
+        cJSON_AddItemToArray(applied, cJSON_CreateString(path.c_str()));
+        if (path.rfind("network.", 0) == 0 || path.rfind("security.", 0) == 0 ||
+            path.rfind("webserver.", 0) == 0 || path.rfind("gpio.", 0) == 0) {
+            cJSON_AddItemToArray(restart_required, cJSON_CreateString(path.c_str()));
+        }
+    }
+}
+
+uint32_t editor_revision(const char* data, size_t len) {
+    uint32_t hash = 2166136261u;
+    for (size_t i = 0; i < len; ++i) { hash ^= static_cast<uint8_t>(data[i]); hash *= 16777619u; }
+    return hash;
+}
+}
+
+esp_err_t WebServer::h_config_editor_schema(httpd_req_t* req) {
+    if (!check_api_auth(req) || !self_ || !self_->cfg_) return httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "auth");
+    size_t len = 0; char* raw = self_->cfg_->getRawConfigInPSRAM(&len);
+    cJSON* root = raw ? cJSON_ParseWithLength(raw, len) : nullptr;
+    if (raw) heap_caps_free(raw);
+    if (!root) return httpd_resp_send_500(req);
+    cJSON* response = cJSON_CreateObject(); cJSON* fields = cJSON_CreateArray();
+    if (!response || !fields) { cJSON_Delete(response); cJSON_Delete(root); return httpd_resp_send_500(req); }
+    editor_schema_walk(root, "", fields); cJSON_AddItemToObject(response, "fields", fields);
+    cJSON_AddStringToObject(response, "version", "1");
+    char* out = cJSON_PrintUnformatted(response); cJSON_Delete(response); cJSON_Delete(root);
+    if (!out) return httpd_resp_send_500(req);
+    httpd_resp_set_type(req, "application/json"); esp_err_t r = httpd_resp_sendstr(req, out); free_cjson_str(out); return r;
+}
+
+esp_err_t WebServer::h_config_editor_snapshot(httpd_req_t* req) {
+    if (!check_api_auth(req) || !self_ || !self_->cfg_) return httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "auth");
+    char source[24] = {0};
+    char query[64] = {0};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+        (void)httpd_query_key_value(query, "source", source, sizeof(source));
+    }
+    size_t len = 0; bool defaults_preview = false; char* raw = nullptr;
+    if (!editor_load_source(self_->cfg_, source, &raw, &len, &defaults_preview)) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "configuration source unavailable");
+    }
+    cJSON* root = raw ? cJSON_ParseWithLength(raw, len) : nullptr;
+    const uint32_t revision = editor_revision(raw ? raw : "", len);
+    if (raw) {
+        heap_caps_free(raw);
+    }
+    if (!root) {
+        return httpd_resp_send_500(req);
+    }
+    editor_redact(root);
+    cJSON* response = cJSON_CreateObject(); cJSON_AddItemToObject(response, "values", root);
+    cJSON_AddStringToObject(response, "source", source[0] ? source : "current");
+    cJSON_AddBoolToObject(response, "defaults_preview", defaults_preview);
+    cJSON_AddBoolToObject(response, "secrets_present", true);
+    cJSON_AddNumberToObject(response, "revision", (double)revision);
+    char* out = cJSON_PrintUnformatted(response); cJSON_Delete(response);
+    if (!out) {
+        return httpd_resp_send_500(req);
+    }
+    httpd_resp_set_type(req, "application/json");
+    esp_err_t r = httpd_resp_sendstr(req, out);
+    free_cjson_str(out);
+    return r;
+}
+
+esp_err_t WebServer::h_config_editor_validate(httpd_req_t* req) {
+    if (!check_api_auth(req) || !self_ || !self_->cfg_) return httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "auth");
+    char* body=nullptr; size_t len=0; if (!read_body_psram(req,&body,&len)) return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"bad body");
+    cJSON* root=cJSON_ParseWithLength(body,len); heap_caps_free(body);
+    if (!root || !cJSON_IsObject(root)) { cJSON_Delete(root); return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"invalid JSON"); }
+    cJSON* values = cJSON_GetObjectItem(root, "values");
+    cJSON* out = cJSON_CreateObject();
+    cJSON* errors = cJSON_CreateArray();
+    if (!values || !cJSON_IsObject(values)) {
+        editor_add_error(errors, "values", "missing object");
+    } else {
+        size_t current_len = 0; char* current_raw = self_->cfg_->getRawConfigInPSRAM(&current_len);
+        cJSON* current = current_raw ? cJSON_ParseWithLength(current_raw, current_len) : nullptr;
+        if (current_raw) heap_caps_free(current_raw);
+        if (!current) editor_add_error(errors, "", "current configuration is unavailable");
+        else {
+            editor_validate_updates(values, current, "", errors);
+            cJSON_Delete(current);
+        }
+    }
+    cJSON_AddBoolToObject(out,"valid", cJSON_GetArraySize(errors) == 0);
+    cJSON_AddItemToObject(out,"errors",errors);
+    cJSON_AddArrayToObject(out,"warnings");
+    char* text=cJSON_PrintUnformatted(out); cJSON_Delete(out); cJSON_Delete(root);
+    if (!text) {
+        return httpd_resp_send_500(req);
+    }
+    httpd_resp_set_type(req, "application/json");
+    esp_err_t r = httpd_resp_sendstr(req, text);
+    free_cjson_str(text);
+    return r;
+}
+
+esp_err_t WebServer::h_config_editor_save(httpd_req_t* req) {
+    if (!check_api_auth(req) || !self_ || !self_->cfg_) return httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "auth");
+    char* body=nullptr; size_t len=0; if (!read_body_psram(req,&body,&len)) return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"bad body");
+    cJSON* request=cJSON_ParseWithLength(body,len); heap_caps_free(body); if(!request||!cJSON_IsObject(request)){cJSON_Delete(request);return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"invalid JSON");}
+    cJSON* values=cJSON_GetObjectItem(request,"values"); if(!values||!cJSON_IsObject(values)){cJSON_Delete(request);return httpd_resp_send_err(req,HTTPD_400_BAD_REQUEST,"missing values");}
+    size_t current_len=0; char* current_raw=self_->cfg_->getRawConfigInPSRAM(&current_len); cJSON* current=current_raw?cJSON_ParseWithLength(current_raw,current_len):nullptr; if(!current){if(current_raw)heap_caps_free(current_raw);cJSON_Delete(request);return httpd_resp_send_500(req);}
+    const uint32_t current_revision = editor_revision(current_raw, current_len);
+    cJSON* base = cJSON_GetObjectItem(request, "base_revision");
+    if (base && cJSON_IsNumber(base) && static_cast<uint32_t>(base->valuedouble) != current_revision) {
+        if (current_raw) {
+            heap_caps_free(current_raw);
+        }
+        cJSON_Delete(current);
+        cJSON_Delete(request);
+        httpd_resp_set_status(req, "409 Conflict");
+        return httpd_resp_sendstr(req, "{\"error\":\"configuration_changed\",\"reload_required\":true}");
+    }
+    cJSON* errors = cJSON_CreateArray(); editor_validate_updates(values, current, "", errors);
+    if (cJSON_GetArraySize(errors) != 0) {
+        char* details = cJSON_PrintUnformatted(errors); cJSON_Delete(errors);
+        if (current_raw) {
+            heap_caps_free(current_raw);
+        }
+        cJSON_Delete(current);
+        cJSON_Delete(request);
+        httpd_resp_set_status(req, "422 Unprocessable Entity");
+        httpd_resp_set_type(req, "application/json");
+        std::string response = std::string("{\"error\":\"validation_failed\",\"errors\":") + (details ? details : "[]") + "}";
+        if (details) free_cjson_str(details);
+        return httpd_resp_send(req, response.c_str(), response.size());
+    }
+    cJSON_Delete(errors);
+    editor_merge(current,values); char* merged=cJSON_PrintUnformatted(current);
+    cJSON* applied = cJSON_CreateArray(); cJSON* restart = cJSON_CreateArray();
+    editor_collect_paths(values, "", applied, restart);
+    if (current_raw) {
+        heap_caps_free(current_raw);
+    }
+    cJSON_Delete(current);
+    cJSON_Delete(request);
+    if (!merged) {
+        cJSON_Delete(applied);
+        cJSON_Delete(restart);
+        return httpd_resp_send_500(req);
+    }
+    bool ok=self_->cfg_->saveConfigJSON(merged); uint32_t rev=editor_revision(merged,strlen(merged)); free_cjson_str(merged); if(!ok){cJSON_Delete(applied);cJSON_Delete(restart);return httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"configuration save failed");}
+    cJSON* out=cJSON_CreateObject(); cJSON_AddBoolToObject(out,"saved",true); cJSON_AddNumberToObject(out,"revision",(double)rev); cJSON_AddItemToObject(out,"applied_paths",applied); cJSON_AddItemToObject(out,"restart_required_paths",restart); char* text=cJSON_PrintUnformatted(out);cJSON_Delete(out);if(!text)return httpd_resp_send_500(req);httpd_resp_set_type(req,"application/json");esp_err_t r=httpd_resp_sendstr(req,text);free_cjson_str(text);return r;
 }
 
 esp_err_t WebServer::h_config_get(httpd_req_t* req) {
@@ -6302,7 +6694,7 @@ esp_err_t WebServer::h_page_ids(httpd_req_t* req) {
         return httpd_resp_send(req,"",0);
     }
 
-    return send_html_chunked(req, IDS_HTML_GEN, IDS_HTML_GEN_SIZE);
+    return send_html_chunked(req, PASSIVE_DETECTION_HTML_GEN, PASSIVE_DETECTION_HTML_GEN_SIZE);
 }
 
 esp_err_t WebServer::h_page_reporting(httpd_req_t* req) {
@@ -6364,6 +6756,7 @@ esp_err_t WebServer::h_ids_adv_cfg_post(httpd_req_t* req) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
     }
 
+    auto config_lock = self_->cfg_->lockConfig();
     // Get current configuration (PSRAM-safe)
     size_t jsz2 = 0; char* jbuf2 = self_->cfg_->getRawConfigInPSRAM(&jsz2);
     PSRAMJsonParser::PSRAMContext ctxids;
@@ -6451,58 +6844,21 @@ esp_err_t WebServer::h_ids_adv_cfg_post(httpd_req_t* req) {
     }
 
     cJSON* alert = cJSON_GetObjectItem(request_json, "alert_modbus_broadcast_write");
-    if (alert && cJSON_IsBool(alert)) {
-        // Get current config, update the modbus alert flag, and save back
-        size_t config_size;
-        char* config_buffer = self_ && self_->cfg_ ? self_->cfg_->getRawConfigInPSRAM(&config_size) : nullptr;
-        if (config_buffer) {
-            cJSON* config_json = cJSON_Parse(config_buffer);
-            heap_caps_free(config_buffer);  // Free PSRAM buffer
-
-            if (config_json) {
-                // Navigate to ids.protocol_specific.modbus and update alert_broadcast_write
-                cJSON* ids = cJSON_GetObjectItem(config_json, "ids");
-                if (!ids) {
-                    ids = cJSON_CreateObject();
-                    cJSON_AddItemToObject(config_json, "ids", ids);
-                }
-
-                cJSON* protocol_specific = cJSON_GetObjectItem(ids, "protocol_specific");
-                if (!protocol_specific) {
-                    protocol_specific = cJSON_CreateObject();
-                    cJSON_AddItemToObject(ids, "protocol_specific", protocol_specific);
-                }
-
-                cJSON* modbus = cJSON_GetObjectItem(protocol_specific, "modbus");
-                if (!modbus) {
-                    modbus = cJSON_CreateObject();
-                    cJSON_AddItemToObject(protocol_specific, "modbus", modbus);
-                }
-
-                // Update or add the alert_broadcast_write field
-                cJSON* existing_alert = cJSON_GetObjectItem(modbus, "alert_broadcast_write");
-                if (existing_alert) {
-                    cJSON_ReplaceItemInObject(modbus, "alert_broadcast_write", cJSON_CreateBool(cJSON_IsTrue(alert)));
-                } else {
-                    cJSON_AddBoolToObject(modbus, "alert_broadcast_write", cJSON_IsTrue(alert));
-                }
-
-                // Save the updated config
-                char* updated_json = cJSON_Print(config_json);
-                if (updated_json) {
-                    if (self_ && self_->cfg_) {
-                        self_->cfg_->saveConfigJSON(std::string(updated_json));
-                    }
-                    free_cjson_str(updated_json);
-                }
-                cJSON_Delete(config_json);
-            }
+    if (cJSON_IsBool(alert)) {
+        cJSON* specific = cJSON_GetObjectItem(ids_root, "protocol_specific");
+        if (!specific) specific = cJSON_AddObjectToObject(ids_root, "protocol_specific");
+        cJSON* modbus_config = cJSON_GetObjectItem(specific, "modbus");
+        if (!modbus_config) modbus_config = cJSON_AddObjectToObject(specific, "modbus");
+        if (modbus_config) {
+            cJSON_DeleteItemFromObject(modbus_config, "alert_broadcast_write");
+            cJSON_AddBoolToObject(modbus_config, "alert_broadcast_write", cJSON_IsTrue(alert));
         }
     }
 
+    // Save all IDS fields together; a second stale snapshot would undo the alert flag.
     // Save updated configuration
     char* updated_config = cJSON_Print(config_root);
-    bool success = self_->cfg_->saveConfigJSON(updated_config);
+    bool success = updated_config && self_->cfg_->saveConfigJSON(updated_config);
 
     cJSON_Delete(request_json);
     cJSON_Delete(config_root);
@@ -6691,57 +7047,8 @@ esp_err_t WebServer::h_presence_config_get(httpd_req_t* req) {
     return httpd_resp_send(req, config_json_psram.c_str(), config_json_psram.length());
 }
 
-esp_err_t WebServer::h_presence_config_post(httpd_req_t* req) {
-    AccessLogger::getInstance().logRequest(req);
-    //LOG_INFO("PRESENCE_CONFIG", "Processing presence config post request");
+// Presence configuration is persisted and applied by passive_detection_api.cpp.
 
-    if (!check_api_auth(req)) {
-        LOG_WARNING("PRESENCE_CONFIG", "Authentication failed for presence config endpoint");
-        AccessLogger::getInstance().logResponse(req, 401, "UNAUTHORIZED");
-        return httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "auth");
-    }
-
-    // Use PSRAM for body allocation to save DRAM
-    char* body_ps = nullptr; size_t body_len = 0;
-    if (!read_body_psram(req, &body_ps, &body_len)) {
-        LOG_WARNING("PRESENCE_CONFIG", "Failed to read request body");
-        AccessLogger::getInstance().logResponse(req, 400, "INVALID_BODY");
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Failed to read body");
-    }
-
-    //LOG_INFOF("PRESENCE_CONFIG", "Received config: %.*s", (int)body_len, body_ps);
-
-    // Update presence configuration for global IDS tracker (not per-protocol)
-    if (!self_->ids_) {
-        heap_caps_free(body_ps);
-        LOG_WARNING("PRESENCE_CONFIG", "IDS not available");
-        AccessLogger::getInstance().logResponse(req, 500, "NO_IDS");
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "IDS not available");
-    }
-
-    // Convert PSRAM buffer to std::string only when needed for API call
-    bool success = self_->ids_->getNetworkPresenceTracker().loadConfigFromJSON(body_ps, body_len);
-    heap_caps_free(body_ps); // Free PSRAM buffer immediately after API call
-    if (!success) {
-        LOG_WARNING("PRESENCE_CONFIG", "Failed to update network presence configuration");
-    }
-
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "close");
-    if (success) {
-        LOG_INFO("PRESENCE_CONFIG", "Network presence configuration updated successfully");
-
-        // Log configuration change to audit channel
-        logConfigChange(req, "network_presence", "Network presence configuration updated");
-
-        AccessLogger::getInstance().logResponse(req, 200, "SUCCESS");
-        return httpd_resp_send(req, "{\"success\":true,\"message\":\"Network presence configuration updated successfully\"}", HTTPD_RESP_USE_STRLEN);
-    } else {
-        LOG_WARNING("PRESENCE_CONFIG", "Failed to update presence configuration");
-        AccessLogger::getInstance().logResponse(req, 500, "CONFIG_ERROR");
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to update presence configuration");
-    }
-}
 
 esp_err_t WebServer::h_presence_clear_post(httpd_req_t* req) {
     AccessLogger::getInstance().logRequest(req);
@@ -7658,7 +7965,10 @@ esp_err_t WebServer::h_logs_get(httpd_req_t* req) {
                     strcmp(safe_name, "vulnerability_scanner.log") == 0 ||
                     strcmp(safe_name, "scanner_events.log") == 0 ||
                     strcmp(safe_name, "audit_events.log") == 0 ||
-                    strcmp(safe_name, "gpio_events.log") == 0);
+                    strcmp(safe_name, "gpio_events.log") == 0 ||
+                    strcmp(safe_name, "discovery_events.log") == 0 ||
+                    strcmp(safe_name, "signature_events.log") == 0 ||
+                    strcmp(safe_name, "network_presence_events.log") == 0);
 
     if (!allowed) {
         LOG_WARNINGF("LOGS_API", "Unauthorized log file access attempt: %s", safe_name);
@@ -7678,7 +7988,10 @@ esp_err_t WebServer::h_logs_get(httpd_req_t* req) {
         strcmp(safe_name, "vulnerability_scanner.log") == 0 ||
         strcmp(safe_name, "scanner_events.log") == 0 ||
         strcmp(safe_name, "audit_events.log") == 0 ||
-        strcmp(safe_name, "gpio_events.log") == 0) {
+        strcmp(safe_name, "gpio_events.log") == 0 ||
+        strcmp(safe_name, "discovery_events.log") == 0 ||
+        strcmp(safe_name, "signature_events.log") == 0 ||
+        strcmp(safe_name, "network_presence_events.log") == 0) {
         snprintf(log_path, log_path_buf.size(), "/data/%s", log_name);
     } else {
         snprintf(log_path, log_path_buf.size(), "/data/logs/%s", log_name);
@@ -7846,7 +8159,10 @@ esp_err_t WebServer::h_logs_download(httpd_req_t* req) {
                    strcmp(safe_name, "vulnerability_scanner.log") == 0 ||
                    strcmp(safe_name, "scanner_events.log") == 0 ||
                    strcmp(safe_name, "audit_events.log") == 0 ||
-                   strcmp(safe_name, "gpio_events.log") == 0);
+                   strcmp(safe_name, "gpio_events.log") == 0 ||
+                   strcmp(safe_name, "discovery_events.log") == 0 ||
+                   strcmp(safe_name, "signature_events.log") == 0 ||
+                   strcmp(safe_name, "network_presence_events.log") == 0);
 
     if (!allowed) {
         LOG_WARNINGF("LOGS_API", "Unauthorized log file access attempt: %s", safe_name);
@@ -7867,7 +8183,10 @@ esp_err_t WebServer::h_logs_download(httpd_req_t* req) {
         strcmp(safe_name, "vulnerability_scanner.log") == 0 ||
         strcmp(safe_name, "scanner_events.log") == 0 ||
         strcmp(safe_name, "audit_events.log") == 0 ||
-        strcmp(safe_name, "gpio_events.log") == 0) {
+        strcmp(safe_name, "gpio_events.log") == 0 ||
+        strcmp(safe_name, "discovery_events.log") == 0 ||
+        strcmp(safe_name, "signature_events.log") == 0 ||
+        strcmp(safe_name, "network_presence_events.log") == 0) {
         // Security assessment logs are in /data/ root
         snprintf(log_path, log_path_buf.size(), "/data/%s", log_name);
     } else {
@@ -8399,6 +8718,10 @@ void WebServer::registerHTTPSHandlers() {
     httpd_uri_t u_telem = { .uri="/api/telemetry", .method=HTTP_GET, .handler=&WebServer::h_telemetry, .user_ctx=nullptr };
     httpd_uri_t u_cfg_g= { .uri="/api/config", .method=HTTP_GET, .handler=&WebServer::h_config_get, .user_ctx=nullptr };
     httpd_uri_t u_cfg_p= { .uri="/api/config", .method=HTTP_POST, .handler=&WebServer::h_config_post, .user_ctx=nullptr };
+    httpd_uri_t u_editor_schema= { .uri="/api/config/editor/schema", .method=HTTP_GET, .handler=&WebServer::h_config_editor_schema, .user_ctx=nullptr };
+    httpd_uri_t u_editor_snapshot= { .uri="/api/config/editor/snapshot", .method=HTTP_GET, .handler=&WebServer::h_config_editor_snapshot, .user_ctx=nullptr };
+    httpd_uri_t u_editor_validate= { .uri="/api/config/editor/validate", .method=HTTP_POST, .handler=&WebServer::h_config_editor_validate, .user_ctx=nullptr };
+    httpd_uri_t u_editor_save= { .uri="/api/config/editor/save", .method=HTTP_POST, .handler=&WebServer::h_config_editor_save, .user_ctx=nullptr };
     httpd_uri_t config_metadata_https = { .uri="/api/config/metadata", .method=HTTP_GET, .handler=&WebServer::h_config_metadata_get, .user_ctx=nullptr };
     httpd_uri_t config_reset_https = { .uri="/api/config/reset", .method=HTTP_POST, .handler=&WebServer::h_config_reset_post, .user_ctx=nullptr };
     httpd_uri_t diagnostics_selftest = { .uri="/api/diagnostics/selftest", .method=HTTP_GET, .handler=&WebServer::h_api_selftest, .user_ctx=nullptr };
@@ -8418,6 +8741,10 @@ void WebServer::registerHTTPSHandlers() {
     httpd_register_uri_handler(active_server_, &u_telem);
     httpd_register_uri_handler(active_server_, &u_cfg_g);
     httpd_register_uri_handler(active_server_, &u_cfg_p);
+    httpd_register_uri_handler(active_server_, &u_editor_schema);
+    httpd_register_uri_handler(active_server_, &u_editor_snapshot);
+    httpd_register_uri_handler(active_server_, &u_editor_validate);
+    httpd_register_uri_handler(active_server_, &u_editor_save);
     httpd_register_uri_handler(active_server_, &config_metadata_https);
     httpd_register_uri_handler(active_server_, &config_reset_https);
     httpd_register_uri_handler(active_server_, &diagnostics_selftest);
@@ -9391,16 +9718,7 @@ esp_err_t WebServer::h_page_network(httpd_req_t* req) {
 }
 
 esp_err_t WebServer::h_page_network_presence(httpd_req_t* req) {
-    AccessLogger::getInstance().logRequest(req);
-
-    if (!check_session(req)) {
-        AccessLogger::getInstance().logResponse(req, 302, "REDIRECT_UNAUTHENTICATED");
-        httpd_resp_set_status(req,"302 Found");
-        httpd_resp_set_hdr(req,"Location","/login");
-        return httpd_resp_send(req,"",0);
-    }
-
-    return send_html_chunked(req, NETWORK_PRESENCE_HTML_GEN, NETWORK_PRESENCE_HTML_GEN_SIZE);
+    return h_page_ids(req);
 }
 
 esp_err_t WebServer::h_page_style(httpd_req_t* req) {
@@ -9435,6 +9753,17 @@ esp_err_t WebServer::h_page_logging(httpd_req_t* req) {
     }
 
     return send_html_chunked(req, LOGGING_HTML_GEN, LOGGING_HTML_GEN_SIZE);
+}
+
+esp_err_t WebServer::h_page_configuration(httpd_req_t* req) {
+    AccessLogger::getInstance().logRequest(req);
+    if (!check_session(req)) {
+        AccessLogger::getInstance().logResponse(req, 302, "REDIRECT_UNAUTHENTICATED");
+        httpd_resp_set_status(req, "302 Found");
+        httpd_resp_set_hdr(req, "Location", "/login");
+        return httpd_resp_send(req, "", 0);
+    }
+    return send_html_chunked(req, CONFIGURATION_HTML_GEN, CONFIGURATION_HTML_GEN_SIZE);
 }
 
 esp_err_t WebServer::h_page_gpio(httpd_req_t* req) {
@@ -10986,7 +11315,10 @@ static bool is_allowed_log_filename(const char* safe_name) {
             strcmp(safe_name, "vulnerability_scanner.log") == 0 ||
             strcmp(safe_name, "scanner_events.log") == 0 ||
             strcmp(safe_name, "audit_events.log") == 0 ||
-            strcmp(safe_name, "gpio_events.log") == 0);
+            strcmp(safe_name, "gpio_events.log") == 0 ||
+            strcmp(safe_name, "discovery_events.log") == 0 ||
+            strcmp(safe_name, "signature_events.log") == 0 ||
+            strcmp(safe_name, "network_presence_events.log") == 0);
 }
 
 static const char* const k_allowed_logs[] = {
@@ -10999,7 +11331,10 @@ static const char* const k_allowed_logs[] = {
     "vulnerability_scanner.log",
     "scanner_events.log",
     "audit_events.log",
-    "gpio_events.log"
+    "gpio_events.log",
+    "discovery_events.log",
+    "signature_events.log",
+    "network_presence_events.log"
 };
 
 static void build_log_path(const char* safe_name, char* out_path, size_t out_len) {
@@ -11011,7 +11346,10 @@ static void build_log_path(const char* safe_name, char* out_path, size_t out_len
         strcmp(safe_name, "vulnerability_scanner.log") == 0 ||
         strcmp(safe_name, "scanner_events.log") == 0 ||
         strcmp(safe_name, "audit_events.log") == 0 ||
-        strcmp(safe_name, "gpio_events.log") == 0) {
+        strcmp(safe_name, "gpio_events.log") == 0 ||
+        strcmp(safe_name, "discovery_events.log") == 0 ||
+        strcmp(safe_name, "signature_events.log") == 0 ||
+        strcmp(safe_name, "network_presence_events.log") == 0) {
         snprintf(out_path, out_len, "/data/%s", safe_name);
     } else {
         snprintf(out_path, out_len, "/data/logs/%s", safe_name);
@@ -11865,6 +12203,27 @@ esp_err_t WebServer::h_features_post(httpd_req_t* req) {
 
 // ========================= LOG FILE MANAGEMENT API =========================
 
+static std::string resolveManagedLogName(const char* name) {
+    if (!name || !*name) return {};
+    if (strstr(name, "..") || strchr(name, '/') || strchr(name, '\\')) return {};
+    std::string base(name);
+    LogFileManager::LogFileInfo info;
+    WebServer* server = WebServer::instance();
+    LogFileManager* manager = server ? server->logFileManager() : nullptr;
+    if (manager && manager->getFileInfo(base, info)) {
+        return base;
+    }
+    const std::string data_path = std::string("/data/") + base;
+    if (manager && manager->getFileInfo(data_path, info)) {
+        return data_path;
+    }
+    const std::string logs_path = std::string("/data/logs/") + base;
+    if (manager && manager->getFileInfo(logs_path, info)) {
+        return logs_path;
+    }
+    return {};
+}
+
 esp_err_t WebServer::h_logging_files_get(httpd_req_t* req) {
     if (!check_api_auth(req)) return httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "auth");
 
@@ -11906,10 +12265,14 @@ esp_err_t WebServer::h_logging_files_post(httpd_req_t* req) {
     }
 
     std::string action_str = action->valuestring;
-    std::string filename_str = filename->valuestring;
+    std::string filename_str = resolveManagedLogName(filename->valuestring);
     bool success = false;
 
-    if (action_str == "enable") {
+    if (filename_str.empty()) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
+    }
+    if (action_str == "enable" || action_str == "toggle") {
         cJSON* enabled = cJSON_GetObjectItem(root, "enabled");
         if (enabled && cJSON_IsBool(enabled)) {
             success = self_->log_file_manager_->enableFile(filename_str, cJSON_IsTrue(enabled));
@@ -11953,8 +12316,12 @@ esp_err_t WebServer::h_logging_file_config_get(httpd_req_t* req) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid filename parameter");
     }
 
+    const std::string resolved_filename = resolveManagedLogName(filename_param);
+    if (resolved_filename.empty()) {
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
+    }
     LogFileManager::LogFileInfo info;
-    if (!self_->log_file_manager_->getFileInfo(filename_param, info)) {
+    if (!self_->log_file_manager_->getFileInfo(resolved_filename, info)) {
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
     }
 
@@ -12010,7 +12377,12 @@ esp_err_t WebServer::h_logging_file_config_post(httpd_req_t* req) {
     }
 
     LogFileManager::LogFileInfo info;
-    std::string filename_str = filename->valuestring;
+    std::string filename_str = resolveManagedLogName(filename->valuestring);
+
+    if (filename_str.empty()) {
+        cJSON_Delete(root);
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
+    }
 
     // Get current info as base
     if (!self_->log_file_manager_->getFileInfo(filename_str, info)) {
@@ -13125,12 +13497,26 @@ esp_err_t WebServer::h_gpio_alert(httpd_req_t* req) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing or invalid 'level' field");
     }
 
+    char safe_level[48] = {0};
+    copy_safe_gpio_token(level_item->valuestring, safe_level, sizeof(safe_level));
+    char event_data[320] = {0};
+    snprintf(event_data, sizeof(event_data),
+             "{\"event\":\"gpio_output_request\",\"level\":\"%s\",\"source\":\"web_api\",\"timestamp_ms\":%llu}",
+             safe_level[0] ? safe_level : "unknown", (unsigned long long)(esp_timer_get_time() / 1000ULL));
+    if (g_reporting) report_event_ps(g_reporting, "gpio_event", event_data);
     cJSON_Delete(json);
     return httpd_resp_send(req, "{\"status\":\"alert_sent\"}", HTTPD_RESP_USE_STRLEN);
 }
 
 esp_err_t WebServer::h_gpio_reset(httpd_req_t* req) {
     if (!check_api_auth(req)) return httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "auth");
+    if (g_reporting) {
+        char event_data[192];
+        snprintf(event_data, sizeof(event_data),
+                 "{\"event\":\"gpio_reset_request\",\"source\":\"web_api\",\"timestamp_ms\":%llu}",
+                 (unsigned long long)(esp_timer_get_time() / 1000ULL));
+        report_event_ps(g_reporting, "gpio_event", event_data);
+    }
     return httpd_resp_send(req, "{\"status\":\"reset_complete\"}", HTTPD_RESP_USE_STRLEN);
 }
 
@@ -13158,17 +13544,33 @@ esp_err_t WebServer::h_gpio_test(httpd_req_t* req) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing_action");
     }
 
+    char safe_action[64] = {0};
+    copy_safe_gpio_token(action->valuestring, safe_action, sizeof(safe_action));
+    char safe_level[48] = {0};
+    if (level && cJSON_IsString(level)) {
+        copy_safe_gpio_token(level->valuestring, safe_level, sizeof(safe_level));
+    }
+
     std::string response = "{\"status\":\"test_sent\",\"action\":\"";
-    response += action->valuestring;
+    response += safe_action;
     response += "\"";
 
-    if (level && cJSON_IsString(level)) {
+    if (safe_level[0]) {
         response += ",\"level\":\"";
-        response += level->valuestring;
+        response += safe_level;
         response += "\"";
     }
 
     response += "}";
+
+    if (g_reporting) {
+        char event_data[320];
+        snprintf(event_data, sizeof(event_data),
+                 "{\"event\":\"gpio_test_request\",\"action\":\"%s\",\"source\":\"web_api\",\"timestamp_ms\":%llu}",
+                 safe_action[0] ? safe_action : "unknown",
+                 (unsigned long long)(esp_timer_get_time() / 1000ULL));
+        report_event_ps(g_reporting, "gpio_event", event_data);
+    }
 
     cJSON_Delete(json);
     httpd_resp_set_type(req, "application/json");
@@ -13393,18 +13795,7 @@ esp_err_t WebServer::h_signatures_save(httpd_req_t* req) {
 }
 
 esp_err_t WebServer::h_page_signatures(httpd_req_t* req) {
-    /*
-    extern const char signatures_html_start[] asm("_binary_signatures_html_start");
-    extern const char signatures_html_end[] asm("_binary_signatures_html_end");
-
-    if (!signatures_html_start) {
-        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Signatures page not found");
-    }
-
-    size_t len = signatures_html_end - signatures_html_start;
-*/
-    httpd_resp_set_type(req, "text/html");
-    return httpd_resp_send(req, SIGNATURES_HTML_GEN, SIGNATURES_HTML_GEN_SIZE);
+    return h_page_ids(req);
 }
 
 esp_err_t WebServer::h_page_security(httpd_req_t* req) {

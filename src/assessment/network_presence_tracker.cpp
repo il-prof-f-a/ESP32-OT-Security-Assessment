@@ -1,6 +1,8 @@
 #include "network_presence_tracker.h"
 #include "../core/logging_system.h"
 #include "../core/configuration_manager.h"
+#include "../core/reporting_engine.h"
+#include "../core/plugin_manager.h"
 #include "../core/filesystem_task_delegate.h"
 #include "../core/whitelist_manager.h"
 #include <cJSON.h>
@@ -429,7 +431,7 @@ NetworkPresenceTracker::~NetworkPresenceTracker() {
 }
 
 bool NetworkPresenceTracker::initialize() {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     LOG_INFO(TAG_NET_PRESENCE, "Initializing NetworkPresenceTracker with learning system");
 
@@ -460,7 +462,8 @@ bool NetworkPresenceTracker::initialize() {
     LOG_INFOF(TAG_NET_PRESENCE, "  🧹 Cleanup interval: %u min, Inactive timeout: %u min",
               config_.cleanup_interval_ms / (60*1000), config_.inactive_device_timeout_ms / (60*1000));
 
-    active_ = true;
+    initialized_ = true;
+    active_ = config_.enabled;
     return true;
 }
 
@@ -469,7 +472,7 @@ bool NetworkPresenceTracker::isActive(){
 }
 
 void NetworkPresenceTracker::shutdown() {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     LOG_INFO(TAG_NET_PRESENCE, "Shutting down NetworkPresenceTracker");
 
@@ -487,12 +490,21 @@ void NetworkPresenceTracker::shutdown() {
     LOG_INFO(TAG_NET_PRESENCE, "NetworkPresenceTracker shutdown complete");
 
     active_ = false;
+    initialized_ = false;
+    reporting_engine_ = nullptr;
 }
 
 // Configuration Management
 void NetworkPresenceTracker::setConfig(const NetworkPresenceConfig& config) {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    // Unrelated saves/toggles must not undo a manual learning/protection transition.
+    const bool learning = initialized_ && configured_learning_mode_ == config.learning_mode
+        ? config_.learning_mode : config.learning_mode;
+    configured_learning_mode_ = config.learning_mode;
     config_ = config;
+    config_.learning_mode = learning;
+    active_ = initialized_ && config_.enabled;
+    persistent_storage_initialized_ = initialized_ && config_.enable_persistent_learning;
 
     // Update whitelisted devices from config
     whitelisted_devices_.clear();
@@ -505,13 +517,13 @@ void NetworkPresenceTracker::setConfig(const NetworkPresenceConfig& config) {
 }
 
 NetworkPresenceConfig NetworkPresenceTracker::getConfig() const {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return config_;
 }
 
 // Device Trust Management
 void NetworkPresenceTracker::addTrustedDevice(const psram_string& identifier, bool is_persistent) {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (identifier.empty()) {
         return;
     }
@@ -536,7 +548,7 @@ void NetworkPresenceTracker::addTrustedDevice(const std::string& identifier, boo
 }
 
 void NetworkPresenceTracker::removeTrustedDevice(const psram_string& identifier) {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (identifier.empty()) {
         return;
     }
@@ -567,7 +579,7 @@ void NetworkPresenceTracker::removeTrustedDevice(const std::string& identifier) 
 }
 
 bool NetworkPresenceTracker::isTrustedSender(const psram_string& ip, const psram_string& mac) const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return matchesTrustedDevice(ip, mac);
 }
 
@@ -576,12 +588,12 @@ bool NetworkPresenceTracker::isTrustedSender(const psram_string& ip) const {
 }
 
 bool NetworkPresenceTracker::isTrustedSender(const std::string& ip, const std::string& mac) const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return matchesTrustedDevice(ip, mac);
 }
 
 bool NetworkPresenceTracker::isTrustedWriter(const psram_string& ip, const psram_string& mac) const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return matchesWriterTrustedDevice(ip, mac);
 }
 
@@ -590,14 +602,14 @@ bool NetworkPresenceTracker::isTrustedWriter(const psram_string& ip) const {
 }
 
 bool NetworkPresenceTracker::isTrustedWriter(const std::string& ip, const std::string& mac) const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return matchesWriterTrustedDevice(ip, mac);
 }
 
 // Core Packet Tracking with Advanced Heuristics
 void NetworkPresenceTracker::trackPacket(const NetworkPacket& packet) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (!config_.enabled) return;
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    if (!active_) return;
 
     total_tracked_packets_++;
 
@@ -623,6 +635,8 @@ void NetworkPresenceTracker::trackPacket(const NetworkPacket& packet) {
 
     bool is_truly_new = devices_.find(device_key_psram) == devices_.end();
     auto& device = devices_[device_key_psram];
+    const bool was_sender = device.is_learned_sender;
+    const bool was_writer = device.is_learned_writer;
 
     if (is_truly_new) {
         device.ip_address = src_ip_ps;
@@ -700,6 +714,26 @@ void NetworkPresenceTracker::trackPacket(const NetworkPacket& packet) {
             checkAutoSave();
             last_auto_save_check_ms_ = now_ms;
         }
+    }
+
+    // Emit a bounded, structured event only for meaningful state changes.  A
+    // per-packet event would make the dedicated presence log unusably noisy.
+    if (reporting_engine_ && (is_truly_new || was_sender != device.is_learned_sender ||
+                              was_writer != device.is_learned_writer)) {
+        char payload[640] = {0};
+        snprintf(payload, sizeof(payload),
+                 "{\"event\":\"%s\",\"ip\":\"%s\",\"mac\":\"%s\","
+                 "\"protocol\":\"%s\",\"packets\":%llu,\"presence_score\":%.3f,"
+                 "\"learned_sender\":%s,\"learned_writer\":%s,\"timestamp_ms\":%llu}",
+                 is_truly_new ? "device_observed" : "trust_state_changed",
+                 device.ip_address.c_str(), device.mac_address.c_str(),
+                 PluginManager::protocolTypeToString(packet.proto),
+                 (unsigned long long)device.total_packets, device.presence_score,
+                 device.is_learned_sender ? "true" : "false",
+                 device.is_learned_writer ? "true" : "false",
+                 (unsigned long long)now_ms);
+        reporting_engine_->reportEvent(PSRAMUtils::createPSRAMString("network_presence"),
+                                       PSRAMUtils::createPSRAMString(payload));
     }
 }
 
@@ -941,7 +975,7 @@ void NetworkPresenceTracker::runRetentionCleanup() {
 
 // Statistics and Status
 psram_vector<NetworkDeviceInfo> NetworkPresenceTracker::getAllDevices() const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     psram_vector<NetworkDeviceInfo> result;
     result.reserve(devices_.size());
 
@@ -958,7 +992,7 @@ psram_vector<NetworkDeviceInfo> NetworkPresenceTracker::getAllDevices() const {
 }
 
 psram_vector<NetworkDeviceInfo> NetworkPresenceTracker::getLearnedDevices() const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     psram_vector<NetworkDeviceInfo> result;
 
     for (const auto& pair : devices_) {
@@ -976,7 +1010,7 @@ psram_vector<NetworkDeviceInfo> NetworkPresenceTracker::getLearnedDevices() cons
 }
 
 size_t NetworkPresenceTracker::getTrustedDevicesCount() const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return std::count_if(devices_.begin(), devices_.end(),
                         [](const auto& pair) {
                             return pair.second.is_whitelisted || pair.second.is_learned_sender || pair.second.is_learned_writer;
@@ -984,7 +1018,7 @@ size_t NetworkPresenceTracker::getTrustedDevicesCount() const {
 }
 
 size_t NetworkPresenceTracker::getLearnedDevicesCount() const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return std::count_if(devices_.begin(), devices_.end(),
                         [](const auto& pair) { return pair.second.is_learned_sender || pair.second.is_learned_writer; });
 }
@@ -1097,12 +1131,12 @@ bool NetworkPresenceTracker::macMatchesPattern(const std::string& mac, const std
 }
 
 bool NetworkPresenceTracker::isWhitelisted(const psram_string& ip, const psram_string& mac) const {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return matchesTrustedDevice(ip, mac);
 }
 
 bool NetworkPresenceTracker::isWhitelisted(const std::string& ip, const std::string& mac) const {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return matchesTrustedDevice(ip, mac);
 }
 
@@ -1145,7 +1179,7 @@ bool NetworkPresenceTracker::saveToPersistentStorage() {
         return false;
     }
 
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     // Ensure directory exists through FilesystemTaskDelegate
     FilesystemTaskDelegate::getInstance().createDirectorySync("/data/network");
@@ -1226,7 +1260,7 @@ bool NetworkPresenceTracker::loadFromPersistentStorage() {
         return false;
     }
 
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     // Ensure directory exists through FilesystemTaskDelegate
     FilesystemTaskDelegate::getInstance().createDirectorySync("/data/network");
@@ -1346,7 +1380,7 @@ bool NetworkPresenceTracker::loadFromPersistentStorage() {
 
 // Complete implementations for web interface support
 psram_string NetworkPresenceTracker::getConfigJSON() const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     cJSON* root = cJSON_CreateObject();
     cJSON_AddBoolToObject(root, "enabled", config_.enabled);
@@ -1359,6 +1393,17 @@ psram_string NetworkPresenceTracker::getConfigJSON() const {
     cJSON_AddNumberToObject(root, "retention_days", config_.retention_days);
     cJSON_AddNumberToObject(root, "trust_threshold_score", config_.trust_threshold_score);
     cJSON_AddNumberToObject(root, "min_observation_period_hours", config_.min_observation_period_hours);
+    cJSON_AddNumberToObject(root, "continuity_weight", config_.continuity_weight);
+    cJSON_AddNumberToObject(root, "diversity_weight", config_.diversity_weight);
+    cJSON_AddNumberToObject(root, "frequency_weight", config_.frequency_weight);
+    cJSON_AddBoolToObject(root, "enable_persistent_learning", config_.enable_persistent_learning);
+    cJSON_AddNumberToObject(root, "storage_sync_interval_ms", config_.storage_sync_interval_ms);
+    cJSON* whitelist = cJSON_AddArrayToObject(root, "whitelisted_devices");
+    if (whitelist) {
+        for (const auto& entry : config_.whitelisted_devices) {
+            cJSON_AddItemToArray(whitelist, cJSON_CreateString(entry.c_str()));
+        }
+    }
 
     char* json_string = cJSON_PrintUnformatted(root);
     psram_string result = PSRAMUtils::createPSRAMString(json_string ? json_string : "{}");
@@ -1372,7 +1417,7 @@ bool NetworkPresenceTracker::loadConfigFromJSON(const std::string& json) {
     cJSON* root = cJSON_Parse(json.c_str());
     if (!root) return false;
 
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     NetworkPresenceConfig new_config = config_;
 
     cJSON* item = cJSON_GetObjectItem(root, "enabled");
@@ -1405,7 +1450,7 @@ bool NetworkPresenceTracker::loadConfigFromJSON(const std::string& json) {
     item = cJSON_GetObjectItem(root, "min_observation_period_hours");
     if (item && cJSON_IsNumber(item)) new_config.min_observation_period_hours = item->valuedouble;
 
-    config_ = new_config;
+    setConfig(new_config);
     cJSON_Delete(root);
 
     LOG_INFO(TAG_NET_PRESENCE, "Configuration updated from JSON");
@@ -1413,7 +1458,7 @@ bool NetworkPresenceTracker::loadConfigFromJSON(const std::string& json) {
 }
 
 psram_vector<psram_string> NetworkPresenceTracker::getTrustedDevices() const {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     psram_vector<psram_string> trusted;
     psram_string_set seen;
 
@@ -1543,7 +1588,7 @@ void NetworkPresenceTracker::demoteFromTrusted(const psram_string& ip) {
 }
 
 void NetworkPresenceTracker::demoteFromTrusted(const std::string& ip) {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     psram_string mac_to_clear;
 
     auto it = findDeviceByIp(ip);
@@ -1571,7 +1616,7 @@ void NetworkPresenceTracker::demoteFromTrusted(const std::string& ip) {
 }
 
 void NetworkPresenceTracker::clearLearningData() {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     // Clear learned devices but keep whitelisted ones (in-RAM)
     for (auto& pair : devices_) {
@@ -1602,25 +1647,25 @@ void NetworkPresenceTracker::clearLearningData() {
 
 
 NetworkDeviceInfo* NetworkPresenceTracker::getDeviceInfo(const psram_string& ip) {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto it = findDeviceByIp(ip);
     return (it != devices_.end()) ? &it->second : nullptr;
 }
 
 NetworkDeviceInfo* NetworkPresenceTracker::getDeviceInfo(const std::string& ip) {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto it = findDeviceByIp(ip);
     return (it != devices_.end()) ? &it->second : nullptr;
 }
 
 const NetworkDeviceInfo* NetworkPresenceTracker::getDeviceInfo(const psram_string& ip) const {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto it = findDeviceByIp(ip);
     return (it != devices_.end()) ? &it->second : nullptr;
 }
 
 const NetworkDeviceInfo* NetworkPresenceTracker::getDeviceInfo(const std::string& ip) const {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto it = findDeviceByIp(ip);
     return (it != devices_.end()) ? &it->second : nullptr;
 }
@@ -1633,7 +1678,7 @@ psram_string NetworkPresenceTracker::getDevicesStatsJSON() const {
     uint64_t now_ms = getCurrentTimeMs();
 
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
         devices_copy.reserve(devices_.size());
         for (const auto& pair : devices_) {
             devices_copy.push_back(pair.second);
@@ -1768,7 +1813,7 @@ psram_string NetworkPresenceTracker::getDevicesStatsJSON() const {
 psram_string NetworkPresenceTracker::getLearnedDevicesJSON() const {
     psram_vector<NetworkDeviceInfo> learned_devices_copy;
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
         learned_devices_copy.reserve(devices_.size());
         for (const auto& pair : devices_) {
             if (pair.second.is_learned_sender || pair.second.is_learned_writer) {
@@ -1810,7 +1855,7 @@ psram_string NetworkPresenceTracker::getLearnedDevicesJSON() const {
 }
 
 void NetworkPresenceTracker::clearAllDevices() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     devices_.clear();
     learned_trusted_sender_devices_.clear();
     learned_trusted_writer_devices_.clear();
@@ -1821,7 +1866,7 @@ void NetworkPresenceTracker::clearAllDevices() {
 }
 
 size_t NetworkPresenceTracker::getUntrustedDevicesCount() const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return std::count_if(devices_.begin(), devices_.end(),
                         [](const auto& pair) {
                             return !pair.second.is_whitelisted &&
@@ -1831,7 +1876,7 @@ size_t NetworkPresenceTracker::getUntrustedDevicesCount() const {
 }
 
 void NetworkPresenceTracker::trackWritePacket(const NetworkPacket& packet, bool is_write_operation) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (!is_write_operation || !config_.enabled) return;
 
     total_write_packets_++;
@@ -2010,7 +2055,7 @@ void NetworkPresenceTracker::removeDeviceFromNVS(const psram_string& ip) {
 
 // Learning mode detection - returns true if we're still in the initial learning phase
 bool NetworkPresenceTracker::isInLearningMode() const {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     // If learning_mode is disabled, we're never in learning mode
     if (!config_.learning_mode) {
@@ -2088,7 +2133,7 @@ bool NetworkPresenceTracker::isInLearningMode() const {
 }
 
 void NetworkPresenceTracker::notifyLearningComplete() {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     LOG_INFO(TAG_NET_PRESENCE, "🎓➡️🛡️ Learning phase completed - saving discovered devices");
 
@@ -2164,7 +2209,7 @@ psram_map<psram_string, NetworkDeviceInfo>::const_iterator NetworkPresenceTracke
       cJSON* root = (len > 0) ? cJSON_ParseWithLength(json, len) : cJSON_Parse(json);
       if (!root) return false;
 
-      //std::lock_guard<std::mutex> lock(mutex_);
+      std::lock_guard<std::recursive_mutex> lock(mutex_);
       NetworkPresenceConfig new_config = config_;
 
       cJSON* item = cJSON_GetObjectItem(root, "enabled");
@@ -2199,7 +2244,7 @@ psram_map<psram_string, NetworkDeviceInfo>::const_iterator NetworkPresenceTracke
       item = cJSON_GetObjectItem(root, "min_observation_period_hours");
       if (item && cJSON_IsNumber(item)) new_config.min_observation_period_hours = item->valuedouble;
 
-      config_ = new_config;
+      setConfig(new_config);
       cJSON_Delete(root);
 
       LOG_INFO(TAG_NET_PRESENCE, "Configuration updated from JSON (PSRAM-optimized)");
@@ -2240,7 +2285,7 @@ void NetworkPresenceTracker::loadAuthorized(const psram_vector<psram_string>& ip
                                             const psram_vector<psram_string>& macs,
                                             const psram_vector<psram_string>& wl_ips,
                                             const psram_vector<psram_string>& wl_macs) {
-    //std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     whitelisted_devices_.clear();
 
     auto append_list = [&](const psram_vector<psram_string>& list, bool mac) {

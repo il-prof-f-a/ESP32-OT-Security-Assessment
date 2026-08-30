@@ -230,9 +230,10 @@ bool IntrusionDetectionGeneral::initialize(ConfigurationManager* cfg, ReportingE
     cfg_ = cfg;
     reporting_engine_ = reporting_engine;
     plugins_ = plugins;
+    network_presence_.setReportingEngine(reporting_engine);
 
-    if (cfg && cfg->getNetworkPresenceConfig().enabled)
-        network_presence_.initialize();
+    if (cfg) network_presence_.setConfig(cfg->getNetworkPresenceConfig());
+    network_presence_.initialize();
 
     if (cfg_) {
         IDSAnomalyConfig anomaly_cfg = cfg_->getIDSAnomalyConfig();
@@ -289,8 +290,18 @@ bool IntrusionDetectionGeneral::initialize(ConfigurationManager* cfg, ReportingE
     return true;
 }
 
+void IntrusionDetectionGeneral::applyRuntimeConfig() {
+    if (!cfg_) return;
+    network_presence_.setConfig(cfg_->getNetworkPresenceConfig());
+    if (cfg_->getPassiveDetectionFlags().ids_enabled) startIDS();
+    else stopIDS();
+}
+
 void IntrusionDetectionGeneral::shutdown() {
     stopIDS();
+    worker_stop_ = true;
+    while (worker_running_) vTaskDelay(pdMS_TO_TICKS(10));
+    ids_task_handle_ = nullptr;
     reporting_engine_ = nullptr;
     cfg_ = nullptr;
     plugins_ = nullptr;
@@ -301,7 +312,10 @@ bool IntrusionDetectionGeneral::startIDS() {
     if (ids_active_) return true;
     ids_active_ = true;
 
-    // Create the IDS worker task
+    // Create once; disabling IDS pauses the worker without deleting a running task.
+    if (!ids_task_handle_) {
+    worker_stop_ = false;
+    worker_running_ = true;
     ids_task_handle_ = TaskConfig::createTask(
         idsTaskThunk,
         "IDS_Worker",
@@ -311,9 +325,12 @@ bool IntrusionDetectionGeneral::startIDS() {
     );
 
     if (!ids_task_handle_) {
+        worker_running_ = false;
         LOG_ERROR(TAG_IDS, "Failed to create IDS worker task");
         ids_active_ = false;
         return false;
+    }
+
     }
 
     LOG_INFOF("IDS_ENGINE", "IDS started: Baseline learning=%s",
@@ -337,11 +354,7 @@ void IntrusionDetectionGeneral::stopIDS() {
     if (!ids_active_) return;
     ids_active_ = false;
 
-    // Delete the task
-    if (ids_task_handle_ != nullptr) {
-        vTaskDelete(ids_task_handle_);
-        ids_task_handle_ = nullptr;
-    }
+    // Keep the worker alive but dormant; no lock or storage transaction is interrupted.
 
     LOG_INFOF("IDS_ENGINE", "IDS stopped: Total packets analyzed=%llu, Alerts generated=%llu",
               getTotalPacketsAnalyzed(), getAlertsGenerated());
@@ -378,6 +391,7 @@ void IntrusionDetectionGeneral::reportWhitelistViolation(const NetworkPacket& p)
 }
 
 bool IntrusionDetectionGeneral::onPacket(const NetworkPacket& pkt) {
+    if (!ids_active_) return false;
     bool bypassAuthorization = false;
     char mac[18];
     auto mac_str = EthL2Adapter::macToString(pkt.src_mac);
@@ -387,7 +401,6 @@ bool IntrusionDetectionGeneral::onPacket(const NetworkPacket& pkt) {
     if (getNetworkPresenceTracker().isActive())
     {
         isLearningMode = getNetworkPresenceTracker().isInLearningMode();
-        getNetworkPresenceTracker().trackPacket(pkt);
     }
 
     if (isLearningMode) {
@@ -437,9 +450,9 @@ bool IntrusionDetectionGeneral::onPacket(const NetworkPacket& pkt) {
         }
 
         bool source_is_trusted = false;
-        if (is_writer_packet) {
+        if (getNetworkPresenceTracker().isActive() && is_writer_packet) {
             source_is_trusted = getNetworkPresenceTracker().isTrustedWriter(pkt.src_ip, mac);
-        } else {
+        } else if (getNetworkPresenceTracker().isActive()) {
             source_is_trusted = getNetworkPresenceTracker().isTrustedSender(pkt.src_ip, mac);
         }
 
@@ -646,14 +659,16 @@ psram_map<psram_string, uint64_t> IntrusionDetectionGeneral::getProtocolStatisti
 void IntrusionDetectionGeneral::idsTaskThunk(void* pvParameters) {
     IntrusionDetectionGeneral* ids = static_cast<IntrusionDetectionGeneral*>(pvParameters);
     ids->idsWorker();
+    ids->worker_running_ = false;
     vTaskDelete(nullptr);  // Delete self when done
 }
 
 void IntrusionDetectionGeneral::idsWorker() {
     LOG_INFO(TAG_IDS, "IDS worker task started");
 
-    while (ids_active_) {
-        vTaskDelay(pdMS_TO_TICKS(1));
+    while (!worker_stop_) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+        if (!ids_active_ || worker_stop_) continue;
 
         uint64_t now_ms = esp_timer_get_time() / 1000ULL;
         if (now_ms - last_memory_report_ms_ >= 5000ULL) {
@@ -730,10 +745,7 @@ bool IntrusionDetectionGeneral::onPacketScan(const NetworkPacket& packet) {
     NetworkPresenceTracker& presence = getNetworkPresenceTracker();
     const bool presence_active = presence.isActive();
 
-    // Track packet senders only when the tracker is active/configured.
-    if (presence_active) {
-        presence.trackPacket(packet);
-    }
+    // Presence is fed once by the common dispatcher, independently of IDS.
 
     // Don't generate unauthorized_sender alerts during learning.
     bool isLearningMode = presence_active && presence.isInLearningMode();

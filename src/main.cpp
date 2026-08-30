@@ -667,7 +667,7 @@ extern "C" void app_main(void) {
 
     static IntrusionDetectionGeneral ids;
 
-    if (cfg.getIDSConfig().enabled)
+    // Always initialize shared passive services, even when IDS starts disabled.
     {
         MemorySnapshot mem_before_ids = MemoryMonitor::capture();
         ids.initialize(&cfg, &rep, &pm);
@@ -704,10 +704,18 @@ extern "C" void app_main(void) {
 
         MemoryMonitor::logDelta("IDS::initialize+whitelist", mem_before_ids);
 
-        ids.startIDS();
-    } else {
-        LOG_INFO(TAG, "IDS Engine disabled by configuration");
+        ids.applyRuntimeConfig();
     }
+    struct PassiveRuntimeContext { ConfigurationManager* cfg; IntrusionDetectionGeneral* ids; };
+    static PassiveRuntimeContext passive_runtime{&cfg, &ids};
+    auto apply_passive_config = [](void* context) {
+        auto& runtime = *static_cast<PassiveRuntimeContext*>(context);
+        SignatureDetection::SignatureDetector::getInstance().setEnabled(
+            runtime.cfg->getPassiveDetectionFlags().signatures_enabled);
+        runtime.ids->applyRuntimeConfig();
+    };
+    cfg.setConfigAppliedCallback(apply_passive_config, &passive_runtime);
+    apply_passive_config(&passive_runtime);
 
     // Vulnerability Scanner
     VulnerabilityScanner* scannerPtr = nullptr;
@@ -783,15 +791,12 @@ extern "C" void app_main(void) {
             printf("\n");
         }*/
 
-        // General IDS always active (telemetry, baseline, anomalies)
-        bool bypassAuthorization = false;
-        if (cfg.getIDSConfig().enabled) {
-            bypassAuthorization = ids.onPacket(pkt);
-            //LOG_INFO(TAG, "ids packet analysis");
-            //printf("[PACKET_DEBUG] 🛡️ IDS analysis completed - bypass=%s\n", bypassAuthorization ? "true" : "false");
-            }
-
-        // Signature-based threat detection on packet payload (always try - detector handles gracefully)
+        // One snapshot per packet. Presence never grants authorization on its own.
+        const bool bypassAuthorization = PassiveDetection::dispatch(
+            cfg.getPassiveDetectionFlags(),
+            [&] { ids.getNetworkPresenceTracker().trackPacket(pkt); },
+            [&] { return ids.onPacket(pkt); },
+            [&] {
         if (pkt.data && pkt.length > 0) {
             auto& detector = SignatureDetection::SignatureDetector::getInstance();
             psram_string threat_report_json;
@@ -835,6 +840,8 @@ extern "C" void app_main(void) {
                 AuditManager::getInstance().logSecurityEvent("cve_pattern_match", nullptr, pkt.src_ip.c_str(), detection.cve_id);
             }
         }
+
+        });
 
         // Forward to plugins with bypass flag
         if (auto* bp = pm.findByProtocol(pkt.proto)) {

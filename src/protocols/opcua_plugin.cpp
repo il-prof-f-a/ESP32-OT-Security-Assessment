@@ -1530,7 +1530,6 @@ bool OPCUAPlugin::doPacketIDSAnalysisOfProtocol(const NetworkPacket& packet) {
     }
 
     trackPacketInFlow(packet);
-    analyzeOPCUATraffic(packet);
 
     char message_type[4];
     memcpy(message_type, header.msgType, 3);
@@ -3375,9 +3374,7 @@ void OPCUAPlugin::assignFlowLabel(FlowData& flow) {
 
 // Enhanced IDS method for real-time packet analysis
 
-void OPCUAPlugin::analyzeOPCUATraffic(const NetworkPacket& packet) {
-    network_presence_tracker_.trackPacket(packet);
-}
+// Network Presence is fed by the common dispatcher, not by the OPC UA IDS hook.
 
 bool OPCUAPlugin::isOPCUAHandshake(const NetworkPacket& packet) {
     const uint8_t* data = nullptr;

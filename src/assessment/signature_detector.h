@@ -1,4 +1,6 @@
 #pragma once
+#include <atomic>
+#include <mutex>
 
 #include <cstdint>
 #include <cstring>
@@ -125,6 +127,7 @@ struct DetectionResult {
 };
 
 // Main signature detector class - PSRAM-only allocations
+
 class SignatureDetector {
 public:
     SignatureDetector();
@@ -155,6 +158,9 @@ public:
         return res;
     }
 
+    void setEnabled(bool enabled);
+    bool isEnabled() const { return enabled_.load(std::memory_order_acquire); }
+
     // Statistics
     uint32_t getTotalSignatures() const;
     uint32_t getSignaturesForProtocol(ProtocolType protocol) const;
@@ -163,6 +169,8 @@ public:
     void clearSignatures();
 
 private:
+    std::atomic<bool> enabled_{true};
+    mutable std::recursive_mutex mutex_;
     ProtocolSignatureMap signatures_;
     uint32_t total_signatures_;
 

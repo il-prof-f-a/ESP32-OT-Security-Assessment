@@ -178,6 +178,14 @@ bool ConfigurationManager::loadOrCreateDefault() {
 
 
 bool ConfigurationManager::saveConfigJSON(const psram_string& json_ps) {
+    auto config_lock = lockConfig();
+    // Allocate and validate before touching persistent or runtime state.
+    struct Candidate {
+        cJSON* value;
+        ~Candidate() { cJSON_Delete(value); }
+    } candidate{PSRAMJsonParser::parseInPSRAM(json_ps.c_str(), json_ps.size())};
+    if (!cJSON_IsObject(candidate.value)) return false;
+
 
     //LOG_INFO("Config", "Starting configuration save process");
 
@@ -257,6 +265,7 @@ bool ConfigurationManager::saveConfigJSON(const psram_string& json_ps) {
     } else {
 
         LOG_ERRORF("Config", "Failed to save CRC to NVS: %s", esp_err_to_name(r));
+        return false;
 
     }
 
@@ -276,41 +285,18 @@ bool ConfigurationManager::saveConfigJSON(const psram_string& json_ps) {
 
 
 
-    //LOG_INFO("Config", "Re-parsing and caching configuration");
-
-    if (root_) cJSON_Delete(root_);
-
-    {
-
-        PSRAMJsonParser::PSRAMContext ctx;
-
-        root_ = PSRAMJsonParser::parseInPSRAM(json_ps.c_str(), json_ps.size());
-
+    // Do not publish new flags if storage/provisioning metadata failed.
+    if (!finishProvisionedConfigUpdate(crc, provisioning_transaction)) {
+        LOG_ERROR("Config", "Failed to finalize provisioning metadata update");
+        return false;
     }
-
-    if (root_) {
-
-        raw_ = json_ps;
-
-        parseAndCache(root_);
-
-        if (!finishProvisionedConfigUpdate(crc, provisioning_transaction)) {
-            LOG_ERROR("Config", "Failed to finalize provisioning metadata update");
-            return false;
-        }
-
-        //LOG_INFO("Config", " Configuration parsed and cached successfully");
-
-        return true;
-
-    }
-
-
-
-    LOG_ERROR("Config", "Failed to parse saved configuration JSON");
-
-    return false;
-
+    cJSON_Delete(root_);
+    root_ = candidate.value;
+    candidate.value = nullptr;
+    raw_ = json_ps;
+    parseAndCache(root_);
+    if (config_applied_callback_) config_applied_callback_(config_applied_context_);
+    return true;
 }
 
 bool ConfigurationManager::beginProvisionedConfigUpdate(bool& transaction_active) {
@@ -489,7 +475,10 @@ static psram_string jsonStringOrEmpty(cJSON* obj, const char* key) {
     return psram_string{};
 }
 
+static cJSON* get_path_object(cJSON* root, const char* path);
+
 bool ConfigurationManager::parseAndCache(cJSON* root) {
+    auto config_lock = lockConfig();
     if (!root) return false;
     // debug
     cJSON* d = cJSON_GetObjectItem(root,"debug");
@@ -697,6 +686,11 @@ bool ConfigurationManager::parseAndCache(cJSON* root) {
         }
     }
 
+    // Missing module flags retain the historical enabled defaults, never the
+    // state left by a previously loaded configuration.
+    ids_ = IDSConfig{};
+    signatures_ = SignatureConfig{};
+    network_presence_ = NetworkPresenceConfig{};
     // IDS configuration (consolidated under "ids" key)
     cJSON* ids_root = cJSON_GetObjectItem(root,"ids");
 
@@ -707,6 +701,9 @@ bool ConfigurationManager::parseAndCache(cJSON* root) {
     }
 
     if (ids_root) {
+        cJSON* signatures = cJSON_GetObjectItemCaseSensitive(ids_root, "signatures");
+        cJSON* signature_enabled = cJSON_GetObjectItemCaseSensitive(signatures, "enabled");
+        if (cJSON_IsBool(signature_enabled)) signatures_.enabled = cJSON_IsTrue(signature_enabled);
         ids_anomaly_ = IDSAnomalyConfig();
         // Try new structure first
         cJSON* general = cJSON_GetObjectItem(ids_root, "general");
@@ -832,7 +829,7 @@ bool ConfigurationManager::parseAndCache(cJSON* root) {
             if (cJSON_IsNumber(activation_delay)) network_presence_.activation_delay_minutes = (uint32_t)activation_delay->valuedouble;
             if (cJSON_IsNumber(retention_days)) network_presence_.retention_days = (uint32_t)retention_days->valuedouble;
             if (cJSON_IsNumber(trust_threshold)) network_presence_.trust_threshold_score = trust_threshold->valuedouble;
-            if (cJSON_IsNumber(observation_period)) network_presence_.min_observation_period_hours = (uint32_t)observation_period->valuedouble;
+            if (cJSON_IsNumber(observation_period)) network_presence_.min_observation_period_hours = observation_period->valuedouble;
             if (cJSON_IsNumber(continuity_weight)) network_presence_.continuity_weight = continuity_weight->valuedouble;
             if (cJSON_IsNumber(diversity_weight)) network_presence_.diversity_weight = diversity_weight->valuedouble;
             if (cJSON_IsNumber(frequency_weight)) network_presence_.frequency_weight = frequency_weight->valuedouble;
@@ -893,11 +890,38 @@ bool ConfigurationManager::parseAndCache(cJSON* root) {
         if (cJSON_IsNumber(activation_delay)) network_presence_.activation_delay_minutes = (uint32_t)activation_delay->valuedouble;
         if (cJSON_IsNumber(retention_days)) network_presence_.retention_days = (uint32_t)retention_days->valuedouble;
         if (cJSON_IsNumber(trust_threshold)) network_presence_.trust_threshold_score = trust_threshold->valuedouble;
-        if (cJSON_IsNumber(observation_period)) network_presence_.min_observation_period_hours = (uint32_t)observation_period->valuedouble;
+        if (cJSON_IsNumber(observation_period)) network_presence_.min_observation_period_hours = observation_period->valuedouble;
         if (cJSON_IsNumber(continuity_weight)) network_presence_.continuity_weight = continuity_weight->valuedouble;
         if (cJSON_IsNumber(diversity_weight)) network_presence_.diversity_weight = diversity_weight->valuedouble;
         if (cJSON_IsNumber(frequency_weight)) network_presence_.frequency_weight = frequency_weight->valuedouble;
     }
+
+    // Read these from the same canonical/legacy object as the other fields.
+    cJSON* presence_extra = cJSON_GetObjectItemCaseSensitive(ids_root, "network_presence");
+    if (!cJSON_IsObject(presence_extra)) presence_extra = network_presence;
+    if (cJSON_IsObject(presence_extra)) {
+        cJSON* persistent = cJSON_GetObjectItemCaseSensitive(presence_extra, "enable_persistent_learning");
+        cJSON* sync = cJSON_GetObjectItemCaseSensitive(presence_extra, "storage_sync_interval_ms");
+        cJSON* whitelist = cJSON_GetObjectItemCaseSensitive(presence_extra, "whitelisted_devices");
+        if (cJSON_IsBool(persistent)) network_presence_.enable_persistent_learning = cJSON_IsTrue(persistent);
+        if (cJSON_IsNumber(sync)) network_presence_.storage_sync_interval_ms = static_cast<uint32_t>(sync->valuedouble);
+        if (cJSON_IsArray(whitelist)) {
+            cJSON* item = nullptr;
+            cJSON_ArrayForEach(item, whitelist) {
+                if (cJSON_IsString(item)) network_presence_.whitelisted_devices.emplace_back(PSRAMUtils::createPSRAMString(item->valuestring));
+            }
+        }
+    }
+    const auto flags = PassiveDetection::loadFlags([root](const char* path, bool& out) {
+        cJSON* value = get_path_object(root, path);
+        if (!cJSON_IsBool(value)) return false;
+        out = cJSON_IsTrue(value);
+        return true;
+    });
+    ids_.enabled = flags.ids_enabled;
+    signatures_.enabled = flags.signatures_enabled;
+    network_presence_.enabled = flags.network_presence_enabled;
+    passive_flags_.store(flags.bits(), std::memory_order_release);
 
     // watchdog
     cJSON* watchdog = cJSON_GetObjectItem(root,"watchdog");
@@ -1058,10 +1082,11 @@ bool ConfigurationManager::getStringAtPath(const char* path, char* out, size_t o
 DebugConfig ConfigurationManager::getDebugConfig() const { return debug_; }
 SecurityConfig ConfigurationManager::getSecurityConfig() const { return sec_; }
 NetworkConfig ConfigurationManager::getNetworkConfig() const { return net_; }
-IDSConfig ConfigurationManager::getIDSConfig() const { return ids_; }
+IDSConfig ConfigurationManager::getIDSConfig() const { auto lock = lockConfig(); return ids_; }
+SignatureConfig ConfigurationManager::getSignatureConfig() const { return {getPassiveDetectionFlags().signatures_enabled}; }
 IDSAnomalyConfig ConfigurationManager::getIDSAnomalyConfig() const { return ids_anomaly_; }
 WritersConfig ConfigurationManager::getWritersConfig() const { return writers_; }
-NetworkPresenceConfig ConfigurationManager::getNetworkPresenceConfig() const { return network_presence_; }
+NetworkPresenceConfig ConfigurationManager::getNetworkPresenceConfig() const { auto lock = lockConfig(); return network_presence_; }
 WatchdogConfig ConfigurationManager::getWatchdogConfig() const { return watchdog_; }
 GpioReportingConfig ConfigurationManager::getGpioReportingConfig() const { return gpio_; }
 
@@ -1387,6 +1412,27 @@ bool ConfigurationManager::loadDevConfigFromSource() {
 
     LOG_INFO("Config", "✅ Embedded development configuration loaded and parsed successfully");
     return true;
+}
+
+char* ConfigurationManager::getEmbeddedConfigInPSRAM(size_t* size_out) const {
+    if (!size_out) return nullptr;
+    const size_t config_len = config_json_len_bytes();
+    *size_out = config_len;
+    if (config_len == 0) return nullptr;
+
+    char* buffer = static_cast<char*>(heap_caps_malloc(
+        config_len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!buffer && config_len < 4096) {
+        buffer = static_cast<char*>(heap_caps_malloc(
+            config_len + 1, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    }
+    if (!buffer) {
+        *size_out = 0;
+        return nullptr;
+    }
+    memcpy(buffer, config_json_cstr(), config_len);
+    buffer[config_len] = '\0';
+    return buffer;
 }
 
 std::string ConfigurationManager::getConfigSourceName() const {

@@ -2,6 +2,9 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <atomic>
+#include <mutex>
+#include "../assessment/passive_detection_policy.h"
 #include "types.h"
 #include "logging_system.h"
 #include "async_storage_engine.h"
@@ -108,6 +111,10 @@ struct IDSAnomalyConfig {
     float malformed_packets_normalizer = 5.0f;
     uint32_t reactive_fuzzing_cooldown_ms = 15U * 60U * 1000U;   // 15 minutes
     uint32_t reactive_fuzzing_retention_ms = 60U * 60U * 1000U;  // 60 minutes
+};
+
+struct SignatureConfig {
+    bool enabled = true;
 };
 
 // Legacy WritersConfig - keep for backward compatibility
@@ -244,6 +251,7 @@ public:
 
     // Memory-safe version that allocates JSON buffer in PSRAM
     char* getRawConfigInPSRAM(size_t* size_out) const {
+        auto lock = lockConfig();
         if (!size_out) return nullptr;
 
         const size_t json_size = raw_.size();
@@ -268,6 +276,11 @@ public:
         return psram_buffer;
     }
 
+    // Return the compile-time public configuration without mutating runtime state.
+    // This is used by the configuration editor's non-destructive "Load defaults"
+    // action; it deliberately does not call resetToEmbeddedConfig().
+    char* getEmbeddedConfigInPSRAM(size_t* size_out) const;
+
     bool saveConfigJSON(const psram_string& json);
     bool saveConfigJSON(const std::string& json) { return saveConfigJSON(PSRAMUtils::createPSRAMString(json.c_str())); }
     bool saveConfigJSON(const char* json) { return json ? saveConfigJSON(PSRAMUtils::createPSRAMString(json)) : false; }
@@ -282,6 +295,20 @@ public:
     SecurityConfig getSecurityConfig() const;
     NetworkConfig getNetworkConfig() const;
     IDSConfig getIDSConfig() const;
+    SignatureConfig getSignatureConfig() const;
+    PassiveDetection::Flags getPassiveDetectionFlags() const {
+        return PassiveDetection::Flags::fromBits(passive_flags_.load(std::memory_order_acquire));
+    }
+    // Serialize read/modify/save transactions, including nested config getters.
+    std::unique_lock<std::recursive_mutex> lockConfig() const {
+        return std::unique_lock<std::recursive_mutex>(config_mutex_);
+    }
+    using ConfigAppliedCallback = void (*)(void*);
+    void setConfigAppliedCallback(ConfigAppliedCallback callback, void* context) {
+        auto lock = lockConfig();
+        config_applied_callback_ = callback;
+        config_applied_context_ = context;
+    }
     IDSAnomalyConfig getIDSAnomalyConfig() const;
     WritersConfig getWritersConfig() const;
     NetworkPresenceConfig getNetworkPresenceConfig() const;
@@ -312,6 +339,10 @@ public:
     static const char* kCONFIG_BAK;
 
 private:
+    mutable std::recursive_mutex config_mutex_;
+    std::atomic<uint8_t> passive_flags_{PassiveDetection::Flags{}.bits()};
+    ConfigAppliedCallback config_applied_callback_ = nullptr;
+    void* config_applied_context_ = nullptr;
     // Using AsyncStorage::Global instead of StorageManager
     psram_string raw_ = PSRAMUtils::createPSRAMString("{}");
     cJSON* root_ = nullptr;
@@ -319,6 +350,7 @@ private:
     SecurityConfig sec_;
     NetworkConfig net_;
     IDSConfig ids_;
+    SignatureConfig signatures_;
     IDSAnomalyConfig ids_anomaly_;
     WritersConfig writers_;
     NetworkPresenceConfig network_presence_;

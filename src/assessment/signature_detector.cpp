@@ -60,7 +60,13 @@ SignatureDetector& SignatureDetector::getInstance() {
     return instance;
 }
 
+void SignatureDetector::setEnabled(bool enabled) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    enabled_.store(enabled, std::memory_order_release);
+}
+
 bool SignatureDetector::initialize() {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     LOG_INFO(TAG, "Initializing signature detector...");
 
     // Clear any existing data
@@ -77,6 +83,7 @@ bool SignatureDetector::initialize() {
 }
 
 bool SignatureDetector::reloadSignatures() {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     LOG_INFO(TAG, "Hot-reloading signatures from NVS...");
 
     // Clear current signatures
@@ -95,9 +102,10 @@ bool SignatureDetector::reloadSignatures() {
 }
 
 DetectionResult SignatureDetector::analyzePacket(const uint8_t* payload, size_t payload_len, ProtocolType protocol) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     DetectionResult result;
 
-    if (!payload || payload_len == 0) {
+    if (!isEnabled() || !payload || payload_len == 0) {
         return result;
     }
 
@@ -127,6 +135,7 @@ DetectionResult SignatureDetector::analyzePacket(const uint8_t* payload, size_t 
 }
 
 DetectionResult SignatureDetector::analyzePacketWithReport(const NetworkPacket& packet, psram_string& threat_report_json) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     DetectionResult result = analyzePacket(packet.data, packet.length, packet.proto);
     threat_report_json.clear();
 
@@ -175,8 +184,31 @@ DetectionResult SignatureDetector::analyzePacketWithReport(const NetworkPacket& 
             cJSON_AddNumberToObject(packet_info, "length", packet.length);
             cJSON_AddNumberToObject(packet_info, "ether_type", packet.ether_type);
 
+            // Preserve the complete captured buffer for incident review.  The
+            // packet object is the ingress snapshot available to the detector;
+            // it does not include an Ethernet FCS that the MAC may strip.
+            constexpr size_t kMaxReportBytes = 16384;
+            const size_t captured_len = (packet.data && packet.length <= kMaxReportBytes)
+                ? packet.length : (packet.data ? kMaxReportBytes : 0);
+            cJSON_AddNumberToObject(packet_info, "captured_length", captured_len);
+            cJSON_AddBoolToObject(packet_info, "capture_complete",
+                                  packet.data && packet.length <= kMaxReportBytes);
+            cJSON_AddStringToObject(packet_info, "capture_scope", "network_packet_data");
+            if (captured_len > 0) {
+                char* full_hex = static_cast<char*>(heap_caps_malloc(
+                    captured_len * 2 + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+                if (full_hex) {
+                    for (size_t i = 0; i < captured_len; ++i) {
+                        snprintf(&full_hex[i * 2], 3, "%02X", packet.data[i]);
+                    }
+                    full_hex[captured_len * 2] = '\0';
+                    cJSON_AddStringToObject(packet_info, "payload_hex", full_hex);
+                    heap_caps_free(full_hex);
+                }
+            }
+
             // Add first 64 bytes of payload as hex for analysis
-            size_t hex_len = (packet.length > 64) ? 64 : packet.length;
+            size_t hex_len = (captured_len > 64) ? 64 : captured_len;
             char* hex_payload = (char*)heap_caps_malloc(hex_len * 2 + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
             if (hex_payload && packet.data) {
                 for (size_t i = 0; i < hex_len; i++) {
@@ -226,15 +258,18 @@ DetectionResult SignatureDetector::analyzePacketWithReport(const NetworkPacket& 
 }
 
 uint32_t SignatureDetector::getTotalSignatures() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return total_signatures_;
 }
 
 uint32_t SignatureDetector::getSignaturesForProtocol(ProtocolType protocol) const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto it = signatures_.find(protocol);
     return (it != signatures_.end()) ? it->second.size() : 0;
 }
 
 void SignatureDetector::clearSignatures() {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     signatures_.clear();
     total_signatures_ = 0;
 }

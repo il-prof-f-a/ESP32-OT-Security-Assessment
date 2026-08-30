@@ -90,12 +90,20 @@ std::string FileReporter::determineLogFileMulti(const psram_string& payload) {
 
         if (json) {
             cJSON* channel = cJSON_GetObjectItem(json, "channel");
+            cJSON* type = cJSON_GetObjectItem(json, "type");
             std::string channel_str = (channel && cJSON_IsString(channel)) ? channel->valuestring : "";
+            std::string type_str = (type && cJSON_IsString(type)) ? type->valuestring : "";
 
             cJSON_Delete(json);
 
-            // Use configured multi-file map for routing
-            std::string target_file = getFileForChannel(channel_str);
+            // Event type is authoritative.  This prevents a broad substring
+            // channel (for example "scanner") from stealing a discovery,
+            // signature, or presence event when the channel map evolves.
+            std::string target_file = getFileForChannel(type_str);
+            if (!target_file.empty()) return target_file;
+
+            // Fall back to the explicit channel for legacy payloads.
+            target_file = getFileForChannel(channel_str);
 
             if (!target_file.empty()) return target_file;
 

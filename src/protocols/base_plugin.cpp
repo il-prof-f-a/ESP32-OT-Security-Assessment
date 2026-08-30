@@ -174,7 +174,7 @@ namespace {
 
 
 bool BasePlugin::isIdsAnalysisEnabled() const {
-    return !cfg_ || cfg_->getIDSConfig().enabled;
+    return !cfg_ || cfg_->getPassiveDetectionFlags().ids_enabled;
 }
 
 BasePlugin::DiscoveryScope BasePlugin::beginDiscovery() {

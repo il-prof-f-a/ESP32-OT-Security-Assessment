@@ -106,7 +106,6 @@ private:
 
     bool parseOPCUAPacket(const NetworkPacket& packet, std::string& message_type,
                           uint32_t& secure_channel_id, uint32_t& sequence_number);
-    void analyzeOPCUATraffic(const NetworkPacket& packet);
     bool isOPCUAHandshake(const NetworkPacket& packet);
     bool isBruteForceAttempt(uint32_t src_ipv4);
     void configureScan(const std::map<std::string,std::string>&) {}

@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -8,6 +9,8 @@
 #include "../core/types.h"
 #include "../core/configuration_manager.h"
 #include "../core/psram_allocator.h"
+
+class ReportingEngine;
 
 // Enhanced structure to track network presence and trust
 struct NetworkDeviceInfo {
@@ -46,6 +49,7 @@ public:
     // Initialize persistent storage
     bool initialize();
     void shutdown();
+    void setReportingEngine(ReportingEngine* reporting) { reporting_engine_ = reporting; }
 
     // Configuration management
     void setConfig(const NetworkPresenceConfig& config);
@@ -136,10 +140,13 @@ public:
     bool isActive();
 
 private:
-    mutable std::mutex mutex_;
+    mutable std::recursive_mutex mutex_;
     NetworkPresenceConfig config_;
 
-    bool active_ = false;
+    std::atomic<bool> active_{false};
+    bool initialized_ = false;
+    ReportingEngine* reporting_engine_ = nullptr;
+    bool configured_learning_mode_ = true;
 
     // Device tracking data
     psram_map<psram_string, NetworkDeviceInfo> devices_; // keyed by IP address

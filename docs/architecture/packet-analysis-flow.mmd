@@ -33,14 +33,22 @@ flowchart TD
 
     subgraph CENTRAL["3. Central callback in src/main.cpp"]
         CALLBACK["registered packet callback\none execution per dispatched NetworkPacket"]
-        IDS{"cfg.getIDSConfig().enabled?"}
-        GIDS["IntrusionDetectionSystem::onPacket(pkt)\ngeneral IDS, baseline and trust side effects\ncalled at most once here"]
-        SIG["SignatureDetection::SignatureDetector::analyzePacketWithReport()\nCVE/signature matching and threat report"]
+        PRESENCE{"cfg.getPassiveDetectionFlags().network_presence_enabled?"}
+        IDS{"cfg.getPassiveDetectionFlags().ids_enabled?"}
+        SIG_GATE{"cfg.getPassiveDetectionFlags().signatures_enabled?"}
+        NP["NetworkPresenceTracker::trackPacket(pkt)\nlearning, inventory and trust data\nnever an IDS bypass by itself"]
+        GIDS["IntrusionDetectionGeneral::onPacket(pkt)\ngeneral IDS, baseline and trust side effects\ncalled at most once here"]
+        SIG["SignatureDetector::analyzePacketWithReport()\nCVE/signature matching and threat report"]
         LOOKUP{"PluginManager::findByProtocol(pkt.proto)\nplugin registered?"}
-        CALLBACK --> IDS
+        CALLBACK --> PRESENCE
+        PRESENCE -->|yes| NP
+        PRESENCE -->|no| IDS
+        NP --> IDS
         IDS -->|yes| GIDS
-        IDS -->|no| SIG
-        GIDS --> SIG
+        IDS -->|no| SIG_GATE
+        GIDS --> SIG_GATE
+        SIG_GATE -->|yes| SIG
+        SIG_GATE -->|no| LOOKUP
         SIG --> LOOKUP
     end
     ANA --> CALLBACK

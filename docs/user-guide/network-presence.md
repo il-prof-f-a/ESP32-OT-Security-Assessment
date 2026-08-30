@@ -1,20 +1,24 @@
 # NetworkPresence • Device Learning & Trust
 
-![NetworkPresence page](assets/network-presence.png)
+![Network Presence panel](assets/passive-detection-presence.png)
 
 NetworkPresence learns devices from observed protocol traffic and assigns trust based on the
 configured observation policy. It supports inventory and change detection; it is not an identity
 or cryptographic authentication system.
 
+This panel belongs to the [shared passive detection page](passive-detection.md).
+It learns independently of IDS, without granting a writer bypass while IDS is off.
+The screenshot uses simulated lab data from the local UI fixture.
+
 ## Learning configuration
 
-- **System Enabled** activates presence tracking.
+- The shared **Network Presence** switch activates tracking; **Save** applies it without rebooting.
 - **Learning Mode** allows new observations to contribute to the learned baseline.
 - **Activation Delay** delays enforcement after startup or activation.
 - **Retention** controls how long learned observations are kept.
 - **Trust Threshold (0–1)** is the score required for trusted classification.
 - **Observation Period** is the minimum history used before classification.
-- **Save Configuration** applies these values.
+- **Save Configuration** persists and applies these values without rebooting.
 - **Reset Learning** deletes learned-device state. Export first if the baseline matters.
 
 ## Global statistics

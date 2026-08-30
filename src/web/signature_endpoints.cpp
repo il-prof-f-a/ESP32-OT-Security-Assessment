@@ -303,6 +303,7 @@ cJSON* handleSignatureStats() {
     auto& detector = SignatureDetection::SignatureDetector::getInstance();
 
     uint32_t total = detector.getTotalSignatures();
+    cJSON_AddBoolToObject(response, "enabled", detector.isEnabled());
     cJSON_AddNumberToObject(response, "total", total);
 
     cJSON* by_protocol = cJSON_CreateObject();

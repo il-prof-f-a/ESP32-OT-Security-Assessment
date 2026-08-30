@@ -35,14 +35,12 @@ drop counter instead of retaining a driver-owned buffer.
 
 The callback registered in `src/main.cpp` performs the cross-protocol work in a fixed order:
 
-1. `IntrusionDetectionSystem::onPacket(pkt)` runs once when the global IDS configuration is
-   enabled.
-2. `SignatureDetection::SignatureDetector::analyzePacketWithReport()` evaluates signatures and
-   emits a structured threat event when a match is found.
-3. `PluginManager::findByProtocol(pkt.proto)` selects the protocol plugin, if one is registered.
+1. `NetworkPresenceTracker::trackPacket(pkt)` runs once when `ids.network_presence.enabled` is true. It learns and inventories traffic; Presence alone never grants an IDS writer bypass.
+2. `IntrusionDetectionGeneral::onPacket(pkt)` runs once when `ids.general.enabled` is true.
+3. `SignatureDetector::analyzePacketWithReport()` evaluates signatures when `ids.signatures.enabled` is true and emits a structured threat event on a match.
+4. `PluginManager::findByProtocol(pkt.proto)` selects the protocol plugin, if one is registered.
 
-Consequently, disabling a protocol plugin cannot accidentally disable the global IDS or signature
-path, and a plugin cannot invoke the global IDS a second time.
+Consequently, the three passive modules can be toggled independently, disabling a protocol plugin cannot accidentally disable their global paths, and a plugin cannot invoke the global IDS or global Presence a second time.
 
 ### 4. Base-plugin template method
 

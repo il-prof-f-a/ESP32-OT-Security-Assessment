@@ -29,6 +29,7 @@ and HTTP handlers in the firmware source.
 
 - [Login](login.md)
 - [Dashboard](dashboard.md)
+- [Configuration editor](configuration.md)
 
 ### Configure and assess OT protocols
 
@@ -39,6 +40,7 @@ and HTTP handlers in the firmware source.
 
 ### Detection and trust
 
+- [IDS, Network Presence & CVE Signatures — shared controls](passive-detection.md)
 - [Intrusion Detection System](intrusion-detection-system.md)
 - [CVE Signature Detection Engine](cve-signatures.md)
 - [NetworkPresence Device Learning & Trust](network-presence.md)

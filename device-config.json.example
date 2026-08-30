@@ -60,6 +60,9 @@
       "max_per_sec_s7": 100,
       "replay_window_ms": 5000
     },
+    "signatures": {
+      "enabled": true
+    },
     "network_presence": {
       "activation_delay_minutes": 5,
       "alert_unauthorized_writes": true,

@@ -1,14 +1,17 @@
 # IDS • Allowlist & Policy
 
-![IDS page](assets/intrusion-detection.png)
+![IDS panel in the shared page](assets/passive-detection-ids.png)
 
 This page configures passive packet-analysis modules, protocol-specific detection rules and the
-source allowlist. It also displays learned devices and rule statistics.
+source allowlist. It also displays learned devices and rule statistics. It is part
+of the [shared passive detection page](passive-detection.md). The screenshot uses
+simulated lab data from the local UI fixture.
 
 ## IDS modules and protocol rules
 
-**General IDS (Packet Analysis)** enables the common packet pipeline. **Network Presence Monitor**
-enables learning/trust analysis. **Save Modules** applies these switches.
+The shared **General IDS** switch and **Save** control IDS analysis without
+rebooting. Network Presence and CVE Signatures have independent switches.
+Disabling IDS does not disable packet capture or discovery.
 
 - **Modbus:** alert on broadcast writes.
 - **S7:** detect non-TLS communication, STOP CPU commands, SZL reconnaissance, write storms and

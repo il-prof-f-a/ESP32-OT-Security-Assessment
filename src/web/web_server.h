@@ -208,6 +208,10 @@ private:
     static esp_err_t h_config_import(httpd_req_t* req);
     static esp_err_t h_config_metadata_get(httpd_req_t* req);
     static esp_err_t h_config_reset_post(httpd_req_t* req);
+    static esp_err_t h_config_editor_schema(httpd_req_t* req);
+    static esp_err_t h_config_editor_snapshot(httpd_req_t* req);
+    static esp_err_t h_config_editor_validate(httpd_req_t* req);
+    static esp_err_t h_config_editor_save(httpd_req_t* req);
     static bool check_api_auth(httpd_req_t* req);
     static bool check_session(httpd_req_t* req);
 
@@ -223,6 +227,8 @@ private:
 
     static void logConfigChange(httpd_req_t* req, const char* config_type, const char* details = nullptr);
     static esp_err_t h_ids_adv_cfg_get(httpd_req_t* req);
+    static esp_err_t h_passive_config_get(httpd_req_t* req);
+    static esp_err_t h_passive_config_post(httpd_req_t* req);
     static esp_err_t h_ids_adv_cfg_post(httpd_req_t* req);
     static esp_err_t h_api_selftest(httpd_req_t* req);
     static esp_err_t h_api_httpd_stats(httpd_req_t* req);
@@ -391,6 +397,7 @@ private:
     static esp_err_t h_page_logging(httpd_req_t* req);
     static esp_err_t h_page_gpio(httpd_req_t* req);
     static esp_err_t h_page_audit(httpd_req_t* req);
+    static esp_err_t h_page_configuration(httpd_req_t* req);
     static esp_err_t h_page_style(httpd_req_t* req);
 
     static bool read_body(httpd_req_t* req, psram_string& out, size_t max_len = 65536);

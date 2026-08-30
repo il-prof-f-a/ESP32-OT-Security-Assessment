@@ -59,6 +59,7 @@ select[multiple]{min-height:120px}
 
 <div class="card">
     <h2>📋 Log File Status</h2>
+    <p class="stream-hint">Action logs: Discovery, Vulnerability Scan, Audit, GPIO, Signature and Network Presence. The legacy scanner_events.log is retained as mixed historical data.</p>
     <div id="status-msg" class="status" style="display:none;"></div>
 
     <button class="btn" onclick="refreshFileStatus()">🔄 Refresh</button>
@@ -186,6 +187,9 @@ select[multiple]{min-height:120px}
 let files_data = [];
 let streamSource = null;
 const STREAM_MAX_CHARS = 180000;
+// Canonical action files are also documented here so the page remains clear
+// while a newly installed device is creating an empty file for the first time.
+const ACTION_FILES = ['discovery_events.log','signature_events.log','network_presence_events.log','audit_events.log','gpio_events.log','vulnerability_scanner.log'];
 
 // Load file status on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -248,9 +252,28 @@ function updateFilesTable(files) {
                         onclick="toggleFile('${file.filename}', ${!file.enabled})">
                     ${file.enabled ? '❌ Disable' : '✅ Enable'}
                 </button>
+                <button class="btn" onclick="downloadLogFile('${file.filename}')">📥 Download</button>
             </td>
         `;
     });
+}
+
+async function downloadLogFile(filename) {
+    try {
+        const response = await fetch('/api/logs/download?name=' + encodeURIComponent(filename));
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const blob = await response.blob();
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(link.href);
+        showStatus('✅ Downloaded ' + filename, 'ok');
+    } catch (error) {
+        showStatus('❌ Download failed: ' + error.message, 'err');
+    }
 }
 
 async function toggleFile(filename, enable) {

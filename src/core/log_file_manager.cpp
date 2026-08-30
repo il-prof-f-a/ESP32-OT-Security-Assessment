@@ -88,12 +88,31 @@ void LogFileManager::setupDefaultFiles() {
 
     file_configs_["/data/scanner_events.log"] = {
         "/data/scanner_events.log", true, 512, 3,
-        {"scan", "discovery", "probe", "scanner_scan_activity"}, 0, ""
+        {"legacy_scan_events"}, 0, ""
+    };
+
+    // Dedicated action logs. Keep the legacy scanner_events.log readable, but
+    // never route new discovery or vulnerability records into it.
+    file_configs_["/data/discovery_events.log"] = {
+        "/data/discovery_events.log", true, 1024, 3,
+        {"discovery", "general_discovery_result", "discovery_result"}, 0, ""
+    };
+    file_configs_["/data/signature_events.log"] = {
+        "/data/signature_events.log", true, 2048, 3,
+        {"signature", "threat_detected", "signature_match"}, 0, ""
+    };
+    file_configs_["/data/network_presence_events.log"] = {
+        "/data/network_presence_events.log", true, 1024, 3,
+        {"network_presence", "presence", "device_observed", "trust_changed"}, 0, ""
     };
 
     file_configs_["/data/audit_events.log"] = {
         "/data/audit_events.log", true, 1024, 3,
-        {"audit", "audit_event", "security_audit", "config_change"}, 0, ""
+        {"audit", "AUDIT", "audit_event", "security_audit", "security_event", "SECURITY", "config_change"}, 0, ""
+    };
+    file_configs_["/data/gpio_events.log"] = {
+        "/data/gpio_events.log", true, 512, 3,
+        {"gpio", "gpio_event", "gpio_input", "gpio_output"}, 0, ""
     };
 }
 
@@ -309,7 +328,10 @@ psram_string LogFileManager::getStatusJSON() const {
         if (!file_obj) {
             continue;
         }
-        cJSON_AddStringToObject(file_obj, "filename", filename.c_str());
+        const size_t slash = filename.find_last_of("/\\");
+        const std::string display_name = slash == std::string::npos
+            ? filename : filename.substr(slash + 1);
+        cJSON_AddStringToObject(file_obj, "filename", display_name.c_str());
         cJSON_AddStringToObject(file_obj, "path", info.path.c_str());
         cJSON_AddBoolToObject(file_obj, "enabled", info.enabled);
         cJSON_AddNumberToObject(file_obj, "max_size_kb", info.max_size_kb);

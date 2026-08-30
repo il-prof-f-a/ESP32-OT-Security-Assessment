@@ -56,6 +56,23 @@ class DashboardUiTests(unittest.TestCase):
         dashboard = (PROJECT_ROOT / "src/web/ui/dashboard.html").read_text(encoding="utf-8")
         self.assertIn('<a href="/discovery" class="nav-btn">🔍 Protocol Discovery</a>', dashboard)
 
+    def test_dashboard_hides_redundant_cards_and_links_configuration(self):
+        dashboard = (PROJECT_ROOT / "src/web/ui/dashboard.html").read_text(encoding="utf-8")
+        self.assertIn('href="/configuration"', dashboard)
+        self.assertNotIn('<h2>🔒 Access Log</h2>', dashboard)
+        self.assertNotIn('<h2>🧪 Scanner Jobs</h2>', dashboard)
+        self.assertNotIn('<h2>⚙️ Config (JSON)</h2>', dashboard)
+        self.assertNotIn('<h2>📝 Event Format</h2>', dashboard)
+        self.assertIn("downloadLogFile('discovery_events.log')", dashboard)
+        self.assertNotIn("downloadLogFile('scanner_events.log')", dashboard)
+
+    def test_configuration_page_declares_safe_draft_actions(self):
+        page = (PROJECT_ROOT / "src/web/ui/configuration.html").read_text(encoding="utf-8")
+        for token in ("Load current", "Load saved", "Load defaults", "Import JSON",
+                      "Validate", "Save to device", "Save as", "/api/config/editor/schema",
+                      "secrets_present", "restart_required_paths"):
+            self.assertIn(token, page)
+
     def test_discovery_start_status_is_inside_configuration_card_before_active_jobs(self):
         discovery = (PROJECT_ROOT / "src/web/ui/discovery.html").read_text(encoding="utf-8")
 

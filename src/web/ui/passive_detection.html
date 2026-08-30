@@ -1,0 +1,2731 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IDS, Network Presence &amp; CVE Signatures</title>
+<style>
+#panel-ids{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial; margin:1rem; background:#f6f6f6; color:#222}
+#panel-ids .container{max-width:1100px;margin:0 auto}
+#panel-ids .card{background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.06); padding:1rem; margin-bottom:1rem}
+#panel-ids .full-width{grid-column:1 / -1}
+#panel-ids h1{font-size:1.4rem;margin:0 0 1rem 0}
+#panel-ids h2{font-size:1.15rem;margin:0 0 .5rem 0}
+#panel-ids label{display:block;margin-bottom:.3rem;font-weight:600;color:#333}
+#panel-ids .muted{color:#666}
+#panel-ids code,#panel-ids .mono{font-family:ui-monospace,SFMono-Regular,Consolas,Monaco,monospace; font-size:12px; background:#f8f9fa; padding:.1rem .3rem; border-radius:4px; color:#222}
+#panel-ids .form-group{margin-bottom:.8rem}
+#panel-ids input,#panel-ids select,#panel-ids textarea{width:100%; padding:.45rem .6rem; border:1px solid #ccc; border-radius:4px; background:#fff; color:#222}
+#panel-ids input[type="checkbox"],#panel-ids input[type="radio"]{width:auto}
+#panel-ids .switch{display:inline-flex; align-items:center; gap:.5rem}
+#panel-ids .btn{background:#007; color:#fff; border:none; padding:.5rem 1rem; border-radius:6px; cursor:pointer; display:inline-block; margin-right:.5rem}
+#panel-ids .btn:hover{background:#008}
+#panel-ids .btn.small{font-size:.9rem; padding:.35rem .7rem; border-radius:5px}
+#panel-ids .btn.ghost{background:transparent; color:#333; border:1px solid #bbb}
+#panel-ids .btn.danger{background:#c33}
+#panel-ids .btn.danger:hover{background:#d44}
+#panel-ids .nav-btn{background:#06a; color:#fff; border:none; padding:.6rem 1rem; border-radius:8px; text-decoration:none; display:inline-block}
+#panel-ids .nav-btn:hover{background:#07b}
+#panel-ids table{width:100%; border-collapse:collapse}
+#panel-ids th,#panel-ids td{padding:.5rem; text-align:left; border-bottom:1px solid #eee}
+#panel-ids th{background:#f8f9fa; color:#333}
+#panel-ids .status{padding:.5rem;border-radius:4px;margin-bottom:.8rem}
+#panel-ids .status.ok{background:#d4edda;color:#155724}
+#panel-ids .status.err{background:#f8d7da;color:#721c24}
+#panel-ids .pill{display:inline-flex; gap:.5rem; align-items:center; padding:.25rem .5rem; border-radius:999px; background:#eef5ff; border:1px solid #cfe8ff; color:#113}
+#panel-ids .grid{display:grid; gap:16px}
+#panel-ids .row{display:flex; gap:12px; flex-wrap:wrap; align-items:center}
+#panel-ids .section-title{display:flex; align-items:center; gap:.5rem; margin-bottom:.5rem}
+#panel-ids .right{margin-left:auto}
+#panel-ids .stat{display:flex; gap:.6rem; align-items:center; background:#f8f9fa; border:1px solid #e6e6e6; border-radius:10px; padding:.5rem .6rem}
+#panel-ids .stat .v{font-size:1.25rem; font-weight:600}
+#panel-ids .toast{position:fixed; right:16px; bottom:16px; background:#fff; color:#222222; border:1px solid #ddd; border-radius:10px; padding:10px 12px; box-shadow:0 10px 20px rgba(0,0,0,.08); display:none}
+#panel-ids .toast.show{display:block}
+#panel-ids details{border:1px dashed #bcd; border-radius:12px; padding:10px; background:#fff}
+#panel-ids summary{cursor:pointer; color:#333}
+
+#panel-network-presence{
+  --ok:#268c2f;
+  --warn:#d29922;
+  --danger:#c33;
+  --muted:#666;
+}
+#panel-network-presence{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial; margin:1rem; background:#f6f6f6; color:#222}
+#panel-network-presence .container{max-width:1100px;margin:0 auto}
+#panel-network-presence .card{background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.06); padding:1rem; margin-bottom:1rem}
+#panel-network-presence .full-width{grid-column:1 / -1}
+#panel-network-presence .grid{display:grid; gap:16px}
+#panel-network-presence .row{display:flex; gap:12px; flex-wrap:wrap; align-items:center}
+#panel-network-presence h1{font-size:1.4rem;margin:0 0 1rem 0}
+#panel-network-presence h2{font-size:1.15rem;margin:0 0 .5rem 0}
+#panel-network-presence label{display:block;margin-bottom:.3rem;font-weight:600;color:#333}
+#panel-network-presence .muted{color:var(--muted)}
+#panel-network-presence code,#panel-network-presence .mono{font-family:ui-monospace,SFMono-Regular,Consolas,Monaco,monospace; font-size:12px; background:#f8f9fa; padding:.1rem .3rem; border-radius:4px; color:#222}
+#panel-network-presence .form-group{margin-bottom:.8rem}
+#panel-network-presence input,#panel-network-presence select,#panel-network-presence textarea{width:100%; padding:.45rem .6rem; border:1px solid #ccc; border-radius:4px; background:#fff; color:#222}
+#panel-network-presence .switch{display:inline-flex; align-items:center; gap:.5rem}
+#panel-network-presence .btn{background:#007; color:#fff; border:none; padding:.5rem 1rem; border-radius:6px; cursor:pointer; display:inline-block; margin-right:.5rem}
+#panel-network-presence .btn:hover{background:#008}
+#panel-network-presence .btn.small{font-size:.9rem; padding:.35rem .7rem}
+#panel-network-presence .btn.ghost{background:transparent; color:#333; border:1px solid #bbb}
+#panel-network-presence .btn.danger{background:#c33}
+#panel-network-presence .btn.danger:hover{background:#d44}
+#panel-network-presence .btn.primary{background:#06a}
+#panel-network-presence .btn.primary:hover{background:#07b}
+#panel-network-presence .btn.success{background:#268c2f}
+#panel-network-presence .btn.success:hover{background:#2fa73a}
+#panel-network-presence table{width:100%; border-collapse:collapse}
+#panel-network-presence th,#panel-network-presence td{padding:.5rem; text-align:left; border-bottom:1px solid #eee}
+#panel-network-presence th{background:#f8f9fa; color:#333}
+#panel-network-presence .pill,#panel-network-presence .tag{display:inline-flex; gap:.5rem; align-items:center; padding:.25rem .5rem; border-radius:999px; background:#eef5ff; border:1px solid #cfe8ff; color:#113}
+#panel-network-presence .tag.trusted{background:#d4edda;border-color:#b6dfc1;color:#155724}
+#panel-network-presence .tag.learned{background:#fff3cd;border-color:#f0de9b;color:#856404}
+#panel-network-presence .tag.untrusted{background:#f8d7da;border-color:#efb8bf;color:#721c24}
+#panel-network-presence .tag.role-reader{background:#e7f3ff;border-color:#b8dbff;color:#114a7a}
+#panel-network-presence .tag.role-writer{background:#ffe8e8;border-color:#f2bcbc;color:#7a1111}
+#panel-network-presence .tag.role-rw{background:#efe6ff;border-color:#d7c3ff;color:#3f1c7a}
+#panel-network-presence .tag.role-sender{background:#e8f7ef;border-color:#bee8cf;color:#12522f}
+#panel-network-presence .tag.role-unknown{background:#f0f0f0;border-color:#ddd;color:#555}
+#panel-network-presence .success{background:#d4edda !important; color:#155724 !important}
+#panel-network-presence .warning{background:#fff3cd !important; color:#856404 !important}
+#panel-network-presence .danger{background:#f8d7da !important; color:#721c24 !important}
+#panel-network-presence .device-active{color:#155724}
+#panel-network-presence .device-inactive{color:#721c24}
+#panel-network-presence .stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px}
+#panel-network-presence .stat{background:#f8f9fa; border:1px solid #e6e6e6; border-radius:8px; padding:.6rem .8rem}
+#panel-network-presence .stat-number{font-weight:700; font-size:1.2rem}
+#panel-network-presence .toast{position:fixed; right:16px; bottom:16px; background:#fff; color:#222; border:1px solid #ddd; border-radius:10px; padding:10px 12px; box-shadow:0 10px 20px rgba(0,0,0,.08); display:none}
+#panel-network-presence .toast.show{display:block}
+#panel-network-presence .card h2 + .row a,#panel-network-presence .card h2 + .row button,#panel-network-presence .card h2 + .row .clickable{
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .38rem .72rem;
+  margin: 0 .5rem .5rem 0;
+  border-radius: 6px;
+  background: #007;
+  color: #fff;
+  border: 1px solid #006;
+  text-decoration: none;
+  cursor: pointer;
+  line-height: 1.2;
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+  transition: background .15s ease, border-color .15s ease, transform .02s;
+}
+#panel-network-presence .card h2 + .row a:hover,#panel-network-presence .card h2 + .row button:hover,#panel-network-presence .card h2 + .row .clickable:hover{
+  background: #008;
+  border-color: #007;
+}
+#panel-network-presence .card h2 + .row a:active,#panel-network-presence .card h2 + .row button:active,#panel-network-presence .card h2 + .row .clickable:active{
+  transform: translateY(1px);
+}
+#panel-network-presence .card h2 + .row a.is-active,#panel-network-presence .card h2 + .row .clickable.is-active{
+  background: #06a;
+  border-color: #06a;
+}
+#panel-network-presence .card h2 + .row a.btn-ghost,#panel-network-presence .card h2 + .row .clickable.btn-ghost{
+  background: transparent;
+  color: #333;
+  border: 1px solid #bbb;
+}
+#panel-network-presence .card h2 + .row a:focus-visible,#panel-network-presence .card h2 + .row button:focus-visible,#panel-network-presence .card h2 + .row .clickable:focus-visible{
+  outline: 2px solid #58a6ff;
+  outline-offset: 2px;
+}
+#panel-network-presence .protocol-tabs{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.5rem;
+  margin:.25rem 0 .75rem 0;
+}
+#panel-network-presence .protocol-tab{
+  appearance:none;
+  display:inline-flex;
+  align-items:center;
+  gap:.4rem;
+  padding:.42rem .78rem;
+  border-radius:999px;            
+  background:#007;
+  color:#fff;
+  border:1px solid #006;
+  cursor:pointer;
+  user-select:none;
+  line-height:1.1;
+  text-decoration:none;
+  box-shadow:0 1px 2px rgba(0,0,0,.06);
+  transition:background .15s ease, border-color .15s ease, transform .02s, box-shadow .15s ease;
+}
+#panel-network-presence .protocol-tab:hover{
+  background:#008;
+  border-color:#007;
+}
+#panel-network-presence .protocol-tab:active{
+  transform:translateY(1px);
+}
+#panel-network-presence .protocol-tab:focus-visible{
+  outline:2px solid #58a6ff;
+  outline-offset:2px;
+}
+#panel-network-presence .protocol-tab.active{
+  background:#06a;
+  border-color:#06a;
+  box-shadow:0 0 0 2px rgba(6,170,255,.12);
+}
+#panel-network-presence .protocol-tab[aria-disabled="true"],#panel-network-presence .protocol-tab.disabled{
+  opacity:.6;
+  cursor:not-allowed;
+  pointer-events:none;
+}
+#panel-network-presence .device-list .device-row{
+  display:grid;
+  grid-template-columns: 1.2fr auto 1fr auto auto auto;
+  gap:.6rem;
+  align-items:center;
+  padding:.6rem .75rem;
+  border:1px solid #e9ecef;
+  border-radius:8px;
+  background:#fff;
+  margin-bottom:.5rem;
+}
+#panel-network-presence .device-ip{font-weight:600}
+#panel-network-presence .device-mac{font-size:12px; color:var(--muted)}
+#panel-network-presence .score-bar{width:140px; height:8px; background:#eef2f7; border-radius:999px; overflow:hidden; border:1px solid #e1e6ee}
+#panel-network-presence .score-fill{height:100%; width:0%}
+#panel-network-presence .empty-state{padding:1rem; color:#555; text-align:center}
+
+#panel-signatures{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial; margin:1rem; background:#f6f6f6; color:#222}
+#panel-signatures .container{max-width:1100px;margin:0 auto}
+#panel-signatures .card{background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.06); padding:1rem; margin-bottom:1rem}
+#panel-signatures .full-width{grid-column:1 / -1}
+#panel-signatures h1{font-size:1.4rem;margin:0 0 1rem 0}
+#panel-signatures h2{font-size:1.15rem;margin:0 0 .5rem 0}
+#panel-signatures label{display:block;margin-bottom:.3rem;font-weight:600;color:#333}
+#panel-signatures .muted{color:#666}
+#panel-signatures code,#panel-signatures .mono{font-family:ui-monospace,SFMono-Regular,Consolas,Monaco,monospace; font-size:12px; background:#f8f9fa; padding:.1rem .3rem; border-radius:4px; color:#222}
+#panel-signatures .form-group{margin-bottom:.8rem}
+#panel-signatures input,#panel-signatures select,#panel-signatures textarea{width:100%; padding:.45rem .6rem; border:1px solid #ccc; border-radius:4px; background:#fff; color:#222}
+#panel-signatures input[type="checkbox"],#panel-signatures input[type="radio"]{width:auto}
+#panel-signatures input[type="file"]{width:auto; padding:.3rem}
+#panel-signatures .switch{display:inline-flex; align-items:center; gap:.5rem}
+#panel-signatures .btn{background:#007; color:#fff; border:none; padding:.5rem 1rem; border-radius:6px; cursor:pointer; display:inline-block; margin-right:.5rem}
+#panel-signatures .btn:hover{background:#008}
+#panel-signatures .btn.small{font-size:.9rem; padding:.35rem .7rem; border-radius:5px}
+#panel-signatures .btn.ghost{background:transparent; color:#333; border:1px solid #bbb}
+#panel-signatures .btn.danger{background:#c33}
+#panel-signatures .btn.danger:hover{background:#d44}
+#panel-signatures .btn.success{background:#28a745}
+#panel-signatures .btn.success:hover{background:#218838}
+#panel-signatures .nav-btn{background:#06a; color:#fff; border:none; padding:.6rem 1rem; border-radius:8px; text-decoration:none; display:inline-block}
+#panel-signatures .nav-btn:hover{background:#07b}
+#panel-signatures table{width:100%; border-collapse:collapse}
+#panel-signatures th,#panel-signatures td{padding:.5rem; text-align:left; border-bottom:1px solid #eee}
+#panel-signatures th{background:#f8f9fa; color:#333}
+#panel-signatures .table-actions{display:flex; gap:.3rem}
+#panel-signatures .status{padding:.5rem;border-radius:4px;margin-bottom:.8rem}
+#panel-signatures .status.ok{background:#d4edda;color:#155724}
+#panel-signatures .status.err{background:#f8d7da;color:#721c24}
+#panel-signatures .status.warn{background:#fff3cd;color:#856404}
+#panel-signatures .pill{display:inline-flex; gap:.5rem; align-items:center; padding:.25rem .5rem; border-radius:999px; background:#eef5ff; border:1px solid #cfe8ff; color:#113}
+#panel-signatures .toolbar{display:flex; gap:.5rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap}
+#panel-signatures .file-upload{display:flex; gap:.5rem; align-items:center}
+#panel-signatures .json-editor{min-height:400px; font-family:ui-monospace,SFMono-Regular,Consolas,Monaco,monospace; font-size:13px; line-height:1.4}
+#panel-signatures .signature-item{border:1px solid #e0e0e0; border-radius:6px; margin-bottom:1rem; padding:1rem; background:#fafafa}
+#panel-signatures .signature-item.editing{background:#f0f8ff; border-color:#007}
+#panel-signatures .signature-header{display:flex; justify-content:space-between; align-items:center; margin-bottom:.5rem}
+#panel-signatures .signature-cve{font-weight:bold; color:#c33}
+#panel-signatures .signature-protocol{color:#666; font-size:.9rem}
+#panel-signatures .signature-details{margin-top:.5rem}
+#panel-signatures .signature-bytes{font-family:ui-monospace,monospace; background:#fff; padding:.5rem; border-radius:4px; border:1px solid #ddd; word-break:break-all}
+#panel-signatures .loader{text-align:center; padding:2rem; color:#666}
+#panel-signatures .modal{display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.5); z-index:1000}
+#panel-signatures .modal.show{display:flex; align-items:center; justify-content:center}
+#panel-signatures .modal-content{background:#fff; border-radius:8px; padding:2rem; max-width:600px; width:90%; max-height:80vh; overflow-y:auto}
+#panel-signatures .modal-header{display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem}
+#panel-signatures .modal-close{background:none; border:none; font-size:1.5rem; cursor:pointer; padding:0}
+@media (max-width: 768px){#panel-signatures .toolbar{flex-direction:column; align-items:stretch}
+#panel-signatures .file-upload{flex-direction:column}
+#panel-signatures .table-actions{flex-direction:column}
+}
+
+
+*{box-sizing:border-box}
+body{font-family:system-ui;margin:1rem;background:#f6f6f6;color:#222}
+#passive-detection{max-width:1200px;margin:0 auto}
+.card{background:#fff;border:1px solid #ddd;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);padding:1rem;margin-bottom:1rem}
+h1{font-size:1.6rem;margin:0 0 1rem}
+h2{font-size:1.15rem;margin:0 0 .75rem}
+.btn{background:#007;color:#fff;border:none;padding:.5rem 1rem;border-radius:6px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn:hover{background:#008}
+.btn.ghost{background:transparent;color:#333;border:1px solid #bbb}
+.nav-btn{background:#06a}
+.module-toggles{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
+.module-toggles label{display:inline-flex;align-items:center;gap:.5rem;font-weight:600}
+.module-toggles input{width:auto}
+.module-actions{display:flex;gap:.5rem;flex-wrap:wrap}
+.status{padding:.6rem;border-radius:4px;margin:.8rem 0 0;overflow-wrap:anywhere}
+.status.ok{background:#d4edda;color:#155724}
+.status.err{background:#f8d7da;color:#721c24}
+.passive-tabs{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem}
+.passive-tabs button{font:inherit;padding:.6rem 1rem;border:1px solid #bbb;background:#ddd;border-radius:4px;cursor:pointer}
+.passive-tabs button[aria-selected="true"]{background:#007;border-color:#007;color:#fff}
+[hidden]{display:none!important}
+.panel-controls{border:0;margin:0;padding:0;min-width:0}
+.module-note{padding:.75rem 1rem;border:1px solid #ccc;background:#eee;border-radius:6px}
+.module-disabled .panel-controls{filter:grayscale(1);opacity:.55}
+:disabled{cursor:not-allowed}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid #06a;outline-offset:3px}
+#passive-detection .passive-panel{margin:0;background:transparent}
+#passive-detection .card{border-radius:8px;padding:1rem}
+#passive-detection .row,#passive-detection .flex{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center}
+#passive-detection input,#passive-detection select,#passive-detection textarea{font:inherit;max-width:100%}
+#passive-detection input[type="checkbox"],#passive-detection input[type="radio"]{width:auto}
+#passive-detection .switch label{margin:0}
+#passive-detection .btn{border-radius:6px}
+#passive-detection .btn.primary{background:#007;color:#fff}
+#passive-detection .btn.danger{background:#c33!important;color:#fff!important}
+#passive-detection .btn.success{background:#268c2f!important;color:#fff!important}
+#passive-detection .toast{z-index:1100}
+#passive-detection .card{overflow-x:auto}
+#panel-signatures .modal-content{padding:1rem}
+@media(max-width:760px){
+  body{margin:.6rem}
+  h1{font-size:1.3rem}
+  .module-toggles{flex-direction:column;gap:.75rem}
+  .passive-tabs button{flex:1 1 auto}
+  #passive-detection .row>div[style*="flex:1"]{flex:1 1 100%!important;min-width:0}
+  #passive-detection .device-list .device-row{grid-template-columns:1fr 1fr}
+  #passive-detection .signature-header{align-items:flex-start;gap:.5rem}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+</style>
+</head>
+<body>
+<div id="passive-detection">
+<header class="card">
+<h1>IDS, Network Presence &amp; CVE Signatures</h1>
+<a id="passive-dashboard" class="btn nav-btn" href="/">← Dashboard</a>
+</header>
+<section class="card" aria-labelledby="module-heading">
+<h2 id="module-heading">Passive Detection Modules</h2>
+<p>Enable each module independently. Settings remain visible when a module is off.</p>
+<div class="module-toggles">
+<label for="ids_enabled"><input id="ids_enabled" type="checkbox" disabled> IDS</label>
+<label for="network_presence_enabled"><input id="network_presence_enabled" type="checkbox" disabled> Network Presence</label>
+<label for="signatures_enabled"><input id="signatures_enabled" type="checkbox" disabled> CVE Signatures</label>
+</div>
+<div class="module-actions">
+<button id="passive-save" class="btn" type="button" disabled>Save</button>
+<button id="passive-reload" class="btn ghost" type="button">Reload</button>
+</div>
+<div id="passive-status" class="status" role="status" aria-live="polite">Loading module configuration…</div>
+</section>
+<nav class="passive-tabs" role="tablist" aria-label="Passive detection panels">
+<button id="tab-ids" type="button" role="tab" aria-controls="panel-ids" aria-selected="false" tabindex="-1">IDS</button>
+<button id="tab-presence" type="button" role="tab" aria-controls="panel-network-presence" aria-selected="false" tabindex="-1">Network Presence</button>
+<button id="tab-signatures" type="button" role="tab" aria-controls="panel-signatures" aria-selected="false" tabindex="-1">CVE Signatures</button>
+</nav>
+<main>
+<section id="panel-ids" class="passive-panel" role="tabpanel" aria-labelledby="tab-ids" tabindex="0" hidden>
+<p class="module-note" role="status">This module is OFF or unavailable. Enable it in the controls above and Save to use this panel.</p>
+<fieldset class="panel-controls" disabled><h2>IDS · Allowlist & Policy <span id="ids-dirtyMark" class="muted"></span></h2>
+
+
+
+  <!-- IDS Modules Control -->
+  <section class="card" style="margin: 20px auto; max-width: 1100px;">
+    <!-- Protocol Specific Settings -->
+    <div class="section-title" style="margin-top: 16px;"><span class="tag">Protocol Settings</span></div>
+
+    <!-- Modbus Settings -->
+    <div style="background:#f8f9fa; border:1px solid #e0e0e0; border-radius:8px; padding:12px; margin-bottom:12px;">
+      <h4 style="margin:0 0 8px 0; color:#333">Modbus TCP</h4>
+      <div class="row" style="gap: 20px;">
+        <div class="switch"><input id="ids-modbusAlertBroadcast" type="checkbox"/> <label for="ids-modbusAlertBroadcast">Alert Broadcast Write</label></div>
+      </div>
+    </div>
+
+    <!-- S7 Settings -->
+    <div style="background:#f8f9fa; border:1px solid #e0e0e0; border-radius:8px; padding:12px; margin-bottom:12px;">
+      <h4 style="margin:0 0 8px 0; color:#333">S7 Communication</h4>
+      <div class="row" style="gap: 20px; flex-wrap: wrap;">
+        <div class="switch"><input id="ids-s7DetectNonTLS" type="checkbox"/> <label for="ids-s7DetectNonTLS">Detect Non-TLS Communications</label></div>
+        <div class="switch"><input id="ids-s7DetectStop" type="checkbox"/> <label for="ids-s7DetectStop">Detect STOP CPU Commands</label></div>
+        <div class="switch"><input id="ids-s7DetectRecon" type="checkbox"/> <label for="ids-s7DetectRecon">Detect Reconnaissance (SZL Reads)</label></div>
+        <div class="switch"><input id="ids-s7DetectWriteStorm" type="checkbox"/> <label for="ids-s7DetectWriteStorm">Detect Write Storms</label></div>
+        <div class="switch"><input id="ids-s7DetectBruteForce" type="checkbox"/> <label for="ids-s7DetectBruteForce">Detect Brute Force</label></div>
+      </div>
+      <div class="row" style="margin-top:8px; gap:16px;">
+        <div style="flex:1">
+          <label for="ids-s7MaxWrites" style="font-size:0.9rem">Max Writes/60s</label>
+          <input id="ids-s7MaxWrites" type="number" placeholder="50" style="width:100px">
+        </div>
+        <div style="flex:1">
+          <label for="ids-s7MaxReads" style="font-size:0.9rem">Max Reads/30s</label>
+          <input id="ids-s7MaxReads" type="number" placeholder="100" style="width:100px">
+        </div>
+      </div>
+    </div>
+
+    <!-- PROFINET Settings -->
+    <div style="background:#f8f9fa; border:1px solid #e0e0e0; border-radius:8px; padding:12px; margin-bottom:12px;">
+      <h4 style="margin:0 0 8px 0; color:#333">PROFINET</h4>
+      <div class="row" style="gap: 20px; flex-wrap: wrap;">
+        <div class="switch"><input id="ids-pnDetectSpoofing" type="checkbox"/> <label for="ids-pnDetectSpoofing">Detect DCP Spoofing</label></div>
+        <div class="switch"><input id="ids-pnDetectConfigChanges" type="checkbox"/> <label for="ids-pnDetectConfigChanges">Detect Config Changes (DCP Set)</label></div>
+        <div class="switch"><input id="ids-pnDetectTopology" type="checkbox"/> <label for="ids-pnDetectTopology">Detect Topology Changes</label></div>
+        <div class="switch"><input id="ids-pnDetectHelloFlood" type="checkbox"/> <label for="ids-pnDetectHelloFlood">Detect Hello Flooding</label></div>
+        <div class="switch"><input id="ids-pnDetectXIDReuse" type="checkbox"/> <label for="ids-pnDetectXIDReuse">Detect XID Reuse (Replay)</label></div>
+      </div>
+      <div class="row" style="margin-top:8px; gap:16px;">
+        <div style="flex:1">
+          <label for="ids-pnMaxIdentify" style="font-size:0.9rem">Max Identify Responses/30s</label>
+          <input id="ids-pnMaxIdentify" type="number" placeholder="20" style="width:100px">
+        </div>
+        <div style="flex:1">
+          <label for="ids-pnMaxConfig" style="font-size:0.9rem">Max Config Changes/120s</label>
+          <input id="ids-pnMaxConfig" type="number" placeholder="5" style="width:100px">
+        </div>
+      </div>
+    </div>
+
+    <!-- EtherNet/IP Settings -->
+    <div style="background:#f8f9fa; border:1px solid #e0e0e0; border-radius:8px; padding:12px; margin-bottom:12px;">
+      <h4 style="margin:0 0 8px 0; color:#333">EtherNet/IP (CIP)</h4>
+      <div class="row" style="gap: 20px; flex-wrap: wrap;">
+        <div class="switch"><input id="ids-enipDetectSessionFlood" type="checkbox"/> <label for="ids-enipDetectSessionFlood">Detect Session Flooding</label></div>
+        <div class="switch"><input id="ids-enipDetectRRDataStorm" type="checkbox"/> <label for="ids-enipDetectRRDataStorm">Detect SendRRData Storm</label></div>
+        <div class="switch"><input id="ids-enipDetectWriteStorm" type="checkbox"/> <label for="ids-enipDetectWriteStorm">Detect Write Storm (CIP)</label></div>
+        <div class="switch"><input id="ids-enipDetectRecon" type="checkbox"/> <label for="ids-enipDetectRecon">Detect Reconnaissance</label></div>
+        <div class="switch"><input id="ids-enipDetectErrors" type="checkbox"/> <label for="ids-enipDetectErrors">Detect Error Patterns</label></div>
+      </div>
+      <div class="row" style="margin-top:8px; gap:16px;">
+        <div style="flex:1">
+          <label for="ids-enipMaxSessions" style="font-size:0.9rem">Max Sessions/60s</label>
+          <input id="ids-enipMaxSessions" type="number" placeholder="10" style="width:100px">
+        </div>
+        <div style="flex:1">
+          <label for="ids-enipMaxRRData" style="font-size:0.9rem">Max SendRRData/30s</label>
+          <input id="ids-enipMaxRRData" type="number" placeholder="50" style="width:100px">
+        </div>
+        <div style="flex:1">
+          <label for="ids-enipMaxWrites" style="font-size:0.9rem">Max Writes/120s</label>
+          <input id="ids-enipMaxWrites" type="number" placeholder="5" style="width:100px">
+        </div>
+        <div style="flex:1">
+          <label for="ids-enipMaxDiscovery" style="font-size:0.9rem">Max Discovery/60s</label>
+          <input id="ids-enipMaxDiscovery" type="number" placeholder="20" style="width:100px">
+        </div>
+      </div>
+    </div>
+
+    <button class="btn primary" onclick="PassivePanels.ids.saveProtocolSettings()">💾 Save Protocol Settings</button>
+  </section>
+  <div class="grid">
+
+    <!-- Left: Allowlist editor -->
+    <section class="card">
+      <div class="row" style="justify-content:space-between">
+        <div class="switch"><input id="ids-enabled" type="checkbox"/> <label for="ids-enabled">Allowlist active</label></div>
+        <div class="row">
+          <label for="ids-action" style="margin-right:6px">Default action</label>
+          <select id="ids-action">
+            <option value="alert">Alert (log + continue)</option>
+            <option value="drop">Drop (block and log)</option>
+            <option value="ignore">Ignore (no special logging)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="section-title"><span class="tag">Global list</span></div>
+      <div class="row">
+        <div style="flex:1">
+          <label>Allowed IPs (IPv4 or CIDR)</label>
+          <table>
+            <thead><tr><th>Address</th><th class="right">Actions</th></tr></thead>
+            <tbody id="ids-ipGlobalTbody"></tbody>
+          </table>
+          <button class="btn small" onclick="PassivePanels.ids.addRow('ids-ipGlobalTbody','ip')">+ Add IP/CIDR</button>
+        </div>
+        <div style="flex:1">
+          <label>Allowed MACs (e.g. 00:11:22:33:44:55 or wildcard AA:BB:CC:*:*:*)</label>
+          <table>
+            <thead><tr><th>MAC</th><th class="right">Actions</th></tr></thead>
+            <tbody id="ids-macGlobalTbody"></tbody>
+          </table>
+          <button class="btn small" onclick="PassivePanels.ids.addRow('ids-macGlobalTbody','mac')">+ Add MAC</button>
+        </div>
+      </div>
+
+      <div class="section-title"><span class="tag">Per protocol</span></div>
+      <details open>
+        <summary>Configure per-protocol exceptions (overrides / additions)</summary>
+        <div class="row" style="margin-top:10px;gap:10px">
+          <select id="ids-catalogProto" style="flex:1;min-width:220px">
+            <option value="">Select protocol from catalog…</option>
+          </select>
+          <button class="btn small" onclick="PassivePanels.ids.addProtocolFromCatalog()">+ Add from catalog</button>
+          <span class="muted" style="font-size:12px">or</span>
+          <input id="ids-newProtoName" type="text" placeholder="Manual protocol name (e.g. modbus, s7, opcua)" style="flex:1;min-width:220px"/>
+          <button class="btn small" onclick="PassivePanels.ids.addProtocol()">+ Add manually</button>
+          <button class="btn small ghost" onclick="PassivePanels.ids.reloadProtocolCatalog()">↺ Refresh catalog</button>
+        </div>
+        <div id="ids-protoSuggestions" class="row" style="margin-top:6px"></div>
+
+        <div id="ids-protocols"></div>
+      </details>
+
+      <div class="row" style="margin-top:16px;justify-content:space-between">
+        <div class="flex">
+          <button class="btn" onclick="PassivePanels.ids.reloadFromDevice()">↺ Reload</button>
+          <button class="btn ghost" onclick="PassivePanels.ids.showJson()">{} JSON</button>
+        </div>
+        <div class="flex">
+          <button class="btn danger" onclick="PassivePanels.ids.revertLocal()">Cancel</button>
+          <button class="btn primary" onclick="PassivePanels.ids.saveToDevice()">💾 Save</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: Tools / Tester -->
+    <aside class="card">
+      <div class="section-title"><span class="tag">Tools</span></div>
+      <div class="row">
+        <div style="flex:1">
+          <label for="ids-testValue">Quick test – sample IP/MAC</label>
+          <input id="ids-testValue" type="search" placeholder="192.168.1.10 or 00:11:22:33:44:55"/>
+          <div class="row" style="margin-top:8px">
+            <button class="btn small" onclick="PassivePanels.ids.runTest()">Run test with current configuration</button>
+            <span id="ids-testResult" class="pill muted">Waiting…</span>
+          </div>
+          <p class="muted" style="font-size:13px;margin-top:8px">The test runs client-side with rules equivalent to the firmware's (IPv4/CIDR, MAC with per-byte wildcard).</p>
+        </div>
+      </div>
+
+      <div class="section-title"><span class="tag">IDS Statistics</span></div>
+      <div class="row">
+        <div class="flex" id="ids-statsRow">
+          <span class="pill"><span class="ok">●</span> allowed: <b id="ids-statAllowed">–</b></span>
+          <span class="pill"><span class="warn">●</span> alert: <b id="ids-statAlert">–</b></span>
+          <span class="pill"><span class="bad">●</span> dropped: <b id="ids-statDropped">–</b></span>
+        </div>
+        <button class="btn small right" onclick="PassivePanels.ids.refreshStats()">Refresh</button>
+      </div>
+
+      <div class="section-title" style="margin-top: 16px;"><span class="tag">Recognized Devices</span></div>
+      <div style="margin-bottom: 8px;">
+        <button class="btn small" onclick="PassivePanels.ids.loadLearnedDevices()">↺ Refresh List</button>
+        <button class="btn small ghost" onclick="PassivePanels.ids.clearAllLearned()">🗑️ Clear All</button>
+      </div>
+      <table id="ids-learnedDevicesTable" style="width: 100%; font-size: 12px;">
+        <thead>
+          <tr>
+            <th>IP/MAC</th>
+            <th>Type</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="ids-learnedDevicesBody">
+          <tr><td colspan="3" class="muted">Loading...</td></tr>
+        </tbody>
+      </table>
+
+      <details style="margin-top:12px">
+        <summary>Allowed patterns (help)</summary>
+        <ul>
+          <li>IPv4 or <span class="mono">IPv4/CIDR</span> (e.g. <span class="mono">10.0.0.0/24</span>)</li>
+          <li>MAC <span class="mono">AA:BB:CC:DD:EE:FF</span> with per-byte wildcard, e.g. <span class="mono">AA:BB:CC:*:*:*</span></li>
+        </ul>
+      </details>
+    </aside>
+
+  </div>
+
+  <div id="ids-toast" class="toast">Saved</div>
+
+  </fieldset>
+</section>
+<section id="panel-network-presence" class="passive-panel" role="tabpanel" aria-labelledby="tab-presence" tabindex="0" hidden>
+<p class="module-note" role="status">This module is OFF or unavailable. Enable it in the controls above and Save to use this panel.</p>
+<fieldset class="panel-controls" disabled><h2>Network Presence · Device Learning & Trust</h2>
+
+
+ 
+
+  <div>
+    <!-- Configuration Panel -->
+    <div class="grid">
+      <div class="card">
+        <h2>⚙️ Learning Configuration</h2>
+        <div class="flex" style="margin-bottom:12px">
+          <div class="switch">
+            <input type="checkbox" id="presence-learning_mode">
+            <label for="presence-learning_mode">Learning Mode</label>
+          </div>
+        </div>
+        
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0">
+          <div>
+            <label for="presence-activation_delay">Activation Delay (min)</label>
+            <input type="number" id="presence-activation_delay" min="1" max="60">
+          </div>
+          <div>
+            <label for="presence-retention_days">Retention (days)</label>
+            <input type="number" id="presence-retention_days" min="1" max="365">
+          </div>
+          <div>
+            <label for="presence-trust_threshold">Trust Threshold (0-1)</label>
+            <input type="number" id="presence-trust_threshold" min="0" max="1" step="0.1">
+          </div>
+          <div>
+            <label for="presence-observation_hours">Observation Period (hours)</label>
+            <input type="number" id="presence-observation_hours" min="1" max="168">
+          </div>
+        </div>
+        
+        <div class="row">
+          <button class="btn primary" onclick="PassivePanels.presence.saveConfig()">💾 Save Configuration</button>
+          <button class="btn danger" onclick="PassivePanels.presence.clearAllLearning()" title="Delete all learned devices">🗑️ Reset Learning</button>
+        </div>
+      </div>
+
+      <!-- Statistics -->
+      <div class="card">
+        <h2>📊 Global Statistics</h2>
+        <div id="presence-globalStats" class="stats">
+          <div class="stat">
+            <div class="stat-number" id="presence-totalDevices">-</div>
+            <div class="stat-label">Total Devices</div>
+          </div>
+          <div class="stat">
+            <div class="stat-number" id="presence-trustedDevices">-</div>
+            <div class="stat-label">Trusted</div>
+          </div>
+          <div class="stat">
+            <div class="stat-number" id="presence-learnedDevices">-</div>
+            <div class="stat-label">Learned</div>
+          </div>
+          <div class="stat">
+            <div class="stat-number" id="presence-untrustedDevices">-</div>
+            <div class="stat-label">Not Trusted</div>
+          </div>
+        </div>
+        
+        <div class="row">
+          <button class="btn" onclick="PassivePanels.presence.refreshStats()">🔄 Refresh</button>
+          <button class="btn ghost" onclick="PassivePanels.presence.exportData()">📥 Export Data</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Protocol Devices -->
+    <div class="card full-width">
+      <div class="section-header">
+        <h2>🔌 Devices by Protocol</h2>
+        <div class="row">
+          <button class="btn ghost small" onclick="PassivePanels.presence.refreshDevices()">🔄 Refresh</button>
+          <button class="btn ghost small" onclick="PassivePanels.presence.toggleAutoRefresh()" id="presence-autoRefreshBtn">⏱️ Auto Refresh</button>
+        </div>
+      </div>
+
+      <!-- Protocol Tabs -->
+      <div class="protocol-tabs" id="presence-protocolTabs">
+        <button type="button" class="protocol-tab active" data-protocol="all">🌐 All</button>
+        <button type="button" class="protocol-tab" data-protocol="modbus">🔧 Modbus</button>
+        <button type="button" class="protocol-tab" data-protocol="s7">🏭 S7</button>
+        <button type="button" class="protocol-tab" data-protocol="opcua">📡 OPC-UA</button>
+        <button type="button" class="protocol-tab" data-protocol="profinet">🔗 Profinet</button>
+        <button type="button" class="protocol-tab" data-protocol="ethernetip">🌐 EtherNet/IP</button>
+      </div>
+
+      <!-- Device List -->
+      <div id="presence-deviceList" class="device-list">
+        <div class="empty-state" id="presence-emptyState">
+          <div>🔍 Loading devices...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notifications -->
+  <div id="presence-toast" class="toast"></div>
+
+  </fieldset>
+</section>
+<section id="panel-signatures" class="passive-panel" role="tabpanel" aria-labelledby="tab-signatures" tabindex="0" hidden>
+<p class="module-note" role="status">This module is OFF or unavailable. Enable it in the controls above and Save to use this panel.</p>
+<fieldset class="panel-controls" disabled><h2>CVE Signatures · Detection Engine</h2>
+
+  <div class="container">
+
+    <!-- Navigation -->
+    
+
+    <div class="card">
+      <div id="signatures-status" class="status" style="display:none"></div>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="file-upload">
+          <input type="file" aria-label="Signature JSON file" id="signatures-fileInput" accept=".json" />
+          <button class="btn" onclick="PassivePanels.signatures.uploadSignatures()">📤 Upload File</button>
+        </div>
+        <button class="btn success" onclick="PassivePanels.signatures.downloadSignatures()">📥 Download JSON</button>
+        <button class="btn danger" onclick="PassivePanels.signatures.clearSignatures()">🗑️ Delete All</button>
+        <button class="btn ghost" onclick="PassivePanels.signatures.reloadSignatures()">🔄 Reload from NVS</button>
+      </div>
+
+      <!-- Stats -->
+      <div class="card">
+        <h2>📊 Signature Statistics</h2>
+        <div id="signatures-stats" class="loader">Loading statistics...</div>
+      </div>
+
+      <!-- Signature List -->
+      <div class="card">
+        <h2>📋 CVE Signature List</h2>
+        <div class="toolbar">
+          <button class="btn" onclick="PassivePanels.signatures.addNewSignature()">➕ Add New</button>
+          <button class="btn ghost" onclick="PassivePanels.signatures.toggleRawEditor()">🧾 Edit JSON</button>
+          <button class="btn success" id="signatures-saveRawBtn" style="display:none" onclick="PassivePanels.signatures.saveRawJSON()">💾 Save JSON</button>
+        </div>
+        <textarea aria-label="Signature JSON editor" id="signatures-jsonEditor" class="json-editor" style="display:none"></textarea>
+
+        <div id="signatures-signatureList" class="loader">Loading signatures...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal per editing signature -->
+  <div id="signatures-editModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="signatures-signature-dialog-title">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="signatures-signature-dialog-title">✏️ Edit Signature</h2>
+        <button aria-label="Close signature editor" class="modal-close" onclick="PassivePanels.signatures.closeEditModal()">&times;</button>
+      </div>
+      <div class="form-group">
+        <label for="signatures-editCVE">CVE ID:</label>
+        <input type="text" id="signatures-editCVE" placeholder="CVE-2024-12345">
+      </div>
+      <div class="form-group">
+        <label for="signatures-editName">Name (optional):</label>
+        <input type="text" id="signatures-editName" placeholder="Vulnerability name">
+      </div>
+      <div class="form-group">
+        <label for="signatures-editProtocol">Protocol:</label>
+        <select id="signatures-editProtocol">
+          <option value="Modbus TCP">Modbus TCP</option>
+          <option value="PROFINET">PROFINET</option>
+          <option value="S7comm/S7comm+">S7comm/S7comm+</option>
+          <option value="OPC UA">OPC UA</option>
+          <option value="EtherNet/IP">EtherNet/IP</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="signatures-editBytes">Bytes (hex):</label>
+        <textarea id="signatures-editBytes" rows="3" placeholder="01 02 03 FF ... for prefix match"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="signatures-editFunctionCode">Function Code (optional):</label>
+        <input type="text" id="signatures-editFunctionCode" placeholder="e.g. 0x05">
+      </div>
+      <div class="form-group">
+        <label for="signatures-editDescription">Description (optional):</label>
+        <textarea id="signatures-editDescription" rows="2"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="signatures-editReferences">References (optional, one per line):</label>
+        <textarea id="signatures-editReferences" rows="3" placeholder="https://cve.mitre.org/...&#10;https://nvd.nist.gov/..."></textarea>
+      </div>
+      <div class="toolbar">
+        <button class="btn success" onclick="PassivePanels.signatures.saveSignatureEdit()">💾 Save</button>
+        <button class="btn ghost" onclick="PassivePanels.signatures.closeEditModal()">❌ Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  </fieldset>
+</section>
+</main>
+</div>
+<script>
+/* Shared lifecycle and API queue. Panel modules below retain their own state. */
+const PassivePanels = {};
+const PassiveDetection = (() => {
+  const keys = ['ids_enabled', 'network_presence_enabled', 'signatures_enabled'];
+  const names = ['ids', 'presence', 'signatures'];
+  const roots = {
+    ids: document.getElementById('panel-ids'),
+    presence: document.getElementById('panel-network-presence'),
+    signatures: document.getElementById('panel-signatures')
+  };
+  const toggles = Object.fromEntries(keys.map(key => [key, document.getElementById(key)]));
+  const status = document.getElementById('passive-status');
+  const save = document.getElementById('passive-save');
+  const reload = document.getElementById('passive-reload');
+  let confirmed = null;
+  let runtime = {};
+  let active = null;
+  let busy = false;
+  const starts = {};
+  const disabledBefore = new WeakMap();
+  const originalFetch = window.fetch.bind(window);
+  let queue = Promise.resolve();
+
+  function api(url, options = {}) {
+    if (typeof url !== 'string' || !url.startsWith('/api/')) return originalFetch(url, options);
+    const headers = new Headers(options.headers || {});
+    const token = new URL(window.location.href).searchParams.get('sid');
+    if (token) headers.set('Authorization', 'Bearer ' + token);
+    const run = () => originalFetch(url, {...options, headers});
+    // Also serialize response bodies: the embedded server has a small socket budget.
+    const request = queue.then(async () => {
+      const response = await run();
+      const bytes = await response.arrayBuffer();
+      return new Response(bytes, {status: response.status, statusText: response.statusText, headers: response.headers});
+    });
+    queue = request.catch(() => {});
+    return request;
+  }
+
+  function scope(root) {
+    return {
+      getElementById: id => root.querySelector('[id="' + CSS.escape(id) + '"]'),
+      querySelector: selector => root.querySelector(selector),
+      querySelectorAll: selector => root.querySelectorAll(selector),
+      createElement: tag => document.createElement(tag),
+      get activeElement() { return document.activeElement; },
+      body: document.body
+    };
+  }
+
+  function message(text, error = false) {
+    status.textContent = text;
+    status.className = 'status ' + (error ? 'err' : 'ok');
+    status.setAttribute('role', error ? 'alert' : 'status');
+  }
+
+  function isEnabled(name) {
+    const key = keys[names.indexOf(name)];
+    return Boolean(confirmed && confirmed[key] && runtime[key] !== false);
+  }
+
+  function isActive(name) {
+    return active === name && isEnabled(name) && !document.hidden;
+  }
+
+  function updatePanel(name) {
+    const root = roots[name];
+    const off = !isEnabled(name);
+    root.classList.toggle('module-disabled', off);
+    root.setAttribute('aria-disabled', String(off));
+    const fieldset = root.querySelector('.panel-controls');
+    fieldset.disabled = off;
+    fieldset.inert = off;
+    root.querySelector('.module-note').hidden = !off;
+    root.querySelectorAll('button, input, select, textarea').forEach(control => {
+      if (off) {
+        if (!disabledBefore.has(control)) disabledBefore.set(control, control.disabled);
+        control.disabled = true;
+      } else if (disabledBefore.has(control)) {
+        control.disabled = disabledBefore.get(control);
+        disabledBefore.delete(control);
+      }
+    });
+    if (PassivePanels[name] && PassivePanels[name].activeChanged) {
+      PassivePanels[name].activeChanged(isActive(name));
+    }
+  }
+
+  function applyState(payload) {
+    if (!payload || keys.some(key => typeof payload[key] !== 'boolean')) {
+      throw new Error('Invalid passive detection configuration response');
+    }
+    confirmed = Object.fromEntries(keys.map(key => [key, payload[key]]));
+    runtime = payload.runtime || {};
+    keys.forEach(key => { toggles[key].checked = confirmed[key]; });
+    names.forEach(updatePanel);
+    return keys.filter(key => typeof runtime[key] === 'boolean' && runtime[key] !== confirmed[key]);
+  }
+
+  function setBusy(value) {
+    busy = value;
+    save.disabled = value || !confirmed;
+    reload.disabled = value;
+    keys.forEach(key => { toggles[key].disabled = value || !confirmed; });
+  }
+
+  async function loadConfig() {
+    if (busy) return;
+    setBusy(true);
+    message('Loading module configuration…');
+    try {
+      const response = await api('/api/passive-detection/config', {cache: 'no-store'});
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const mismatches = applyState(await response.json());
+      message(mismatches.length ? 'Runtime state differs from saved configuration: ' + mismatches.join(', ') : 'Module configuration loaded.', Boolean(mismatches.length));
+    } catch (error) {
+      message('Could not load module configuration: ' + error.message + '. Use Reload to retry.', true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveConfig() {
+    if (busy || !confirmed) return;
+    const desired = Object.fromEntries(keys.map(key => [key, toggles[key].checked]));
+    setBusy(true);
+    message('Saving module configuration…');
+    try {
+      const response = await api('/api/passive-detection/config', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(desired)
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.success === false) throw new Error(payload.message || payload.error || 'HTTP ' + response.status);
+      const mismatches = applyState(payload);
+      const rejected = keys.filter(key => confirmed[key] !== desired[key]);
+      if (mismatches.length || rejected.length) {
+        message('Configuration was not fully applied. Requested/runtime state differs for: ' + [...new Set([...mismatches, ...rejected])].join(', ') + '. Reload and retry.', true);
+      } else {
+        message('Module configuration saved.');
+      }
+    } catch (error) {
+      // Keep the last confirmed panel state and the user's unsaved checkbox choices.
+      message('Module configuration was not saved: ' + error.message + '. Reload to verify device state before retrying.', true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function selectedPanel() {
+    const url = new URL(window.location.href);
+    const requested = url.searchParams.get('panel');
+    if (names.includes(requested)) return requested;
+    return url.pathname === '/network-presence' ? 'presence' : url.pathname === '/signatures' ? 'signatures' : 'ids';
+  }
+
+  async function selectPanel(name, updateURL = false) {
+    if (!names.includes(name)) name = 'ids';
+    active = name;
+    names.forEach(item => {
+      roots[item].hidden = item !== name;
+      const tab = document.getElementById('tab-' + item);
+      tab.setAttribute('aria-selected', String(item === name));
+      tab.tabIndex = item === name ? 0 : -1;
+      updatePanel(item);
+    });
+    if (updateURL) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('panel', name);
+      if (url.href !== window.location.href) history.pushState({panel: name}, '', url);
+    }
+    if (!starts[name]) {
+      roots[name].setAttribute('aria-busy', 'true');
+      starts[name] = Promise.resolve().then(() => PassivePanels[name].init()).finally(() => {
+        roots[name].setAttribute('aria-busy', 'false');
+        updatePanel(name);
+      });
+    }
+    await starts[name];
+  }
+
+  function init() {
+    names.forEach(name => {
+      const tab = document.getElementById('tab-' + name);
+      tab.addEventListener('click', () => { selectPanel(name, true); });
+      tab.addEventListener('keydown', event => {
+        let next = names.indexOf(name);
+        if (event.key === 'ArrowRight') next = (next + 1) % names.length;
+        else if (event.key === 'ArrowLeft') next = (next + names.length - 1) % names.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = names.length - 1;
+        else return;
+        event.preventDefault();
+        document.getElementById('tab-' + names[next]).focus();
+        selectPanel(names[next], true);
+      });
+      // Dynamic rows inherit disabled semantics, including their .disabled property.
+      new MutationObserver(() => updatePanel(name)).observe(roots[name].querySelector('.panel-controls'), {childList: true, subtree: true});
+      updatePanel(name);
+    });
+    keys.forEach(key => toggles[key].addEventListener('change', () => message('Unsaved module changes. Select Save to apply.')));
+    save.addEventListener('click', saveConfig);
+    reload.addEventListener('click', loadConfig);
+    window.addEventListener('popstate', () => { selectPanel(selectedPanel()); });
+    document.addEventListener('visibilitychange', () => names.forEach(updatePanel));
+    window.addEventListener('beforeunload', event => {
+      if (confirmed && keys.some(key => toggles[key].checked !== confirmed[key])) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    });
+    const dashboard = document.getElementById('passive-dashboard');
+    const token = new URL(window.location.href).searchParams.get('sid');
+    if (token) dashboard.href = '/?sid=' + encodeURIComponent(token);
+    selectPanel(selectedPanel());
+    loadConfig();
+  }
+  return {api, scope, isActive, init};
+})();
+PassivePanels.ids = (() => {
+const root = document.getElementById('panel-ids');
+const documentScope = PassiveDetection.scope(root);
+return ((document, fetch) => {
+
+
+    // ---- Utilities ----
+    const $ = (sel, root=document) => sel.startsWith('#') ? root.getElementById(sel.slice(1)) : root.querySelector(sel);
+    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+    const MAC_RE = /^([0-9a-fA-F]{2}|\*)(:([0-9a-fA-F]{2}|\*)){5}$/;
+    const IPV4_RE = /^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)(?:\/(?:3[0-2]|[12]?\d))?$/;
+
+    let serverMode = 'auto'; // 'whitelist' | 'allowlist'
+    const API = {
+      whitelist: { get: '/api/whitelist', post: '/api/whitelist' },      // nuovo
+      allowlist: { get: '/api/allowlist', put:  '/api/allowlist' }       // legacy
+    };
+
+    let __BOOTSTRAP = null;
+    let bootstrapComplete = false;
+    let bootstrapAttempted = false;
+    async function ensureBootstrap(){
+      if (bootstrapComplete) return null;
+      if(__BOOTSTRAP) return __BOOTSTRAP;
+      if (bootstrapAttempted) return null;
+      bootstrapAttempted = true;
+      try{
+        const r = await fetch('/api/page/bootstrap?name=ids', { cache: 'no-store' });
+        if(!r.ok) return null;
+        __BOOTSTRAP = await r.json();
+        // If bootstrap worked, we assume new whitelist API is present.
+        serverMode = 'whitelist';
+        return __BOOTSTRAP;
+      }catch(_){
+        return null;
+      }
+    }
+
+    async function detectApi(){
+      if (serverMode !== 'auto') return serverMode;
+      try {
+        const r = await fetch(API.whitelist.get, { method: 'GET' });
+        if (r.ok) { serverMode = 'whitelist'; return serverMode; }
+      } catch(e){}
+      // fallback
+      serverMode = 'allowlist';
+      return serverMode;
+    }
+
+    function serverToModel(j){
+      // Supporta sia { ip_whitelist: {...} } (nuovo) sia {...} "piatto" (legacy)
+      const wl = (j && typeof j === 'object' && j.ip_whitelist) ? j.ip_whitelist : (j || {});
+      const out = {
+        enabled: wl.enabled ?? true,
+        action:  wl.action  ?? 'alert',
+        ip:      Array.isArray(wl.ip)  ? wl.ip  : [],
+        mac:     Array.isArray(wl.mac) ? wl.mac : [],
+        per_protocol: {}
+      };
+
+      // Case 1: structure similar to yours (per_protocol already present)
+      if (wl.per_protocol && typeof wl.per_protocol === 'object') {
+        for (const k of Object.keys(wl.per_protocol)) {
+          const p = wl.per_protocol[k] || {};
+          out.per_protocol[k] = {
+            ip:  Array.isArray(p.ip)  ? p.ip  : [],
+            mac: Array.isArray(p.mac) ? p.mac : []
+          };
+        }
+      }
+
+      // Caso 2: struttura "ids-protocols": [{protocol, allowed_IP_sources, allowed_MAC_sources, ...}]
+      if (Array.isArray(wl.protocols)) {
+        wl.protocols.forEach(p => {
+          const name = (p.protocol || '').toString();
+          if (!name) return;
+          out.per_protocol[name] = {
+            ip:  Array.isArray(p.allowed_IP_sources) ? p.allowed_IP_sources : [],
+            mac: Array.isArray(p.allowed_macs)    ? p.allowed_macs    : []
+          };
+          // Se serve, puoi mappare default_deny => action, ma lasciamo invariato
+        });
+      }
+
+      return normalizeModel(out);
+    }
+
+    // Converte model UI -> body server
+    function modelToServerBody(m){
+      const nm = normalizeModel(m);
+
+      if (serverMode === 'whitelist') {
+        // Nuovo endpoint: incapsula in { ip_whitelist: {...} }
+        // and, for compatibility, export both per_protocol and the derived "ids-protocols" list.
+        const protocols = Object.keys(nm.per_protocol||{}).map(name => ({
+          protocol: name,
+          enabled: true,
+          default_deny: (nm.action === 'drop'),        // euristica: se action=drop, default_deny=true
+          allowed_IP_sources: (nm.per_protocol[name]?.ip)  || [],
+          allowed_MAC_sources: (nm.per_protocol[name]?.mac) || []
+        }));
+
+        const body = {
+          ip_whitelist: {
+            enabled: nm.enabled,
+            action:  nm.action,       // se il firmware lo ignora, non fa danni
+            ip:      nm.ip,
+            mac:     nm.mac,
+            per_protocol: nm.per_protocol,
+            protocols
+          }
+        };
+        return JSON.stringify(body);
+      }
+
+      // Legacy endpoint: flat JSON as you already used
+      const body = {
+        enabled: nm.enabled,
+        action:  nm.action,
+        ip:      nm.ip,
+        mac:     nm.mac,
+        per_protocol: nm.per_protocol
+      };
+      return JSON.stringify(body);
+    }
+
+    function toCIDR(ip, mask){return ip+"/"+mask}
+    function ipToInt(ip){return ip.split('.').reduce((a,b)=> (a<<8) + (+b), 0)>>>0}
+    function cidrContains(cidr, ip){
+      const [net, pfx] = cidr.split('/');
+      const mask = pfx? (0xFFFFFFFF << (32-parseInt(pfx)))>>>0 : 0xFFFFFFFF;
+      return (ipToInt(ip) & mask) === (ipToInt(net) & mask);
+    }
+    function macMatch(pattern, mac){
+      const p = pattern.toUpperCase().split(':'), m = mac.toUpperCase().split(':');
+      if(p.length!==6 || m.length!==6) return false;
+      for(let i=0;i<6;i++){ if(p[i]!=="*" && p[i]!==m[i]) return false; }
+      return true;
+    }
+
+    function toast(msg){const t=$('#ids-toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 1600)}
+    // ---- Protocol catalog (id:name) ----
+    let protocolCatalog = {}; // es. {"1":"Modbus TCP","2":"S7 Communication",...}
+    function catalogNames(){ return Object.values(protocolCatalog||{}); }
+    function slug(n){ return (n||'').toString().trim(); }
+
+    async function loadProtocolCatalog(){
+      try{
+        const boot = await ensureBootstrap();
+        if (boot && boot.data && boot.data.protocols) {
+          protocolCatalog = boot.data.protocols;
+          renderProtoCatalogControls();
+          return;
+        }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(()=>controller.abort(), 1500);
+        const r = await fetch('/api/protocols', { signal: controller.signal, cache: 'no-store' });
+        clearTimeout(timeoutId);
+        if(!r.ok) throw new Error('GET /api/protocols failed');
+        const j = await r.json();
+        // Accetta sia {"1":"Modbus"} che [{id:1,name:"Modbus"}] o ["Modbus",...]
+        let map = {};
+        if(Array.isArray(j)){
+          j.forEach((it,idx)=>{
+            if(typeof it === 'string') map[String(idx+1)] = it;
+            else if(it && typeof it === 'object') map[String(it.id ?? idx+1)] = it.name ?? it.label ?? String(it.proto ?? idx+1);
+          });
+        } else if(j && typeof j === 'object') {
+          map = j;
+        }
+        if(!Object.keys(map).length) throw new Error('catalogo vuoto');
+        protocolCatalog = map;
+      }catch(e){
+        // Fallback predefinito (in linea con altre pagine):
+        protocolCatalog = {"1":"Modbus TCP","2":"S7 Communication","3":"PROFINET","4":"EtherNet/IP","5":"OPC UA"};
+      }
+      renderProtoCatalogControls();
+    }
+
+    function renderProtoCatalogControls(){
+      const sel = $('#ids-catalogProto');
+      if(!sel) return;
+      sel.innerHTML = '<option value="">Select protocol from catalog…</option>' +
+        Object.entries(protocolCatalog).map(([id,name])=>`<option value="${id}">${name}</option>`).join('');
+      // Suggerimenti rapidi: protocolli del catalogo non ancora presenti
+      const existing = new Set(Object.keys(model.per_protocol||{}).map(slug));
+      const suggestions = Object.values(protocolCatalog).filter(n=>!existing.has(slug(n)));
+      const cont = $('#ids-protoSuggestions');
+      cont.innerHTML = suggestions.length? '<label class="muted" style="font-size:12px">Suggestions:</label>' : '';
+      suggestions.slice(0,10).forEach(name=>{
+        const b = document.createElement('button');
+        b.className='btn small'; b.textContent = '+ '+name; b.onclick = ()=>{ addProtocolName(name); };
+        cont.appendChild(b);
+      });
+    }
+
+    function addProtocolFromCatalog(){
+      const sel = $('#ids-catalogProto');
+      const id = sel.value; if(!id) return toast('Select a protocol');
+      const name = protocolCatalog[id];
+      addProtocolName(name);
+    }
+
+    function addProtocolName(name){
+      const n = slug(name);
+      if(!n) return;
+      if(!model.per_protocol) model.per_protocol = {};
+      if(model.per_protocol[n]) { toast('Protocol already present'); return; }
+      model.per_protocol[n] = {ip:[], mac:[]};
+      markDirty(); render();
+    }
+
+    async function reloadProtocolCatalog(){ await loadProtocolCatalog(); }
+
+    // ---- Local model ----
+    let model = {
+      enabled:true,
+      action:"alert",
+      ip:[],
+      mac:[],
+      per_protocol:{}
+    };
+    let pristine = true;
+    function markDirty(d=true){pristine=!d; $('#ids-dirtyMark').innerHTML = d? '<span class="dirty-dot"></span> unsaved changes' : ''}
+    window.addEventListener('beforeunload', (e)=>{ if(!pristine){ e.preventDefault(); e.returnValue=''; } });
+
+    // ---- Rendering ----
+    function render(){
+      renderProtoCatalogControls();
+      $('#ids-enabled').checked = !!model.enabled;
+      $('#ids-action').value = model.action || 'alert';
+
+      renderList($('#ids-ipGlobalTbody'), model.ip, 'ip');
+      renderList($('#ids-macGlobalTbody'), model.mac, 'mac');
+
+      const protoRoot = $('#ids-protocols');
+      protoRoot.innerHTML = '';
+      const names = Object.keys(model.per_protocol||{});
+      if(!names.length){ protoRoot.innerHTML = '<p class="muted">No protocol configured.</p>'; return; }
+      names.sort().forEach(name=>{
+        const sec = document.createElement('section');
+        sec.className='card'; sec.style.marginTop='12px';
+        sec.innerHTML = `
+          <div class="row" style="justify-content:space-between">
+            <div class="tag">${name}</div>
+            <button class="btn small danger" data-del-proto="${name}">Remove protocol</button>
+          </div>
+          <div class="row">
+            <div style="flex:1">
+              <label>IP (${name})</label>
+              <table><thead><tr><th>Address</th><th class="right">Actions</th></tr></thead><tbody id="ids-ip-${name}"></tbody></table>
+              <button class="btn small" data-add-ip="${name}">+ Add IP/CIDR</button>
+            </div>
+            <div style="flex:1">
+              <label>MAC (${name})</label>
+              <table><thead><tr><th>MAC</th><th class="right">Actions</th></tr></thead><tbody id="ids-mac-${name}"></tbody></table>
+              <button class="btn small" data-add-mac="${name}">+ Add MAC</button>
+            </div>
+          </div>`;
+        protoRoot.appendChild(sec);
+        const p = model.per_protocol[name] || {ip:[],mac:[]};
+        renderList($('#ids-ip-'+name), p.ip||[], 'ip', name);
+        renderList($('#ids-mac-'+name), p.mac||[], 'mac', name);
+      });
+
+      // Wire buttons for dynamic sections
+      $$('#ids-protocols [data-add-ip]').forEach(b=> b.onclick = ()=>{ addRow('ids-ip-'+b.dataset.addIp, 'ip', b.dataset.addIp) });
+      $$('#ids-protocols [data-add-mac]').forEach(b=> b.onclick = ()=>{ addRow('ids-mac-'+b.dataset.addMac, 'mac', b.dataset.addMac) });
+      $$('#ids-protocols [data-del-proto]').forEach(b=> b.onclick = ()=>{ delete model.per_protocol[b.dataset.delProto]; markDirty(); render(); });
+    }
+
+    function renderList(tbody, arr, kind, proto){
+      tbody.innerHTML='';
+      arr.forEach((val, idx)=>{
+        const tr = document.createElement('tr');
+        const inputId = `ids-${proto||'global'}-${kind}-${idx}`;
+        tr.innerHTML = `
+          <td><input class="mono" type="text" id="${inputId}" value="${val}"/></td>
+          <td class="right">
+            <span class="muted mono" id="hint-${inputId}"></span>
+            <button class="btn small danger" data-remove="${idx}">Remove</button>
+          </td>`;
+        tbody.appendChild(tr);
+
+        const input = $('#'+inputId);
+        const hint = $('#hint-'+inputId);
+        input.oninput = ()=>{ arr[idx] = input.value.trim(); validateField(input, hint, kind); markDirty(); };
+        input.onblur = ()=>{ validateField(input, hint, kind, true) };
+        validateField(input, hint, kind);
+        tr.querySelector('[data-remove]').onclick = ()=>{ arr.splice(idx,1); markDirty(); render(); };
+      });
+    }
+
+    function addRow(tbodyId, kind, proto){
+      const arr = proto? (model.per_protocol[proto] ||= {ip:[],mac:[]})[kind] : model[kind];
+      arr.push(''); markDirty(); render();
+      const inputs = document.getElementById(tbodyId).querySelectorAll('input'); if(inputs.length) inputs[inputs.length-1].focus();
+    }
+
+    function addProtocol(){
+      const name = $('#ids-newProtoName').value.trim();
+      if(!name) return toast('Enter a protocol name');
+      addProtocolName(name);
+      $('#ids-newProtoName').value='';
+    }
+
+    function validateField(input, hint, kind, strict=false){
+      const v = input.value.trim();
+      if(!v){ hint.textContent = strict? 'required or remove' : ''; input.style.borderColor = '#394350'; return false; }
+      let ok=false;
+      if(kind==='ip') ok = IPV4_RE.test(v);
+      if(kind==='mac') ok = MAC_RE.test(v);
+      hint.textContent = ok? '' : (kind==='ip'? 'Invalid IPv4[/CIDR]' : 'Invalid MAC (* allowed per byte)');
+      input.style.borderColor = ok? '#2a333f' : '#6b2a2e';
+      return ok;
+    }
+
+    function normalizeModel(m){
+      const out = JSON.parse(JSON.stringify(m));
+      out.ip = (out.ip||[]).map(s=>s.trim()).filter(Boolean);
+      out.mac = (out.mac||[]).map(s=>s.trim().toUpperCase()).filter(Boolean);
+      if(out.per_protocol){
+        Object.keys(out.per_protocol).forEach(k=>{
+          const p = out.per_protocol[k]||{};
+          p.ip = (p.ip||[]).map(s=>s.trim()).filter(Boolean);
+          p.mac = (p.mac||[]).map(s=>s.trim().toUpperCase()).filter(Boolean);
+          out.per_protocol[k] = p;
+        });
+      }
+      out.action = out.action||'alert';
+      out.enabled = !!out.enabled;
+      return out;
+    }
+
+    function showJson(){
+      const j = JSON.stringify(normalizeModel(model), null, 2);
+      const w = window.open('', 'json', 'width=720,height=640');
+      w.document.write('<pre style="margin:0;padding:16px;background:#0b0f14;color:#e6edf3">'+
+                       j.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))+
+                       '</pre>');
+      w.document.title='allowlist.json';
+    }
+
+    // ---- Device I/O ----
+    async function reloadFromDevice(){
+      try{
+        const boot = await ensureBootstrap();
+        if (boot && boot.data && boot.data.config) {
+          const cfg = boot.data.config || {};
+          const ipwl = cfg.ip_whitelist || {};
+          model = serverToModel({ ip_whitelist: ipwl });
+          markDirty(false); render(); toast('Configuration loaded (bootstrap)');
+          return;
+        }
+        await detectApi();
+        const url = (serverMode === 'whitelist') ? API.whitelist.get : API.allowlist.get;
+        const r = await fetch(url);
+        if(!r.ok) throw new Error('GET failed');
+        const j = await r.json();
+        model = serverToModel(j);
+        markDirty(false); render(); toast('Configuration loaded');
+      }catch(e){
+        toast('Load error: '+e.message);
+      }
+    }
+
+    async function saveToDevice(){
+      // Validate prima di salvare
+      const fields = $$('#ids-ipGlobalTbody input, #ids-macGlobalTbody input, #ids-protocols input[type="text"]');
+      for(const el of fields){
+        const id = el.id;
+        const kind = id.includes('-ip-')? 'ip' : id.includes('-mac-')? 'mac' : null;
+        if(!kind) continue;
+        if(!validateField(el, $('#hint-'+id), kind, true)){
+          return toast('Fix the highlighted fields');
+        }
+      }
+
+      try{
+        await detectApi();
+        const body = modelToServerBody({
+          enabled: $('#ids-enabled').checked,
+          action:  $('#ids-action').value,
+          ip: model.ip, mac: model.mac, per_protocol: model.per_protocol
+        });
+
+        let ok=false;
+        if (serverMode === 'whitelist') {
+          const r = await fetch(API.whitelist.post, { method:'POST', headers:{'Content-Type':'application/json'}, body });
+          ok = r.ok;
+        } else {
+          const r = await fetch(API.allowlist.put,  { method:'PUT',  headers:{'Content-Type':'application/json'}, body });
+          ok = r.ok;
+        }
+
+        if(!ok) throw new Error('Save failed');
+        markDirty(false); toast('Saved');
+      }catch(e){
+        toast('Save error: '+e.message);
+      }
+    }
+
+
+    function revertLocal(){ reloadFromDevice(); }
+
+    async function refreshStats(){
+      try{
+        const boot = await ensureBootstrap();
+        if (boot && boot.data && boot.data.ids_stats) {
+          const j = boot.data.ids_stats;
+          $('#ids-statAllowed').textContent = j.allowed ?? j.packets_analyzed ?? '0';
+          $('#ids-statAlert').textContent   = j.alert   ?? j.alerts_generated ?? '0';
+          $('#ids-statDropped').textContent = j.dropped ?? '0';
+          return;
+        }
+
+        const r = await fetch('/api/ids/stats', { cache: 'no-store' });
+        if(!r.ok) throw new Error('GET stats failed');
+        const j = await r.json();
+        $('#ids-statAllowed').textContent = j.allowed ?? j.packets_analyzed ?? '0';
+        $('#ids-statAlert').textContent   = j.alert   ?? j.alerts_generated ?? '0';
+        $('#ids-statDropped').textContent = j.dropped ?? '0';
+      }catch(e){ toast('Stats error: '+e.message) }
+    }
+
+    // ---- Tester ----
+    function runTest(){
+      const v = $('#ids-testValue').value.trim();
+      const tag = $('#ids-testResult');
+      if(!v){ tag.className='pill muted'; tag.textContent='Enter a value'; return; }
+      const cfg = normalizeModel(model);
+      const verdict = simulate(cfg, v);
+      tag.className = 'pill ' + (verdict==='allow'?'ok':verdict==='alert'?'warn':'bad');
+      tag.textContent = verdict.toUpperCase();
+    }
+
+    function simulate(cfg, value){
+      const isMac = value.includes(':');
+      const isIp  = !isMac;
+      const inGlobal = () => {
+        if(isMac){ return (cfg.mac||[]).some(p=>macMatch(p, value)); }
+        if(isIp){ return (cfg.ip||[]).some(p=>cidrContains(p, value)); }
+        return false;
+      }
+      const inAnyProto = () => {
+        for(const k of Object.keys(cfg.per_protocol||{})){
+          const p = cfg.per_protocol[k]||{};
+          if(isMac && (p.mac||[]).some(x=>macMatch(x, value))) return true;
+          if(isIp  && (p.ip||[]).some(x=>cidrContains(x, value))) return true;
+        }
+        return false;
+      }
+      const allowed = inGlobal() || inAnyProto();
+      if(allowed) return 'allow';
+      if(cfg.action==='drop') return 'drop';
+      if(cfg.action==='alert') return 'alert';
+      return 'allow';
+    }
+
+    // ---- Wire global controls ----
+    $('#ids-enabled').onchange = ()=>{ model.enabled = $('#ids-enabled').checked; markDirty(); };
+    $('#ids-action').onchange  = ()=>{ model.action  = $('#ids-action').value;   markDirty(); };
+
+    // ---- IDS Modules Management ----
+    async function loadIDSModules() {
+      try {
+        const boot = await ensureBootstrap();
+        const config = boot?.data?.config || await (await fetch('/api/config')).json();
+          // Modbus
+          const modbusAlert = config?.ids?.protocol_specific?.modbus?.alert_broadcast_write;
+          document.getElementById('ids-modbusAlertBroadcast').checked = !!modbusAlert;
+
+          // S7
+          const s7Config = config?.ids?.protocol_specific?.s7 || {};
+          document.getElementById('ids-s7DetectNonTLS').checked = s7Config.detect_non_tls !== false;
+          document.getElementById('ids-s7DetectStop').checked = s7Config.detect_stop_commands !== false;
+          document.getElementById('ids-s7DetectRecon').checked = s7Config.detect_reconnaissance !== false;
+          document.getElementById('ids-s7DetectWriteStorm').checked = s7Config.detect_write_storms !== false;
+          document.getElementById('ids-s7DetectBruteForce').checked = s7Config.detect_brute_force !== false;
+          document.getElementById('ids-s7MaxWrites').value = s7Config.max_writes_per_60s || '50';
+          document.getElementById('ids-s7MaxReads').value = s7Config.max_reads_per_30s || '100';
+
+          // PROFINET
+          const pnConfig = config?.ids?.protocol_specific?.profinet || {};
+          document.getElementById('ids-pnDetectSpoofing').checked = pnConfig.detect_dcp_spoofing !== false;
+          document.getElementById('ids-pnDetectConfigChanges').checked = pnConfig.detect_config_changes !== false;
+          document.getElementById('ids-pnDetectTopology').checked = pnConfig.detect_topology_changes !== false;
+          document.getElementById('ids-pnDetectHelloFlood').checked = pnConfig.detect_hello_flooding !== false;
+          document.getElementById('ids-pnDetectXIDReuse').checked = pnConfig.detect_xid_reuse !== false;
+          document.getElementById('ids-pnMaxIdentify').value = pnConfig.max_identify_responses_per_30s || '20';
+          document.getElementById('ids-pnMaxConfig').value = pnConfig.max_config_changes_per_120s || '5';
+
+          // EtherNet/IP
+          const enipConfig = config?.ids?.protocol_specific?.ethernetip || {};
+          document.getElementById('ids-enipDetectSessionFlood').checked = enipConfig.detect_session_flooding !== false;
+          document.getElementById('ids-enipDetectRRDataStorm').checked = enipConfig.detect_rrdata_storm !== false;
+          document.getElementById('ids-enipDetectWriteStorm').checked = enipConfig.detect_write_storm !== false;
+          document.getElementById('ids-enipDetectRecon').checked = enipConfig.detect_reconnaissance !== false;
+          document.getElementById('ids-enipDetectErrors').checked = enipConfig.detect_error_patterns !== false;
+          document.getElementById('ids-enipMaxSessions').value = enipConfig.max_sessions_per_60s || '10';
+          document.getElementById('ids-enipMaxRRData').value = enipConfig.max_rrdata_per_30s || '50';
+          document.getElementById('ids-enipMaxWrites').value = enipConfig.max_writes_per_120s || '5';
+          document.getElementById('ids-enipMaxDiscovery').value = enipConfig.max_discovery_per_60s || '20';
+
+      } catch (e) { toast('Error loading protocol settings: ' + e.message); }
+    }
+
+    async function saveProtocolSettings() {
+      try {
+        const updates = {
+          // Modbus
+          'ids.protocol_specific.modbus.alert_broadcast_write': document.getElementById('ids-modbusAlertBroadcast').checked,
+
+          // S7
+          'ids.protocol_specific.s7.detect_non_tls': document.getElementById('ids-s7DetectNonTLS').checked,
+          'ids.protocol_specific.s7.detect_stop_commands': document.getElementById('ids-s7DetectStop').checked,
+          'ids.protocol_specific.s7.detect_reconnaissance': document.getElementById('ids-s7DetectRecon').checked,
+          'ids.protocol_specific.s7.detect_write_storms': document.getElementById('ids-s7DetectWriteStorm').checked,
+          'ids.protocol_specific.s7.detect_brute_force': document.getElementById('ids-s7DetectBruteForce').checked,
+          'ids.protocol_specific.s7.max_writes_per_60s': parseInt(document.getElementById('ids-s7MaxWrites').value) || 50,
+          'ids.protocol_specific.s7.max_reads_per_30s': parseInt(document.getElementById('ids-s7MaxReads').value) || 100,
+
+          // PROFINET
+          'ids.protocol_specific.profinet.detect_dcp_spoofing': document.getElementById('ids-pnDetectSpoofing').checked,
+          'ids.protocol_specific.profinet.detect_config_changes': document.getElementById('ids-pnDetectConfigChanges').checked,
+          'ids.protocol_specific.profinet.detect_topology_changes': document.getElementById('ids-pnDetectTopology').checked,
+          'ids.protocol_specific.profinet.detect_hello_flooding': document.getElementById('ids-pnDetectHelloFlood').checked,
+          'ids.protocol_specific.profinet.detect_xid_reuse': document.getElementById('ids-pnDetectXIDReuse').checked,
+          'ids.protocol_specific.profinet.max_identify_responses_per_30s': parseInt(document.getElementById('ids-pnMaxIdentify').value) || 20,
+          'ids.protocol_specific.profinet.max_config_changes_per_120s': parseInt(document.getElementById('ids-pnMaxConfig').value) || 5,
+
+          // EtherNet/IP
+          'ids.protocol_specific.ethernetip.detect_session_flooding': document.getElementById('ids-enipDetectSessionFlood').checked,
+          'ids.protocol_specific.ethernetip.detect_rrdata_storm': document.getElementById('ids-enipDetectRRDataStorm').checked,
+          'ids.protocol_specific.ethernetip.detect_write_storm': document.getElementById('ids-enipDetectWriteStorm').checked,
+          'ids.protocol_specific.ethernetip.detect_reconnaissance': document.getElementById('ids-enipDetectRecon').checked,
+          'ids.protocol_specific.ethernetip.detect_error_patterns': document.getElementById('ids-enipDetectErrors').checked,
+          'ids.protocol_specific.ethernetip.max_sessions_per_60s': parseInt(document.getElementById('ids-enipMaxSessions').value) || 10,
+          'ids.protocol_specific.ethernetip.max_rrdata_per_30s': parseInt(document.getElementById('ids-enipMaxRRData').value) || 50,
+          'ids.protocol_specific.ethernetip.max_writes_per_120s': parseInt(document.getElementById('ids-enipMaxWrites').value) || 5,
+          'ids.protocol_specific.ethernetip.max_discovery_per_60s': parseInt(document.getElementById('ids-enipMaxDiscovery').value) || 20
+        };
+
+        const response = await fetch('/api/config/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        });
+
+        if (response.ok) {
+          toast('Protocol settings updated');
+        } else {
+          throw new Error('Save error');
+        }
+      } catch (e) {
+        toast('Error saving protocol: ' + e.message);
+      }
+    }
+
+    // ---- Learned Devices Management ----
+    async function loadLearnedDevices() {
+      try {
+        const boot = await ensureBootstrap();
+        let data = null;
+        if (boot && boot.data && boot.data.presence_learned) {
+          data = boot.data.presence_learned;
+        } else {
+          const response = await fetch('/api/network-presence/learned', { cache: 'no-store' });
+          if (!response.ok) throw new Error('API unavailable');
+          data = await response.json();
+        }
+
+        const devices =
+          (data && Array.isArray(data.devices) ? data.devices : null) ||
+          (data && Array.isArray(data.learned_devices) ? data.learned_devices : []) ||
+          [];
+        const tbody = document.getElementById('ids-learnedDevicesBody');
+
+        tbody.innerHTML = '';
+
+        if (devices.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" class="muted">No recognized devices</td></tr>';
+          return;
+        }
+
+        devices.forEach((device, index) => {
+          const row = document.createElement('tr');
+          const address =
+            (device && typeof device.address === 'string' && device.address) ? device.address :
+            (device && typeof device.ip_address === 'string' && device.ip_address) ? device.ip_address :
+            (device && typeof device.mac_address === 'string' && device.mac_address) ? device.mac_address :
+            '';
+          const deviceType = address.includes(':') ? 'MAC' : 'IP';
+          const persistent = (device && device.is_persistent) ? 'P' : '-';
+
+          // Backward-compat for old UI template: normalize fields when backend uses learned_devices schema.
+          if (device && typeof device === 'object') {
+            if (!device.address) device.address = address;
+            if (device.trusted === undefined && device.is_persistent !== undefined) {
+              device.trusted = !!device.is_persistent;
+            }
+          }
+          const trustIndicator = device.trusted ? '🟢' : '🟡';
+
+          row.innerHTML = `
+            <td><code>${device.address}</code> ${trustIndicator}</td>
+            <td>${deviceType}</td>
+            <td>
+              <button class="btn small" onclick="PassivePanels.ids.makeDevicePermanent('${device.address}')" title="Make permanent">💾</button>
+              <button class="btn small danger" onclick="PassivePanels.ids.removeLearnedDevice('${device.address}')" title="Remove">🗑️</button>
+            </td>
+          `;
+          tbody.appendChild(row);
+        });
+
+      } catch (e) {
+        document.getElementById('ids-learnedDevicesBody').innerHTML =
+          '<tr><td colspan="3" class="muted">Load error: ' + e.message + '</td></tr>';
+      }
+    }
+
+    async function makeDevicePermanent(address) {
+      try {
+        const response = await fetch('/api/network-presence/make-permanent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: address })
+        });
+
+        if (response.ok) {
+          toast(`Device ${address} made permanent`);
+          // Add to allowlist automatically
+          const deviceType = address.includes(':') ? 'mac' : 'ip';
+          if (!model.per_protocol) model.per_protocol = {};
+          if (!model.per_protocol['learned']) model.per_protocol['learned'] = { ip: [], mac: [] };
+
+          if (!model.per_protocol['learned'][deviceType].includes(address)) {
+            model.per_protocol['learned'][deviceType].push(address);
+            markDirty();
+            render();
+          }
+
+          loadLearnedDevices();
+        } else {
+          throw new Error('API error');
+        }
+      } catch (e) {
+        toast('Error: ' + e.message);
+      }
+    }
+
+    async function removeLearnedDevice(address) {
+      if (!confirm(`Remove device ${address}?`)) return;
+
+      try {
+        const response = await fetch('/api/network-presence/remove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: address })
+        });
+
+        if (response.ok) {
+          toast(`Device ${address} removed`);
+          loadLearnedDevices();
+        } else {
+          throw new Error('API error');
+        }
+      } catch (e) {
+        toast('Error: ' + e.message);
+      }
+    }
+
+    async function clearAllLearned() {
+      if (!confirm('Remove all recognized devices?')) return;
+
+      try {
+        const response = await fetch('/api/network-presence/clear', {
+          method: 'POST'
+        });
+
+        if (response.ok) {
+          toast('All devices removed');
+          loadLearnedDevices();
+        } else {
+          throw new Error('API error');
+        }
+      } catch (e) {
+        toast('Error: ' + e.message);
+      }
+    }
+
+    // Initial load
+    async function init(){
+      try {
+        await ensureBootstrap();
+        const catalogPromise = loadProtocolCatalog();
+        await reloadFromDevice();
+        await loadIDSModules();
+        await loadLearnedDevices();
+        await refreshStats();
+        await catalogPromise;
+      } catch (err) {
+        console.error('IDS page initial load failed:', err);
+      }
+      bootstrapComplete = true;
+      __BOOTSTRAP = null;
+    }
+  
+return {saveProtocolSettings, addRow, addProtocolFromCatalog, addProtocol, reloadProtocolCatalog, reloadFromDevice, showJson, revertLocal, saveToDevice, runTest, refreshStats, loadLearnedDevices, clearAllLearned, makeDevicePermanent, removeLearnedDevice, init};
+})(documentScope, PassiveDetection.api);
+})();
+PassivePanels.presence = (() => {
+const root = document.getElementById('panel-network-presence');
+const documentScope = PassiveDetection.scope(root);
+return ((document, fetch) => {
+
+
+    let currentProtocol = 'all';
+    let autoRefreshTimer = null;
+    let devices = [];
+    let presenceClockMs = 0;
+    let config = {};
+
+    async function loadBootstrap() {
+      try {
+        const r = await fetch('/api/page/bootstrap?name=network_presence', { cache: 'no-store' });
+        if (!r.ok) return null;
+        return await r.json();
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function applyBootstrapConfig(cfg) {
+      config = cfg || {};
+      document.getElementById('presence-learning_mode').checked = config.learning_mode || false;
+      document.getElementById('presence-activation_delay').value = config.activation_delay_minutes || 10;
+      document.getElementById('presence-retention_days').value = config.retention_days || 30;
+      document.getElementById('presence-trust_threshold').value = config.trust_threshold_score || 0.75;
+      document.getElementById('presence-observation_hours').value = config.min_observation_period_hours || 24;
+    }
+
+    function applyBootstrapStats(data) {
+      const deviceArray = Array.isArray(data && data.devices) ? data.devices : [];
+      const totalDevices = (data && typeof data.total_devices === 'number') ? data.total_devices : deviceArray.length;
+
+      presenceClockMs = (data && typeof data.current_time_ms === 'number') ? data.current_time_ms : presenceClockMs;
+
+      let trustedDevices = 0;
+      let learnedDevices = 0;
+
+      deviceArray.forEach(device => {
+        const isLearned = isLearnedTrustDevice(device);
+        const isTrusted = isTrustedSenderDevice(device) || isTrustedWriterDevice(device);
+        if (isTrusted) trustedDevices++;
+        if (isLearned) learnedDevices++;
+      });
+
+      const untrustedDevices = Math.max(0, totalDevices - trustedDevices);
+
+      document.getElementById('presence-totalDevices').textContent = totalDevices;
+      document.getElementById('presence-trustedDevices').textContent = trustedDevices;
+      document.getElementById('presence-learnedDevices').textContent = learnedDevices;
+      document.getElementById('presence-untrustedDevices').textContent = untrustedDevices;
+    }
+
+    function isTrustedSenderDevice(device) {
+      return Boolean(device && (device.is_trusted_sender || device.is_whitelisted || device.is_learned_sender || device.is_persistent));
+    }
+
+    function isTrustedWriterDevice(device) {
+      return Boolean(device && (device.is_trusted_writer || device.is_whitelisted || device.is_learned_writer));
+    }
+
+    function isLearnedTrustDevice(device) {
+      return Boolean(device && (device.is_learned_sender || device.is_learned_writer));
+    }
+
+    function getDeviceOperationRole(device) {
+      if (!device || typeof device !== 'object') {
+        return { key: 'unknown', label: 'Unknown', css: 'role-unknown' };
+      }
+
+      const explicitRole = typeof device.operation_role === 'string' ? device.operation_role : '';
+      if (explicitRole === 'reader_writer') return { key: explicitRole, label: 'Reader+Writer', css: 'role-rw' };
+      if (explicitRole === 'reader_only') return { key: explicitRole, label: 'Reader', css: 'role-reader' };
+      if (explicitRole === 'writer_only') return { key: explicitRole, label: 'Writer', css: 'role-writer' };
+      if (explicitRole === 'sender_only') return { key: explicitRole, label: 'Sender only', css: 'role-sender' };
+
+      const readPackets = Number(device.total_read_packets || 0);
+      const writePackets = Number(device.total_write_packets || 0);
+      const totalPackets = Number(device.total_packets || 0);
+      if (writePackets > 0 && readPackets > 0) return { key: 'reader_writer', label: 'Reader+Writer', css: 'role-rw' };
+      if (writePackets > 0) return { key: 'writer_only', label: 'Writer', css: 'role-writer' };
+      if (readPackets > 0) return { key: 'reader_only', label: 'Reader', css: 'role-reader' };
+      if (totalPackets > 0) return { key: 'sender_only', label: 'Sender only', css: 'role-sender' };
+      return { key: 'unknown', label: 'Unknown', css: 'role-unknown' };
+    }
+
+    // Load initial data
+    async function init() {
+        try {
+          const boot = await loadBootstrap();
+          if (boot && boot.data) {
+            if (boot.data.presence_config) {
+              applyBootstrapConfig(boot.data.presence_config);
+            }
+            if (boot.data.presence_stats) {
+              applyBootstrapStats(boot.data.presence_stats);
+            }
+            if (boot.data.presence_devices) {
+              const d = boot.data.presence_devices;
+              presenceClockMs = typeof d.current_time_ms === 'number' ? d.current_time_ms : presenceClockMs;
+              devices = Array.isArray(d.devices) ? d.devices : [];
+              renderDevices();
+            }
+            setupProtocolTabs();
+            return;
+          }
+          await loadConfig();
+          await refreshStats();
+          await refreshDevices();
+          setupProtocolTabs();
+        } catch (err) {
+          console.error('Network presence initial load failed:', err);
+        }
+    }
+
+    function setupProtocolTabs() {
+      document.querySelectorAll('.protocol-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+          document.querySelectorAll('.protocol-tab').forEach(t => t.classList.remove('active'));
+          this.classList.add('active');
+          currentProtocol = this.dataset.protocol;
+          renderDevices();
+        });
+      });
+    }
+
+    async function loadConfig() {
+      try {
+        const response = await fetch('/api/ids/presence/config');
+        config = await response.json();
+        document.getElementById('presence-learning_mode').checked = config.learning_mode || false;
+        document.getElementById('presence-activation_delay').value = config.activation_delay_minutes || 10;
+        document.getElementById('presence-retention_days').value = config.retention_days || 30;
+        document.getElementById('presence-trust_threshold').value = config.trust_threshold_score || 0.75;
+        document.getElementById('presence-observation_hours').value = config.min_observation_period_hours || 24;
+      } catch (error) {
+        showToast('❌ Error loading configuration', 'error');
+      }
+    }
+
+    async function saveConfig() {
+      const newConfig = {
+        learning_mode: document.getElementById('presence-learning_mode').checked,
+        activation_delay_minutes: parseInt(document.getElementById('presence-activation_delay').value),
+        retention_days: parseInt(document.getElementById('presence-retention_days').value),
+        trust_threshold_score: parseFloat(document.getElementById('presence-trust_threshold').value),
+        min_observation_period_hours: parseInt(document.getElementById('presence-observation_hours').value)
+      };
+
+      try {
+        const response = await fetch('/api/ids/presence/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newConfig)
+        });
+
+        if (response.ok) {
+          showToast('✅ Configuration saved', 'success');
+          config = newConfig;
+        } else {
+          throw new Error('Save error');
+        }
+      } catch (error) {
+        showToast('❌ Error saving configuration', 'error');
+      }
+    }
+
+    async function refreshStats() {
+      try {
+        const response = await fetch('/api/ids/presence/stats');
+        const data = await response.json();
+
+        const deviceArray = Array.isArray(data.devices) ? data.devices : [];
+        const totalDevices = typeof data.total_devices === 'number' ? data.total_devices : deviceArray.length;
+
+        presenceClockMs = typeof data.current_time_ms === 'number' ? data.current_time_ms : presenceClockMs;
+
+        let trustedDevices = 0;
+        let learnedDevices = 0;
+
+        deviceArray.forEach(device => {
+          const isLearned = isLearnedTrustDevice(device);
+          const isTrusted = isTrustedSenderDevice(device) || isTrustedWriterDevice(device);
+
+          if (isTrusted) trustedDevices++;
+          if (isLearned) learnedDevices++;
+        });
+
+        const untrustedDevices = Math.max(0, totalDevices - trustedDevices);
+
+        document.getElementById('presence-totalDevices').textContent = totalDevices;
+        document.getElementById('presence-trustedDevices').textContent = trustedDevices;
+        document.getElementById('presence-learnedDevices').textContent = learnedDevices;
+        document.getElementById('presence-untrustedDevices').textContent = untrustedDevices;
+      } catch (error) {
+        showToast('Error loading statistics', 'error');
+      }
+    }
+
+    async function refreshDevices() {
+      const deviceListElement = document.getElementById('presence-deviceList');
+      deviceListElement.classList.add('loading');
+
+      try {
+        const response = await fetch('/api/ids/presence/devices');
+        const data = await response.json();
+
+        presenceClockMs = typeof data.current_time_ms === 'number' ? data.current_time_ms : presenceClockMs;
+        devices = Array.isArray(data.devices) ? data.devices : [];
+
+        renderDevices();
+      } catch (error) {
+        showToast('Error loading devices', 'error');
+      } finally {
+        deviceListElement.classList.remove('loading');
+      }
+    }
+
+    function normalizeProtocolKey(label) {
+      return typeof label === 'string'
+        ? label.toLowerCase().replace(/[^a-z0-9]/g, '')
+        : '';
+    }
+
+    function extractProtocolLabels(device) {
+      if (!device || typeof device !== 'object') return [];
+      const labels = [];
+
+      if (Array.isArray(device.protocols)) {
+        device.protocols.forEach(proto => {
+          if (typeof proto === 'string' && proto) {
+            labels.push(proto);
+          } else if (proto && typeof proto === 'object' && typeof proto.name === 'string') {
+            labels.push(proto.name);
+          }
+        });
+      }
+
+      if (device.protocol_counts && typeof device.protocol_counts === 'object') {
+        Object.keys(device.protocol_counts).forEach(key => {
+          if (key) labels.push(key);
+        });
+      }
+
+      if (typeof device.protocol === 'string' && device.protocol) {
+        labels.push(device.protocol);
+      }
+
+      if (typeof device.primary_protocol === 'string' && device.primary_protocol) {
+        labels.push(device.primary_protocol);
+      }
+
+      return labels;
+    }
+
+    function getVisibleProtocolLabels(device) {
+      const labels = extractProtocolLabels(device);
+      const visible = [];
+      const seen = new Set();
+
+      labels.forEach(label => {
+        const normalized = normalizeProtocolKey(label);
+        if (!normalized || normalized === 'unknown' || seen.has(normalized)) return;
+        seen.add(normalized);
+        visible.push(label);
+      });
+
+      if (visible.length > 0) return visible;
+      return labels.some(label => normalizeProtocolKey(label) === 'unknown') ? ['Unknown'] : [];
+    }
+
+    function deviceMatchesProtocol(device, selectedProtocol) {
+      if (selectedProtocol === 'all') return true;
+      const labels = extractProtocolLabels(device);
+      if (labels.length === 0) return false;
+      const normalizedSelected = normalizeProtocolKey(selectedProtocol);
+      return labels.some(label => normalizeProtocolKey(label).includes(normalizedSelected));
+    }
+
+    function renderDevices() {
+      const deviceListElement = document.getElementById('presence-deviceList');
+      const deviceArray = Array.isArray(devices) ? devices : [];
+      const filteredDevices = deviceArray.filter(device => deviceMatchesProtocol(device, currentProtocol));
+
+      if (filteredDevices.length === 0) {
+        deviceListElement.innerHTML = '<div class="empty-state">No devices found for this protocol</div>';
+        return;
+      }
+
+      filteredDevices.sort((a, b) => (b.presence_score || 0) - (a.presence_score || 0));
+
+      let html = '';
+      filteredDevices.forEach(device => {
+        const ip = device.ip_address || device.ip || '';
+        const mac = device.mac_address || device.mac || 'N/A';
+        const isLearned = isLearnedTrustDevice(device);
+        const trustedSender = isTrustedSenderDevice(device);
+        const trustedWriter = isTrustedWriterDevice(device);
+        const isTrusted = trustedSender || trustedWriter;
+        const role = getDeviceOperationRole(device);
+        const visibleProtocols = getVisibleProtocolLabels(device);
+        const protocolTags = (visibleProtocols.length > 0 ? visibleProtocols : ['N/A'])
+          .map(protocol => `<div class="tag">${protocol}</div>`)
+          .join('');
+        const displayIp = ip || 'N/A';
+        const scorePercent = Math.round((device.presence_score || 0) * 100);
+        const scoreColor = scorePercent >= 75 ? 'var(--ok)' : scorePercent >= 50 ? 'var(--warn)' : 'var(--danger)';
+
+        let trustTagClass = 'untrusted';
+        let trustText = 'Not trusted';
+        if (isTrusted) {
+          trustTagClass = 'trusted';
+          trustText = trustedSender && trustedWriter ? 'Trusted S+W' : (trustedWriter ? 'Trusted Writer' : 'Trusted Sender');
+          if (device.is_whitelisted) {
+            trustText = 'Whitelist';
+          } else if (isLearned) {
+            trustTagClass = 'learned';
+            trustText = trustedSender && trustedWriter ? 'Learned S+W' : (trustedWriter ? 'Learned Writer' : 'Learned Sender');
+          }
+        }
+
+        const canManageTrust = Boolean(ip);
+        const promoteLabel = trustedSender && !trustedWriter ? 'Trust writer' : 'Promote';
+        const promoteTitle = trustedSender && !trustedWriter ? 'Promote also as trusted writer' : 'Promote to trusted';
+
+        html += `
+          <div class="device-row">
+            <div>
+              <div class="device-ip">${displayIp}</div>
+              <div class="device-mac">${mac}</div>
+            </div>
+            <div>
+              <div class="tag ${trustTagClass}">${trustText}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">Sender:${trustedSender ? 'Y' : 'N'} | Writer:${trustedWriter ? 'Y' : 'N'}</div>
+            </div>
+            <div>
+              <div class="score-bar">
+                <div class="score-fill" style="width:${scorePercent}%;background:${scoreColor}"></div>
+              </div>
+              <div style="font-size:11px;color:var(--muted);text-align:center">${scorePercent}%</div>
+            </div>
+            <div class="mono" style="font-size:12px">
+              <div>${device.total_packets || 0} pkt</div>
+              <div style="color:var(--muted)">${formatTime(device.last_seen_ms)}</div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              ${protocolTags}
+              <div class="tag ${role.css}">${role.label}</div>
+            </div>
+            <div class="device-actions">
+              ${canManageTrust
+                ? (!isTrusted
+                  ? `<button class="btn success small" onclick="PassivePanels.presence.promoteDevice('${ip}')" title="${promoteTitle}">${promoteLabel}</button>`
+                  : (trustedSender && !trustedWriter && !device.is_whitelisted
+                    ? `<button class="btn success small" onclick="PassivePanels.presence.promoteDevice('${ip}')" title="${promoteTitle}">${promoteLabel}</button><button class="btn danger small" onclick="PassivePanels.presence.demoteDevice('${ip}')" title="Remove from trust">Remove</button>`
+                    : `<button class="btn danger small" onclick="PassivePanels.presence.demoteDevice('${ip}')" title="Remove from trust">Remove</button>`))
+                : '<span class="muted">IP missing</span>'}
+            </div>
+          </div>
+        `;
+      });
+
+      deviceListElement.innerHTML = html;
+    }
+
+    async function promoteDevice(ip) {
+      if (!ip) {
+        showToast('Invalid IP for promotion', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/ids/presence/promote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ip })
+        });
+
+        if (response.ok) {
+          showToast(`Device ${ip} promoted to trusted`, 'success');
+          await refreshDevices();
+          await refreshStats();
+        } else {
+          throw new Error('Promotion error');
+        }
+      } catch (error) {
+        showToast('Error promoting device', 'error');
+      }
+    }
+
+    async function demoteDevice(ip) {
+      if (!ip) {
+        showToast('Invalid IP for trust removal', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/ids/presence/demote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ip })
+        });
+
+        if (response.ok) {
+          showToast(`Device ${ip} removed from trusted`, 'success');
+          await refreshDevices();
+          await refreshStats();
+        } else {
+          throw new Error('Demotion error');
+        }
+      } catch (error) {
+        showToast('Error demoting device', 'error');
+      }
+    }
+
+    async function clearAllLearning() {
+      if (!confirm('⚠️ Are you sure you want to delete all learned devices? This action cannot be undone.')) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/ids/presence/clear', { method: 'POST' });
+        
+        if (response.ok) {
+          showToast('🗑️ All learned devices have been deleted', 'success');
+          await refreshDevices();
+          await refreshStats();
+        } else {
+          throw new Error('Reset error');
+        }
+      } catch (error) {
+        showToast('❌ Error resetting learning data', 'error');
+      }
+    }
+
+    let autoRefreshRequested = false;
+    let autoRefreshBusy = false;
+    function syncAutoRefresh() {
+      const shouldPoll = autoRefreshRequested && PassiveDetection.isActive('presence');
+      if (shouldPoll && !autoRefreshTimer) {
+        autoRefreshTimer = setInterval(async () => {
+          if (autoRefreshBusy || !PassiveDetection.isActive('presence')) return;
+          autoRefreshBusy = true;
+          try {
+            await refreshStats();
+            if (PassiveDetection.isActive('presence')) await refreshDevices();
+          } finally {
+            autoRefreshBusy = false;
+          }
+        }, 30000);
+      } else if (!shouldPoll && autoRefreshTimer) {
+        clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+      }
+    }
+    function toggleAutoRefresh() {
+      autoRefreshRequested = !autoRefreshRequested;
+      const btn = document.getElementById('presence-autoRefreshBtn');
+      btn.textContent = autoRefreshRequested ? '⏸️ Stop Auto' : '⏱️ Auto Refresh';
+      btn.classList.toggle('primary', autoRefreshRequested);
+      syncAutoRefresh();
+    }
+
+    function exportData() {
+      const dataStr = JSON.stringify({
+        config,
+        devices,
+        presence_clock_ms: presenceClockMs,
+        timestamp: new Date().toISOString()
+      }, null, 2);
+      
+      const blob = new Blob([dataStr], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `network-presence-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      showToast('Data exported', 'success');
+    }
+
+    function formatTime(timestamp) {
+      if (typeof timestamp !== 'number' || timestamp <= 0) return 'N/A';
+      const baseClock = presenceClockMs > 0 ? presenceClockMs : Date.now();
+      const diff = Math.max(0, baseClock - timestamp);
+      const seconds = Math.floor(diff / 1000);
+
+      if (seconds < 60) return seconds === 0 ? 'now' : `${seconds}s ago`;
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `${minutes}m ago`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.floor(hours / 24);
+      return `${days}d ago`;
+    }
+
+    function showToast(message, type = 'info') {
+      const toast = document.getElementById('presence-toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', function() {
+      if (autoRefreshTimer) {
+        clearInterval(autoRefreshTimer);
+      }
+    });
+  
+return {saveConfig, clearAllLearning, refreshStats, exportData, refreshDevices, toggleAutoRefresh, promoteDevice, demoteDevice, init, activeChanged: syncAutoRefresh};
+})(documentScope, PassiveDetection.api);
+})();
+PassivePanels.signatures = (() => {
+const root = document.getElementById('panel-signatures');
+const documentScope = PassiveDetection.scope(root);
+return ((document, fetch) => {
+
+
+let signatures = {};
+let editMode = false;
+let currentEditIndex = -1;
+let editorTrigger = null;
+
+// Initialize page
+async function init() {
+    try {
+      let boot = null;
+      try {
+        const r = await fetch('/api/page/bootstrap?name=signatures', { cache: 'no-store' });
+        if (r && r.ok) boot = await r.json();
+      } catch (e) { boot = null; }
+
+      if (boot && boot.data) {
+        await loadStats(boot.data.stats || null);
+        await loadSignatures(boot.data.list || null);
+      } else {
+        await loadStats();
+        await loadSignatures();
+      }
+    } catch (err) {
+      console.error('Signatures page initial load failed:', err);
+    }
+}
+
+// Load signature statistics
+async function loadStats(override) {
+  try {
+    const stats = override || await (async () => {
+      const response = await fetch('/api/signatures/stats', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Failed to load stats');
+      return await response.json();
+    })();
+    const statsDiv = document.getElementById('signatures-stats');
+    statsDiv.classList.remove('loader');
+
+    let html = `<div class="pill">📊 Total: ${stats.total}</div>`;
+
+    if (stats.by_protocol) {
+      html += '<div style="margin-top:.5rem">';
+      for (const [protocol, count] of Object.entries(stats.by_protocol)) {
+        html += `<div class="pill" style="margin-right:.5rem">${protocol}: ${count}</div>`;
+      }
+      html += '</div>';
+    }
+
+    statsDiv.innerHTML = html;
+  } catch (error) {
+    showStatus('Error loading statistics: ' + error.message, 'err');
+  }
+}
+
+function toggleRawEditor() {
+  const ta = document.getElementById('signatures-jsonEditor');
+  const saveBtn = document.getElementById('signatures-saveRawBtn');
+  const visible = ta.style.display !== 'none';
+  if (!visible) {
+    ta.value = JSON.stringify(signatures, null, 2);
+  }
+  ta.style.display = visible ? 'none' : 'block';
+  saveBtn.style.display = visible ? 'none' : 'inline-block';
+}
+
+async function saveRawJSON() {
+  const ta = document.getElementById('signatures-jsonEditor');
+  let parsed;
+  try {
+    parsed = JSON.parse(ta.value);
+  } catch (e) {
+    showStatus('Invalid JSON: ' + e.message, 'err');
+    return;
+  }
+  try {
+    const response = await fetch('/api/signatures/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ signatures: parsed })
+    });
+    const result = await response.json();
+    if (response.ok) {
+      signatures = parsed;
+      showStatus('✅ JSON saved', 'ok');
+      await reloadSignatures();
+      await loadStats();
+      renderSignatures();
+    } else {
+      showStatus(`❌ ${result.message}`, 'err');
+    }
+  } catch (e) {
+    showStatus('Error saving JSON: ' + e.message, 'err');
+  }
+}
+
+function renderExtraFields(sig) {
+  let html = '';
+
+  // Display Name if present
+  if (sig.Name) {
+    html += `<div><strong>Name:</strong> ${esc(sig.Name)}</div>`;
+  }
+
+  // Display FunctionCode if present from Packet
+  if (sig.Packet?.FunctionCode) {
+    html += `<div><strong>Function Code:</strong> ${esc(sig.Packet.FunctionCode)}</div>`;
+  }
+
+  // Display References if present
+  if (sig.References && Array.isArray(sig.References) && sig.References.length > 0) {
+    html += `<div><strong>References:</strong></div>`;
+    sig.References.forEach(ref => {
+      html += `<div style="margin-left:8px;">• <a href="${esc(ref)}" target="_blank" rel="noopener noreferrer">${esc(ref)}</a></div>`;
+    });
+  }
+
+  // Display other unknown fields (backward compatibility)
+  const known = new Set(['CVE','Name','Description','Packet','References']);
+  for (const k of Object.keys(sig)) {
+    if (!known.has(k)) {
+      const v = typeof sig[k] === 'object' ? JSON.stringify(sig[k]) : String(sig[k]);
+      html += `<div><strong>${esc(k)}:</strong> ${esc(v)}</div>`;
+    }
+  }
+
+  // Packet extra fields (excluding Bytes, FunctionCode already shown)
+  if (sig.Packet && typeof sig.Packet === 'object') {
+    const pk = {...sig.Packet};
+    delete pk.Bytes;
+    delete pk.FunctionCode;
+    delete pk.Description; // Description is shown at top level
+    const keys = Object.keys(pk);
+    if (keys.length) {
+      html += `<div><strong>Packet (extra):</strong></div>`;
+      keys.forEach(k => {
+        const v = typeof pk[k] === 'object' ? JSON.stringify(pk[k]) : String(pk[k]);
+        html += `<div style="margin-left:8px;"><strong>${esc(k)}:</strong> ${esc(v)}</div>`;
+      });
+    }
+  }
+  return html;
+}
+
+// Load signatures from API
+async function loadSignatures(override) {
+  try {
+    signatures = override || await (async () => {
+      const response = await fetch('/api/signatures/list', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Failed to load signatures');
+      return await response.json();
+    })();
+    renderSignatures();
+  } catch (error) {
+    showStatus('Error loading signatures: ' + error.message, 'err');
+    document.getElementById('signatures-signatureList').innerHTML =
+      '<div class="status err">❌ Unable to load signatures</div>';
+  }
+}
+
+function esc(s) {
+  return String(s ?? '')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'",'&#39;');
+}
+
+// Render signatures list
+function renderSignatures() {
+  const listDiv = document.getElementById('signatures-signatureList');
+  listDiv.classList.remove('loader');
+
+  if (!signatures || Object.keys(signatures).length === 0) {
+    listDiv.innerHTML = '<div class="status warn">⚠️ No signatures loaded</div>';
+    return;
+  }
+
+  const parts = [];
+
+  for (const [protocol, protocolSigs] of Object.entries(signatures)) {
+    const vulns = protocolSigs?.Vulnerabilities;
+    if (!Array.isArray(vulns)) continue;
+
+    parts.push(`<h3>${esc(protocol)}</h3>`);
+
+    vulns.forEach((sig, index) => {
+      const globalIndex = `${protocol}_${index}`;
+      const safeId = 'sig_' + globalIndex.replace(/[^\w\-:.]+/g, '-');
+      // prefer Packet.Bytes; fall back to flat Bytes for compatibility
+      const bytes = (sig?.Packet?.Bytes ?? sig?.Bytes ?? 'N/A');
+
+      parts.push(`
+        <div class="signature-item" id="${safeId}">
+          <div class="signature-header">
+            <div>
+              <span class="signature-cve">${esc(sig?.CVE ?? 'N/A')}</span>
+              <span class="signature-protocol">${esc(protocol)}</span>
+            </div>
+            <div class="table-actions">
+              <button class="btn small" onclick="PassivePanels.signatures.editSignature('${esc(globalIndex)}')">✏️ Edit</button>
+              <button class="btn small danger" onclick="PassivePanels.signatures.deleteSignature('${esc(globalIndex)}')">🗑️</button>
+            </div>
+          </div>
+          <div class="signature-details">
+            ${sig?.Description ? `<div><strong>Description:</strong> ${esc(sig.Description)}</div>` : ''}
+            <div><strong>Bytes:</strong></div>
+            <div class="signature-bytes">${esc(bytes)}</div>
+            ${renderExtraFields(sig)}
+          </div>
+        </div>
+      `);
+    });
+  }
+
+  listDiv.innerHTML = parts.join('');
+}
+
+// Upload signatures file
+async function uploadSignatures() {
+  const fileInput = document.getElementById('signatures-fileInput');
+  const file = fileInput.files[0];
+  if (!file) { showStatus('Select a JSON file', 'err'); return; }
+
+  const text = await file.text();
+  try {
+    // Validiamo che sia JSON
+    JSON.parse(text);
+  } catch {
+    showStatus('The file is not valid JSON', 'err');
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/signatures/upload', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: text
+    });
+    const result = await response.json();
+    if (response.ok) {
+      showStatus(`✅ ${result.message}. Signatures added: ${result.signatures_added}`, 'ok');
+      fileInput.value = '';
+      await reloadSignatures();
+      await loadStats();
+    } else {
+      showStatus(`❌ ${result.message}`, 'err');
+    }
+  } catch (e) {
+    showStatus('Upload error: ' + e.message, 'err');
+  }
+}
+
+
+// Download signatures
+async function downloadSignatures() {
+  try {
+    const response = await fetch('/api/signatures/download');
+    if (!response.ok) throw new Error('Download failed');
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'cve_signatures.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    showStatus('✅ File downloaded successfully', 'ok');
+  } catch (error) {
+    showStatus('Download error: ' + error.message, 'err');
+  }
+}
+
+// Clear all signatures
+async function clearSignatures() {
+  if (!confirm('⚠️ Are you sure you want to delete ALL signatures?')) return;
+
+  try {
+    const response = await fetch('/api/signatures/clear', { method: 'POST' });
+    const result = await response.json();
+
+    if (response.ok) {
+      showStatus('✅ Signatures deleted successfully', 'ok');
+      loadStats();
+      loadSignatures();
+    } else {
+      showStatus(`❌ ${result.message}`, 'err');
+    }
+  } catch (error) {
+    showStatus('Deletion error: ' + error.message, 'err');
+  }
+}
+
+// Reload signatures from NVS
+async function reloadSignatures() {
+  try {
+    const response = await fetch('/api/signatures/reload', { method: 'POST' });
+    const result = await response.json();
+
+    if (response.ok) {
+      showStatus(`✅ ${result.message}. Signatures loaded: ${result.signatures_loaded}`, 'ok');
+      loadStats();
+      loadSignatures();
+    } else {
+      showStatus(`❌ ${result.message}`, 'err');
+    }
+  } catch (error) {
+    showStatus('Reload error: ' + error.message, 'err');
+  }
+}
+
+// Edit signature
+function editSignature(globalIndex) {
+  const [protocol, index] = globalIndex.split('_');
+  const sig = signatures[protocol]?.Vulnerabilities?.[parseInt(index)];
+
+  if (!sig) return;
+
+  editorTrigger = document.activeElement;
+  currentEditIndex = globalIndex;
+  document.getElementById('signatures-editCVE').value = sig.CVE || '';
+  document.getElementById('signatures-editName').value = sig.Name || '';
+  document.getElementById('signatures-editProtocol').value = protocol;
+  document.getElementById('signatures-editBytes').value = (sig.Packet?.Bytes ?? sig.Bytes ?? '');
+  document.getElementById('signatures-editFunctionCode').value = sig.Packet?.FunctionCode || '';
+  document.getElementById('signatures-editDescription').value = (sig.Packet?.Description ?? sig.Description ?? '');
+
+  // Handle references array
+  const refs = sig.References || [];
+  document.getElementById('signatures-editReferences').value = refs.join('\n');
+
+  document.getElementById('signatures-editModal').classList.add('show');
+  document.getElementById('signatures-editCVE').focus();
+}
+
+// Add new signature
+function addNewSignature() {
+  editorTrigger = document.activeElement;
+  currentEditIndex = 'new';
+  document.getElementById('signatures-editCVE').value = '';
+  document.getElementById('signatures-editName').value = '';
+  document.getElementById('signatures-editProtocol').value = 'Modbus TCP';
+  document.getElementById('signatures-editBytes').value = '';
+  document.getElementById('signatures-editFunctionCode').value = '';
+  document.getElementById('signatures-editDescription').value = '';
+  document.getElementById('signatures-editReferences').value = '';
+
+  document.getElementById('signatures-editModal').classList.add('show');
+  document.getElementById('signatures-editCVE').focus();
+}
+
+// Save signature edit
+async function saveSignatureEdit() {
+  const cve = document.getElementById('signatures-editCVE').value.trim();
+  const name = document.getElementById('signatures-editName').value.trim();
+  const protocolSel = document.getElementById('signatures-editProtocol').value;  // es. "Modbus TCP"
+  const bytes = document.getElementById('signatures-editBytes').value.trim();
+  const functionCode = document.getElementById('signatures-editFunctionCode').value.trim();
+  const description = document.getElementById('signatures-editDescription').value.trim();
+  const referencesText = document.getElementById('signatures-editReferences').value.trim();
+
+  if (!cve || !bytes) { showStatus('CVE and Bytes are required', 'err'); return; }
+
+  // Parse references (one per line)
+  const references = referencesText
+    .split('\n')
+    .map(r => r.trim())
+    .filter(r => r.length > 0);
+
+  // Assicurati che il protocollo esista
+  if (!signatures[protocolSel]) {
+    signatures[protocolSel] = { Vulnerabilities: [] };
+  }
+
+  // Build signature object with new fields
+  const sigObject = {
+    CVE: cve,
+    Packet: {
+      Bytes: bytes
+    }
+  };
+
+  // Add optional fields only if present
+  if (name) sigObject.Name = name;
+  if (functionCode) sigObject.Packet.FunctionCode = functionCode;
+  if (description) sigObject.Packet.Description = description;
+  if (references.length > 0) sigObject.References = references;
+
+  if (currentEditIndex === 'new') {
+    // add new signature
+    signatures[protocolSel].Vulnerabilities.push(sigObject);
+  } else {
+    // edit esistente: "Modbus TCP_3"
+    const [oldProto, idxStr] = String(currentEditIndex).split('_');
+    const idx = parseInt(idxStr, 10);
+
+    const oldArr = signatures[oldProto]?.Vulnerabilities || [];
+    const existing = oldArr[idx];
+    if (!existing) { showStatus('Signature not found', 'err'); return; }
+
+    if (protocolSel === oldProto) {
+      // update in-place
+      oldArr[idx] = sigObject;
+    } else {
+      // spostamento tra protocolli
+      oldArr.splice(idx, 1);
+      signatures[protocolSel].Vulnerabilities.push(sigObject);
+      // se il vecchio protocollo resta vuoto puoi decidere se rimuoverlo
+      if (oldArr.length === 0) {
+        // opzionale: delete signatures[oldProto];
+      }
+    }
+  }
+
+  // Persisti tutto
+  try {
+    const response = await fetch('/api/signatures/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ signatures })
+    });
+    const result = await response.json();
+    if (response.ok) {
+      showStatus('✅ Signature saved successfully', 'ok');
+      closeEditModal();
+      await reloadSignatures();
+      await loadStats();
+    } else {
+      showStatus(`❌ ${result.message}`, 'err');
+    }
+  } catch (e) {
+    showStatus('Save error: ' + e.message, 'err');
+  }
+}
+
+
+// Delete signature
+async function deleteSignature(globalIndex) {
+  if (!confirm('Are you sure you want to delete this signature?')) return;
+  const [protocol, idxStr] = String(globalIndex).split('_');
+  const idx = parseInt(idxStr, 10);
+  const arr = signatures[protocol]?.Vulnerabilities || [];
+  if (arr[idx] == null) { showStatus('Signature not found', 'err'); return; }
+  arr.splice(idx, 1);
+
+  try {
+    const response = await fetch('/api/signatures/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ signatures })
+    });
+    const result = await response.json();
+    if (response.ok) {
+      showStatus('✅ Signature deleted', 'ok');
+      await reloadSignatures();
+      await loadStats();
+    } else {
+      showStatus(`❌ ${result.message}`, 'err');
+    }
+  } catch (e) {
+    showStatus('Deletion error: ' + e.message, 'err');
+  }
+}
+
+
+// Close edit modal
+function closeEditModal() {
+  document.getElementById('signatures-editModal').classList.remove('show');
+  currentEditIndex = -1;
+  if (editorTrigger && editorTrigger.isConnected && !editorTrigger.disabled) editorTrigger.focus();
+}
+
+// Toggle edit mode
+function toggleEditMode() {
+  editMode = !editMode;
+  document.getElementById('saveBtn').style.display = editMode ? 'inline-block' : 'none';
+  // Add visual feedback for edit mode
+}
+
+// Save all changes
+async function saveAllChanges() {
+  showStatus('✅ Changes saved', 'ok');
+  editMode = false;
+  document.getElementById('saveBtn').style.display = 'none';
+}
+
+// Show status message
+function showStatus(message, type = 'ok') {
+  const statusDiv = document.getElementById('signatures-status');
+  statusDiv.className = `status ${type}`;
+  statusDiv.textContent = message;
+  statusDiv.style.display = 'block';
+
+  setTimeout(() => {
+    statusDiv.style.display = 'none';
+  }, 5000);
+}
+
+// Close modal on outside click
+document.getElementById('signatures-editModal').addEventListener('click', function(e) {
+  if (e.target === this) closeEditModal();
+});
+  
+document.getElementById('signatures-editModal').addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeEditModal();
+  if (event.key === 'Tab') {
+    const controls = Array.from(document.getElementById('signatures-editModal').querySelectorAll('button, input, select, textarea')).filter(el => !el.disabled);
+    const first = controls[0], last = controls[controls.length - 1];
+    if (event.shiftKey && event.target === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && event.target === last) { event.preventDefault(); first.focus(); }
+  }
+});
+
+return {uploadSignatures, downloadSignatures, clearSignatures, reloadSignatures, addNewSignature, toggleRawEditor, saveRawJSON, closeEditModal, saveSignatureEdit, editSignature, deleteSignature, init};
+})(documentScope, PassiveDetection.api);
+})();
+PassiveDetection.init();
+</script>
+</body>
+</html>

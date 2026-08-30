@@ -4,12 +4,36 @@
 #include "../core/logging_system.h"
 #include "../core/configuration_manager.h"
 #include <cJSON.h>
+#include <cstdarg>
 extern "C" {
     #include "esp_timer.h"
     #include "esp_heap_caps.h"
 }
 
 static const char* TAG = "AuditManager";
+
+namespace {
+// Audit is intentionally a classic line-oriented log.  Keeping this path on
+// reportLogMessage gives every line the same timestamp policy and routes it to
+// audit_events.log without also creating a structured EventRecord.
+void emitAuditLine(ReportingEngine* reporting, const char* level,
+                   const char* event, const char* format, ...) {
+    if (!reporting || !event) return;
+    char details[384] = {0};
+    va_list args;
+    va_start(args, format);
+    vsnprintf(details, sizeof(details), format ? format : "", args);
+    va_end(args);
+
+    char message[512] = {0};
+    snprintf(message, sizeof(message), "event=%s %s", event, details);
+    reporting->reportLogMessage(
+        PSRAMUtils::createPSRAMString("AUDIT"),
+        PSRAMUtils::createPSRAMString(level ? level : "INFO"),
+        PSRAMUtils::createPSRAMString(message),
+        esp_timer_get_time() / 1000ULL);
+}
+}
 
 AuditManager::AuditManager() {
 }
@@ -189,196 +213,84 @@ void AuditManager::logDenied(const char* actor, const char* what, const char* re
     if (!shouldLogEvent() || !config_.log_denied || !checkRateLimit()) return;
 
     counters_.denied++;
-    if (reporting_engine_) {
-        EventRecord ev;
-        ev.channel = "audit";
-        ev.type = "sandbox_denied";
-        ev.name = "Sandbox deny";
-        ev.severity = "Medium";
-        ev.ext = {
-            {"actor", actor ? actor : ""},
-            {"what", what ? what : ""},
-            {"reason", reason ? reason : ""}
-        };
-        reporting_engine_->submit(ev);
-    }
+    emitAuditLine(reporting_engine_, "WARNING", "sandbox_denied",
+                  "actor=%s what=%s reason=%s", actor ? actor : "",
+                  what ? what : "", reason ? reason : "");
 }
 
 void AuditManager::logTimeout(const char* actor, const char* op, uint32_t timeout_ms) {
     if (!shouldLogEvent() || !config_.log_timeouts || !checkRateLimit()) return;
 
     counters_.timeouts++;
-    if (reporting_engine_) {
-        EventRecord ev;
-        ev.channel = "audit";
-        ev.type = "sandbox_timeout";
-        ev.name = "Sandbox timeout";
-        ev.severity = "Medium";
-
-        char timeout_buf[16];
-        snprintf(timeout_buf, sizeof(timeout_buf), "%lu", (unsigned long)timeout_ms);
-        ev.ext = {
-            {"actor", actor ? actor : ""},
-            {"op", op ? op : ""},
-            {"timeout_ms", timeout_buf}
-        };
-        reporting_engine_->submit(ev);
-    }
+    emitAuditLine(reporting_engine_, "WARNING", "sandbox_timeout",
+                  "actor=%s op=%s timeout_ms=%lu", actor ? actor : "",
+                  op ? op : "", (unsigned long)timeout_ms);
 }
 
 void AuditManager::logRateLimit(const char* actor, const char* op) {
     if (!shouldLogEvent() || !config_.log_ratelimits || !checkRateLimit()) return;
 
     counters_.ratelimits++;
-    if (reporting_engine_) {
-        EventRecord ev;
-        ev.channel = "audit";
-        ev.type = "sandbox_ratelimit";
-        ev.name = "Sandbox rate-limit";
-        ev.severity = "Low";
-        ev.ext = {
-            {"actor", actor ? actor : ""},
-            {"op", op ? op : ""}
-        };
-        reporting_engine_->submit(ev);
-    }
+    emitAuditLine(reporting_engine_, "INFO", "sandbox_ratelimit",
+                  "actor=%s op=%s", actor ? actor : "", op ? op : "");
 }
 
 void AuditManager::logSystemReboot(const char* reason, const char* user, const char* client_ip) {
     if (!shouldLogEvent() || !config_.log_system_events) return;
 
     counters_.system_events++;
-    if (reporting_engine_) {
-        EventRecord ev;
-        ev.channel = "audit";
-        ev.type = "system_reboot";
-        ev.name = "System Reboot";
-        ev.severity = "High";
-        ev.ext = {
-            {"reason", reason ? reason : "unknown"},
-            {"user", user ? user : "system"},
-            {"client_ip", client_ip ? client_ip : ""}
-        };
-        reporting_engine_->submit(ev);
-    }
+    emitAuditLine(reporting_engine_, "ERROR", "system_reboot",
+                  "reason=%s user=%s client_ip=%s", reason ? reason : "unknown",
+                  user ? user : "system", client_ip ? client_ip : "");
 }
 
 void AuditManager::logSystemStartup(const char* version, const char* build_date) {
     if (!shouldLogEvent() || !config_.log_system_events) return;
 
     counters_.system_events++;
-    if (reporting_engine_) {
-        EventRecord ev;
-        ev.channel = "audit";
-        ev.type = "system_startup";
-        ev.name = "System Startup";
-        ev.severity = "Medium";
-        ev.ext = {
-            {"version", version ? version : "unknown"},
-            {"build_date", build_date ? build_date : ""}
-        };
-
-        char heap_buf[16], psram_buf[16];
-        size_t heap_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-        size_t psram_free = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
-        snprintf(heap_buf, sizeof(heap_buf), "%zu", heap_free);
-        snprintf(psram_buf, sizeof(psram_buf), "%zu", psram_free);
-
-        ev.ext["heap_free"] = heap_buf;
-        ev.ext["psram_free"] = psram_buf;
-
-        reporting_engine_->submit(ev);
-    }
+    emitAuditLine(reporting_engine_, "INFO", "system_startup",
+                  "version=%s build_date=%s heap_free=%zu psram_free=%zu",
+                  version ? version : "unknown", build_date ? build_date : "",
+                  heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                  heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 }
 
 void AuditManager::logServiceEvent(const char* service, const char* action, const char* details) {
     if (!shouldLogEvent() || !config_.log_system_events) return;
 
     counters_.system_events++;
-    if (reporting_engine_) {
-        EventRecord ev;
-        ev.channel = "audit";
-        ev.type = "service_event";
-        ev.name = "Service Event";
-        ev.severity = "Medium";
-        ev.ext = {
-            {"service", service ? service : "unknown"},
-            {"action", action ? action : "unknown"},
-            {"details", details ? details : ""}
-        };
-        reporting_engine_->submit(ev);
-    }
+    emitAuditLine(reporting_engine_, "INFO", "service_event",
+                  "service=%s action=%s details=%s", service ? service : "unknown",
+                  action ? action : "unknown", details ? details : "");
 }
 
 void AuditManager::logPluginEvent(const char* plugin, const char* action, const char* details) {
     if (!shouldLogEvent() || !config_.log_system_events) return;
 
     counters_.system_events++;
-    if (reporting_engine_) {
-        EventRecord ev;
-        ev.channel = "audit";
-        ev.type = "plugin_event";
-        ev.name = "Plugin Event";
-        ev.severity = "Medium";
-        ev.ext = {
-            {"plugin", plugin ? plugin : "unknown"},
-            {"action", action ? action : "unknown"},
-            {"details", details ? details : ""}
-        };
-        reporting_engine_->submit(ev);
-    }
+    emitAuditLine(reporting_engine_, "INFO", "plugin_event",
+                  "plugin=%s action=%s details=%s", plugin ? plugin : "unknown",
+                  action ? action : "unknown", details ? details : "");
 }
 
 void AuditManager::logSecurityEvent(const char* event_type, const char* user, const char* client_ip, const char* details) {
     if (!shouldLogEvent() || !config_.log_security_events) return;
 
     counters_.security_events++;
-    if (reporting_engine_) {
-        EventRecord ev;
-        ev.channel = "audit";
-        ev.type = "security_event";
-        ev.name = "Security Event";
-        ev.severity = "High";
-        ev.ext = {
-            {"event_type", event_type ? event_type : "unknown"},
-            {"user", user ? user : "anonymous"},
-            {"client_ip", client_ip ? client_ip : ""},
-            {"details", details ? details : ""}
-        };
-        reporting_engine_->submit(ev);
-
-        uint64_t ts_ms = getCurrentTimeMs();
-        char msg[256];
-        snprintf(msg, sizeof(msg),
-                 "event_type=%s user=%s ip=%s details=%s",
-                 event_type ? event_type : "unknown",
-                 user ? user : "anonymous",
-                 client_ip ? client_ip : "",
-                 details ? details : "");
-        reporting_engine_->reportLogMessage(
-            PSRAMUtils::createPSRAMString("SECURITY"),
-            PSRAMUtils::createPSRAMString("WARNING"),
-            PSRAMUtils::createPSRAMString(msg),
-            ts_ms);
-    }
+    emitAuditLine(reporting_engine_, "ERROR", "security_event",
+                  "event_type=%s user=%s ip=%s details=%s",
+                  event_type ? event_type : "unknown",
+                  user ? user : "anonymous", client_ip ? client_ip : "",
+                  details ? details : "");
 }
 
 void AuditManager::logConfigChangeAudit(const char* config_type, const char* user, const char* client_ip, const char* details) {
     if (!shouldLogEvent() || !config_.log_config_changes) return;
 
     counters_.config_changes++;
-    if (reporting_engine_) {
-        EventRecord ev;
-        ev.channel = "audit";
-        ev.type = "config_change";
-        ev.name = "Configuration Change";
-        ev.severity = "Medium";
-        ev.ext = {
-            {"config_type", config_type ? config_type : "unknown"},
-            {"user", user ? user : "anonymous"},
-            {"client_ip", client_ip ? client_ip : ""},
-            {"details", details ? details : ""}
-        };
-        reporting_engine_->submit(ev);
-    }
+    emitAuditLine(reporting_engine_, "INFO", "config_change",
+                  "config_type=%s user=%s client_ip=%s details=%s",
+                  config_type ? config_type : "unknown",
+                  user ? user : "anonymous", client_ip ? client_ip : "",
+                  details ? details : "");
 }

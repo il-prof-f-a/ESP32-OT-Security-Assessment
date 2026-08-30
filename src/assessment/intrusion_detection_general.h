@@ -48,6 +48,8 @@ public:
     void shutdown();
 
     bool startIDS();
+    bool isActive() const { return ids_active_.load(); }
+    void applyRuntimeConfig();
     void stopIDS();
 
     void startBaselineLearning();
@@ -108,7 +110,9 @@ private:
     NetworkPresenceTracker network_presence_;
 
     TaskHandle_t ids_task_handle_ = nullptr;
-    bool ids_active_ = true;
+    std::atomic<bool> ids_active_{false};
+    std::atomic<bool> worker_stop_{false};
+    std::atomic<bool> worker_running_{false};
     bool baseline_learning_enabled_ = false;
     uint32_t learning_period_hours_ = 1;
     uint32_t baseline_start_time_ = 0;

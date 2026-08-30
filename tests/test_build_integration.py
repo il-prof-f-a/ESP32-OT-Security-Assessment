@@ -282,7 +282,7 @@ class BuildIntegrationTests(unittest.TestCase):
         self.assertIn('masked_hash = std::string(entry.hash.c_str(), 8) + "***" +', security)
 
     def test_network_presence_renders_all_recognized_protocol_tags(self):
-        page = (PROJECT_ROOT / "src/web/ui/network_presence.html").read_text(
+        page = (PROJECT_ROOT / "src/web/ui/passive_detection.html").read_text(
             encoding="utf-8"
         )
 
