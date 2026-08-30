@@ -299,15 +299,43 @@
 .collapsed{
     display:none
 }
+.reporting-collapse{
+    border:1px solid #d7dce8;
+    border-radius:8px;
+    background:#fff;
+    margin-bottom:1rem;
+    box-shadow:0 2px 8px rgba(0,0,0,.08)
+}
+.reporting-collapse>summary{
+    cursor:pointer;
+    list-style:none;
+    display:flex;
+    align-items:center;
+    gap:.6rem;
+    padding:1rem;
+    font-size:1.1rem;
+    font-weight:700
+}
+.reporting-collapse>summary::-webkit-details-marker{display:none}
+.collapse-indicator{font-size:1.25rem;color:#06a;transition:transform .15s ease}
+.reporting-collapse[open] .collapse-indicator{transform:rotate(90deg)}
+.report-save-status{min-height:1.2rem;margin:.6rem 0;padding:.65rem .8rem;border-radius:6px;background:#eef3ff;color:#234;display:none}
+.report-save-status.ok{display:block;background:#d4edda;color:#155724}
+.report-save-status.err{display:block;background:#f8d7da;color:#721c24}
+.report-channel-tabs{display:flex;flex-wrap:wrap;gap:.4rem;margin:.8rem 0;border-bottom:1px solid #d9deea;padding-bottom:.5rem}
+.report-channel-tab{border:1px solid #bfc8e8;background:#f2f5ff;color:#26377a;border-radius:999px;padding:.45rem .8rem;cursor:pointer;font-weight:600}
+.report-channel-tab[aria-selected="true"]{background:#172b8c;color:#fff}
+.report-channel-panel[hidden]{display:none}
+.report-help{font-size:.82rem;color:#536070;margin:.4rem 0 .8rem;line-height:1.35}
+.suggestion-list{display:flex;flex-wrap:wrap;gap:.3rem;margin:.35rem 0 .15rem}
+.suggestion-chip{border:1px solid #b7d8c0;background:#effaf1;color:#245d30;border-radius:999px;padding:.2rem .45rem;font-family:Consolas,monospace;font-size:.72rem;cursor:pointer}
+.endpoint-hint{font-size:.78rem;color:#58677a;margin:.45rem 0;padding:.45rem .6rem;background:#f0f4f8;border-radius:4px}
 </style>
 <div class="card"><h1>📊 Reporting Configuration</h1><a href="/" class="btn nav-btn">← Dashboard</a></div>
 <div id="status"></div>
-<div class="card">
-<div class="card-header-row">
-<h2 style="margin:0;">Live Stream by Reporting Channel</h2>
-<button id="report-stream-toggle" class="toggle-btn" onclick="toggleReportStreamPanel()">Collapse</button>
-</div>
-<div id="report-stream-body">
+<details id="report-stream-panel" class="reporting-collapse">
+<summary><span class="collapse-indicator">▶</span><span>Live Stream by Reporting Channel</span></summary>
+<div id="report-stream-body" class="card" style="margin:0;box-shadow:none;">
 <div class="stream-grid">
     <div class="control-group">
         <label>Channels</label>
@@ -342,10 +370,11 @@
     <button class="btn" onclick="clearReportStream()">Clear</button>
 </div>
 <div id="report-stream-output" class="stream-output"></div>
-</div>
-</div>
-<div class="card">
-<h2>Queue Status</h2>
+ </div>
+</details>
+<details id="queue-status-panel" class="reporting-collapse">
+<summary><span class="collapse-indicator">▶</span><span>Queue Status</span></summary>
+<div class="card" style="margin:0;box-shadow:none;">
 <div>
     <button class="btn" onclick="loadQueueStats()">Refresh</button>
     <button class="btn" onclick="flush()">Flush Queue</button>
@@ -360,17 +389,21 @@
 </div>
 <div class="queue-status-line" id="queue-last-sync">Last sync: N/A</div>
 <div class="queue-status-line" id="queue-backup-path"></div>
-</div>
+ </div>
+</details>
 <div class="card">
 <h2>Reporting Channels</h2>
-<button class="btn" onclick="loadChannels()">Load Channels</button>
+<div id="report-save-status" class="report-save-status" role="status" aria-live="polite"></div>
+<button class="btn" onclick="loadChannels()">Reload Channels</button>
+<p class="report-help">Each tab controls one output channel. Include patterns are evaluated first; an exclude match vetoes delivery. File persistence is configured on the <a class="nav-btn" style="padding:.25rem .5rem" href="/logging">Logging</a> page.</p>
+<div id="report-channel-tabs" class="report-channel-tabs" role="tablist" aria-label="Reporting channels"></div>
 <div id="channelsConfig" style="margin-top: 1rem;">
     <!-- Channels will be populated here -->
 </div>
 <pre id="channels" style="display:none;"></pre>
 </div>
 
-<div class="card">
+<div id="reporting-endpoints-panel" hidden style="display:none" class="card">
 <h2>Reporting Endpoints</h2>
 <textarea id="endpoints" placeholder="Configure MQTT, Webhook, Email, File endpoints..."></textarea>
 <button class="btn" onclick="loadEndpoints()">Load</button>
@@ -433,6 +466,72 @@ const reportStreamStats = {
     previewExcluded: 0,
     regexErrors: 0
 };
+
+// Source-backed suggestions for the include/exclude editors. Keep this list
+// deliberately stable so saved regexes remain useful across firmware builds.
+const REPORTING_PATTERN_CATALOG = [
+    {value:'MAIN', label:'Startup and main task tag'},
+    {value:'Config', label:'Configuration load/save'},
+    {value:'REPORTING', label:'Reporting configuration'},
+    {value:'AsyncStorage', label:'Asynchronous storage'},
+    {value:'FSDelegate', label:'Filesystem delegate'},
+    {value:'EthernetManager', label:'Ethernet link/network'},
+    {value:'WiFiManager', label:'Wi-Fi link/network'},
+    {value:'WIFI_CONNECT', label:'Wi-Fi connection events'},
+    {value:'WIFI_DISCONNECT', label:'Wi-Fi disconnection events'},
+    {value:'PacketCapture', label:'Packet capture'},
+    {value:'EthL2Adapter', label:'Layer-2 Ethernet capture'},
+    {value:'WebServer|WebServerTask|Web', label:'Web management'},
+    {value:'HTTPD_MON', label:'HTTP watchdog'},
+    {value:'SESSION|API_AUTH|ACCESS_LOG', label:'Authentication/access'},
+    {value:'IDS_ENGINE|SIG_DETECT', label:'IDS/signature detection'},
+    {value:'NetworkPresenceTracker|PRESENCE_', label:'Network presence'},
+    {value:'DISCOVERY_MGR|GeneralDiscovery', label:'Discovery orchestration'},
+    {value:'S7Plugin|ModbusTCP|PROFINETPlugin|EtherNetIPPlugin|OPCUA_PLUGIN', label:'Protocol discovery'},
+    {value:'VULNERABILITY_SCANNER|VULN_SCANNER|Scanner', label:'Vulnerability scanner'},
+    {value:'FUZZING_ENGINE|FuzzingEngine|SCAN_JOBS|CronScheduler', label:'Fuzzing/scheduled jobs'},
+    {value:'OPCUACodec|OPCUAVulnTest|OPCUAFuzz', label:'OPC UA codec/tests'},
+    {value:'REPORTQ|ReportingEngine|FileReporter|MQTT|EMAIL|AUDIT', label:'Reporting delivery'},
+    {value:'gpio_event', label:'GPIO state/action event'},
+    {value:'MEM_MONITOR|PSRAMTelemetry|PSRAMUtils|PSRAMJson', label:'Memory telemetry'},
+    {value:'debug|trace|heartbeat', label:'Common noisy diagnostics (exclude example)'},
+    {value:'intrusion_detected|ids_detection|signature', label:'Security finding (include example)'}
+];
+
+function showReportSaveStatus(message, isError){
+    const el = document.getElementById('report-save-status');
+    if (!el) return;
+    el.textContent = message;
+    el.className = 'report-save-status ' + (isError ? 'err' : 'ok');
+}
+
+function attachPatternSuggestions(channelName, type){
+    const input = document.getElementById(`${type}_input_${channelName}`);
+    const list = document.getElementById(`${type}_suggestions_${channelName}`);
+    if (!input || !list) return;
+    list.innerHTML = '';
+    REPORTING_PATTERN_CATALOG.slice(0, 8).forEach(item => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'suggestion-chip';
+        chip.textContent = item.value;
+        chip.title = item.label;
+        chip.addEventListener('click', () => { input.value = item.value; input.focus(); });
+        list.appendChild(chip);
+    });
+}
+
+function populatePatternDatalist(channelName, type){
+    const list = document.getElementById(`${type}_pattern_list_${channelName}`);
+    if (!list) return;
+    list.innerHTML = '';
+    REPORTING_PATTERN_CATALOG.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.value;
+        option.label = item.label;
+        list.appendChild(option);
+    });
+}
 
 function applyReportStreamCollapsedState(collapsed, persist){
     const body = document.getElementById('report-stream-body');
@@ -504,7 +603,7 @@ function updateReportStreamChannelOptions(channels){
     const prev = new Set(Array.from(sel.selectedOptions).map(o => o.value));
     sel.innerHTML = '';
 
-    const all = ['mqtt','webhook','email','file','serial'];
+    const all = ['mqtt','webhook','email','file','serial','audit'];
     const keys = (channels && typeof channels === 'object') ? Object.keys(channels) : [];
     const merged = Array.from(new Set(all.concat(keys))).sort();
 
@@ -874,97 +973,72 @@ try{
 }
 
 function renderChannelsUI(channels, endpoints){
-const container=document.getElementById('channelsConfig');
-container.innerHTML='';
+    const container = document.getElementById('channelsConfig');
+    const tabs = document.getElementById('report-channel-tabs');
+    container.innerHTML = '';
+    tabs.innerHTML = '';
 
-// Show ALL possible reporters, not just enabled ones
-const allReporters=['mqtt','webhook','email','file','serial'];
+    // File settings are intentionally owned by /logging; keep it available to
+    // stream preview but do not expose a second configuration editor here.
+    const known = ['mqtt','webhook','email','serial','audit'];
+    const runtime = channels && typeof channels === 'object'
+        ? Object.keys(channels).filter(name => /^[a-z0-9_-]+$/i.test(name))
+        : [];
+    const reporters = Array.from(new Set(known.concat(runtime))).filter(name => name !== 'file').sort();
+    let firstPanel = null;
 
-allReporters.forEach(channelName=>{
-const channel=channels[channelName] || {enabled:false,format:0,verbosity:0}; // Default if not present
-const hasEndpoint = endpoints[channelName] && Object.keys(endpoints[channelName]).length > 0;
-const div=document.createElement('div');
-div.className='channel-item';
+    reporters.forEach((channelName, index) => {
+        const channel = channels[channelName] || {enabled:false,format:0,verbosity:0};
+        const endpoint = endpoints && endpoints[channelName];
+        const endpointConfigured = endpoint && typeof endpoint === 'object' && Object.keys(endpoint).length > 0;
+        const tab = document.createElement('button');
+        tab.type = 'button';
+        tab.className = 'report-channel-tab';
+        tab.id = `report-tab-${channelName}`;
+        tab.setAttribute('role','tab');
+        tab.setAttribute('aria-controls',`report-panel-${channelName}`);
+        tab.setAttribute('aria-selected', index === 0 ? 'true' : 'false');
+        tab.textContent = channelName.toUpperCase();
+        tab.addEventListener('click', () => selectReportChannel(channelName));
+        tabs.appendChild(tab);
 
-// Configuration status indicator
-const configStatus = hasEndpoint ? '<span style="color:green;font-size:0.8em;">✓ Configured</span>' : '<span style="color:red;font-size:0.8em;">✗ Not configured</span>';
-
-// Determine download button for file reporter
-let downloadButton = '';
-if (channelName === 'file' && channel.enabled) {
-    downloadButton = `
-    <div class="control-group">
-        <label>Download Log</label>
-        <button class="btn" onclick="downloadLog('${getFileReporterLogName()}')">📥 Download</button>
-    </div>`;
+        const panel = document.createElement('section');
+        panel.className = 'channel-item report-channel-panel';
+        panel.id = `report-panel-${channelName}`;
+        panel.setAttribute('role','tabpanel');
+        panel.setAttribute('aria-labelledby',tab.id);
+        if (index !== 0) panel.hidden = true;
+        if (!firstPanel) firstPanel = panel;
+        panel.innerHTML = `
+            <div class="channel-name">📡 ${channelName.toUpperCase()}</div>
+            <p class="endpoint-hint">${endpointConfigured ? 'Endpoint configured and available.' : 'No endpoint-specific settings are configured; use the channel controls below.'}</p>
+            <div class="channel-controls">
+                <div class="control-group"><label for="enabled_${channelName}">Enabled</label><input type="checkbox" id="enabled_${channelName}" ${channel.enabled?'checked':''}></div>
+                <div class="control-group"><label for="format_${channelName}">Format</label><select id="format_${channelName}"><option value="0" ${channel.format==0?'selected':''}>JSON</option><option value="1" ${channel.format==1?'selected':''}>CEE</option><option value="2" ${channel.format==2?'selected':''}>LEEF</option><option value="3" ${channel.format==3?'selected':''}>CEF</option></select></div>
+                <div class="control-group"><label for="verbosity_${channelName}">Verbosity</label><select id="verbosity_${channelName}"><option value="0" ${channel.verbosity==0?'selected':''}>Reports Only</option><option value="1" ${channel.verbosity==1?'selected':''}>Verbose</option></select><div class="verbosity-info">${channel.verbosity==1?'Shows logs + reports with delimiters':'Only tool-generated events'}</div></div>
+            </div>
+            <div class="stream-actions"><button type="button" class="btn" onclick="updateChannel('${channelName}')">Save Channel</button></div>
+            <div class="filters-section" id="filters_${channelName}">
+                <div class="filters-header">🔍 Regex Filters</div>
+                <p class="report-help">Include patterns are evaluated first. If the include list is non-empty, at least one must match; exclude patterns veto a matching line afterward. Patterns are regular expressions.</p>
+                <div class="filter-controls"><div class="control-group"><label for="filters_enabled_${channelName}">Filters Enabled</label><input type="checkbox" id="filters_enabled_${channelName}"></div><div class="control-group"><label for="case_sensitive_${channelName}">Case Sensitive</label><input type="checkbox" id="case_sensitive_${channelName}"></div></div>
+                <div class="filter-list"><strong>Include Patterns:</strong><div id="include_filters_${channelName}"></div><div class="filter-add-controls"><input type="text" id="include_input_${channelName}" class="filter-add-input" list="include_pattern_list_${channelName}" placeholder="Regex, e.g. intrusion|signature"><datalist id="include_pattern_list_${channelName}" class="reporting-pattern-suggestions"></datalist><button type="button" class="filter-add-btn" onclick="addFilter('${channelName}','include')">Add Include</button></div><div id="include_suggestions_${channelName}" class="suggestion-list" aria-label="Include suggestions"></div></div>
+                <div class="filter-list"><strong>Exclude Patterns:</strong><div id="exclude_filters_${channelName}"></div><div class="filter-add-controls"><input type="text" id="exclude_input_${channelName}" class="filter-add-input" list="exclude_pattern_list_${channelName}" placeholder="Regex, e.g. debug|trace"><datalist id="exclude_pattern_list_${channelName}" class="reporting-pattern-suggestions"></datalist><button type="button" class="filter-add-btn" onclick="addFilter('${channelName}','exclude')">Add Exclude</button></div><div id="exclude_suggestions_${channelName}" class="suggestion-list" aria-label="Exclude suggestions"></div></div>
+                <div class="stream-actions"><button type="button" class="btn" onclick="updateChannelFilters('${channelName}')">Save Filters</button></div>
+            </div>`;
+        container.appendChild(panel);
+        populatePatternDatalist(channelName,'include');
+        populatePatternDatalist(channelName,'exclude');
+        attachPatternSuggestions(channelName,'include');
+        attachPatternSuggestions(channelName,'exclude');
+        loadChannelFilters(channelName);
+    });
+    if (!firstPanel) container.textContent = 'No reporting channels are available.';
 }
 
-div.innerHTML=`
-<div class="channel-name">📡 ${channelName.toUpperCase()} ${configStatus}</div>
-<div class="channel-controls">
-    <div class="control-group">
-        <label>Enabled</label>
-        <input type="checkbox" id="enabled_${channelName}" ${channel.enabled?'checked':''} onchange="updateChannel('${channelName}')">
-    </div>
-    <div class="control-group">
-        <label>Format</label>
-        <select id="format_${channelName}" onchange="updateChannel('${channelName}')">
-            <option value="0" ${channel.format==0?'selected':''}>JSON</option>
-            <option value="1" ${channel.format==1?'selected':''}>CEE</option>
-            <option value="2" ${channel.format==2?'selected':''}>LEEF</option>
-            <option value="3" ${channel.format==3?'selected':''}>CEF</option>
-        </select>
-    </div>
-    <div class="control-group">
-        <label>Verbosity</label>
-        <select id="verbosity_${channelName}" onchange="updateChannel('${channelName}')">
-            <option value="0" ${channel.verbosity==0?'selected':''}>Reports Only</option>
-            <option value="1" ${channel.verbosity==1?'selected':''}>Verbose</option>
-        </select>
-        <div class="verbosity-info">
-            ${channel.verbosity==1?'Shows logs + reports with delimiters':'Only tool-generated events'}
-        </div>
-    </div>
-    ${downloadButton}
-</div>
-<div class="filters-section" id="filters_${channelName}">
-    <div class="filters-header">🔍 Regex Filters</div>
-    <div class="filter-controls">
-        <div class="control-group">
-            <label>Filters Enabled</label>
-            <input type="checkbox" id="filters_enabled_${channelName}" onchange="updateChannelFilters('${channelName}')">
-        </div>
-        <div class="control-group">
-            <label>Case Sensitive</label>
-            <input type="checkbox" id="case_sensitive_${channelName}" onchange="updateChannelFilters('${channelName}')">
-        </div>
-    </div>
-    <div class="filter-list">
-        <strong>Include Patterns:</strong>
-        <div id="include_filters_${channelName}"></div>
-        <div class="filter-add-controls">
-            <input type="text" id="include_input_${channelName}" class="filter-add-input" placeholder="Enter regex pattern (e.g., error|warning)">
-            <button class="filter-add-btn" onclick="addFilter('${channelName}', 'include')">Add Include</button>
-        </div>
-    </div>
-    <div class="filter-list">
-        <strong>Exclude Patterns:</strong>
-        <div id="exclude_filters_${channelName}"></div>
-        <div class="filter-add-controls">
-            <input type="text" id="exclude_input_${channelName}" class="filter-add-input" placeholder="Enter regex pattern (e.g., debug|trace)">
-            <button class="filter-add-btn" onclick="addFilter('${channelName}', 'exclude')">Add Exclude</button>
-        </div>
-    </div>
-</div>
-<small style="color:#666;margin-top:0.5rem;display:block;">
-    ${hasEndpoint ? 'Endpoint configured - ready to use' : 'Configure the endpoint in the "Reporting Endpoints" section to enable'}
-</small>
-`;
-container.appendChild(div);
-
-// Load filters for this channel
-loadChannelFilters(channelName);
-});
+function selectReportChannel(channelName){
+    document.querySelectorAll('.report-channel-tab').forEach(tab => tab.setAttribute('aria-selected', tab.id === `report-tab-${channelName}` ? 'true' : 'false'));
+    document.querySelectorAll('.report-channel-panel').forEach(panel => { panel.hidden = panel.id !== `report-panel-${channelName}`; });
 }
 
 async function updateChannel(channelName){
@@ -989,12 +1063,13 @@ body:JSON.stringify(payload)
 if(!r.ok)throw new Error('HTTP '+r.status);
 const result=await r.text();
 status(`${channelName} updated: ${result}`);
+showReportSaveStatus(`${channelName.toUpperCase()} channel settings saved successfully.`, false);
 
 // Update verbosity info text
 const infoDiv=document.querySelector(`#verbosity_${channelName}`).parentNode.querySelector('.verbosity-info');
 infoDiv.textContent=verbosity==1?'Shows logs + reports with delimiters':'Only tool-generated events';
 
-}catch(e){status('Error updating '+channelName+': '+e.message,true);}
+}catch(e){status('Error updating '+channelName+': '+e.message,true);showReportSaveStatus(`Unable to save ${channelName} channel settings: ${e.message}`, true);}
 }
 async function flush(){
 try{
@@ -1095,10 +1170,15 @@ function renderFilterList(channelName, type, patterns) {
     patterns.forEach(pattern => {
         const div = document.createElement('div');
         div.className = 'filter-item';
-        div.innerHTML = `
-            <span>${pattern}</span>
-            <button class="filter-remove" onclick="removeFilter('${channelName}', '${type}', '${pattern}')">Remove</button>
-        `;
+        const value = document.createElement('span');
+        value.textContent = pattern;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'filter-remove';
+        remove.textContent = 'Remove';
+        remove.addEventListener('click', () => removeFilter(channelName, type, pattern));
+        div.appendChild(value);
+        div.appendChild(remove);
         container.appendChild(div);
     });
 }
@@ -1130,9 +1210,11 @@ async function updateChannelFilters(channelName) {
 
         if (!response.ok) throw new Error('HTTP ' + response.status);
         status(`${channelName} filters updated`, false);
+        showReportSaveStatus(`${channelName.toUpperCase()} filters saved successfully.`, false);
 
     } catch (e) {
         status(`Error updating filters for ${channelName}: ${e.message}`, true);
+        showReportSaveStatus(`Unable to save ${channelName} filters: ${e.message}`, true);
     }
 }
 
@@ -1164,9 +1246,11 @@ async function addFilter(channelName, type) {
         document.getElementById(inputId).value = '';
         await loadChannelFilters(channelName);
         status(`Added ${type} filter: ${pattern}`, false);
+        showReportSaveStatus(`${channelName.toUpperCase()} ${type} pattern saved successfully.`, false);
 
     } catch (e) {
         status(`Error adding filter: ${e.message}`, true);
+        showReportSaveStatus(`Unable to add ${type} pattern: ${e.message}`, true);
     }
 }
 
@@ -1189,9 +1273,11 @@ async function removeFilter(channelName, type, pattern) {
         // Reload filters
         await loadChannelFilters(channelName);
         status(`Removed ${type} filter: ${pattern}`, false);
+        showReportSaveStatus(`${channelName.toUpperCase()} ${type} pattern removed.`, false);
 
     } catch (e) {
         status(`Error removing filter: ${e.message}`, true);
+        showReportSaveStatus(`Unable to remove ${type} pattern: ${e.message}`, true);
     }
 }
 
