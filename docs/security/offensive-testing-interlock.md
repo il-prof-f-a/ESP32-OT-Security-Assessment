@@ -3,9 +3,15 @@
 The offensive-testing policy is a two-part authorization gate for state-changing or disruptive assessment operations. An operation is allowed only when both conditions are true:
 
 1. the software policy is enabled and persisted by an authenticated administrator; and
-2. the configured physical GPIO interlock is asserted (when the gate is required).
+2. the physical GPIO interlock is asserted.
 
 The policy fails closed. A missing `SecurityManager`, invalid GPIO, corrupt policy record, open contact or failed NVS write blocks the operation. The gate is re-evaluated immediately before every unsafe fuzz case and by protocol-specific active probes.
+
+In public and release firmware the physical gate is mandatory and cannot be disabled or made
+optional from the web UI, the API, NVS or a filesystem configuration. The board profile also
+provides the authoritative GPIO and electrical mode. This prevents a user from bypassing the
+interlock by changing the checkbox, pin or pull configuration. Only an explicitly authorized
+development build may relax those settings.
 
 This policy is different from IDS `allowed_writers`: `allowed_writers` identifies traffic sources that IDS may classify as authorized writers, while this interlock authorizes the assessment appliance itself to transmit active tests. It is also different from job **Safe Mode**: Safe Mode keeps a job read-only; disabling Safe Mode does not bypass the global policy.
 
@@ -13,7 +19,7 @@ This policy is different from IDS `allowed_writers`: `allowed_writers` identifie
 
 Open **Security → Fuzzing & Testing Controls** or the **Scanner & Fuzzing** controls. Enabling the software switch requires the administrator password. A required physical gate remains ineffective while its contact is open. Disabling the switch takes effect immediately and is persisted.
 
-The API exposes the effective state, reason, source (`config_seed`, `nvs`, `force_config`, or a fail-closed state), selected GPIO and GPIO assertion state through `/api/security/config`. Passwords are never returned or logged.
+The API exposes the effective state, reason, source (`config_seed`, `nvs`, `force_config`, or a fail-closed state), selected GPIO and GPIO assertion state through `/api/security/config`. It also returns `offensive_interlock_bypass_allowed` and `fuzzing_gpio_gate_locked`. Passwords are never returned or logged.
 
 ## Board wiring
 
@@ -56,17 +62,24 @@ For local development only, the embedded configuration path can be enabled delib
 
 ```powershell
 $env:ESP32_OT_EMBEDDED_CONFIG='1'
+$env:ESP32_OT_ALLOW_OFFENSIVE_CONFIG_OVERRIDE='1'
 pio run -e t-poe-pro
 Remove-Item Env:ESP32_OT_EMBEDDED_CONFIG
+Remove-Item Env:ESP32_OT_ALLOW_OFFENSIVE_CONFIG_OVERRIDE
 ```
 
-The build system rejects an embedded configuration that enables software authorization or weakens the GPIO requirement unless the developer sets `ESP32_OT_ALLOW_OFFENSIVE_CONFIG_OVERRIDE=1` for that one build. Clear both variables before creating release artifacts. A production/public release must never ship with software authorization forced on, `force_config`, a disabled required gate or an unvalidated GPIO.
+`ESP32_OT_EMBEDDED_CONFIG` selects the embedded-configuration path; it does not authorize an
+interlock bypass. `ESP32_OT_ALLOW_OFFENSIVE_CONFIG_OVERRIDE=1` is the separate, development-only
+build authorization. The build system emits this authorization into the firmware assets and
+rejects permissive embedded settings unless the variable is explicitly present. Clear both
+variables before creating release artifacts. A production/public release must never ship with
+software authorization forced on, `force_config`, a disabled required gate or an unvalidated GPIO.
 
 ## Operational behavior
 
 - Read-only discovery and passive IDS continue while offensive authorization is blocked.
 - Modbus write-capability probes, S7 control/write operations, EtherNet/IP SetAttribute/Reset probes, OPC UA active resilience/DoS checks and PROFINET disruptive fuzz profiles are blocked until the policy is effective.
 - Opening the contact blocks the next unsafe case without a reboot; closing it allows a previously software-authorized policy to become effective.
-- Every blocked operation reports a non-secret reason such as `gpio_not_asserted`, `disabled_in_security_config` or `security_manager_unavailable`.
+- Every blocked operation reports a non-secret reason such as `hardware_interlock_locked_by_build`, `disabled_by_physical_switch`, `disabled_in_security_config` or `security_manager_unavailable`.
 
 Hardware acceptance must verify open/closed boot behavior, immediate runtime transitions, wrong-password rejection and persistence after reboot on each board. Until those checks are recorded, treat the profile as experimental.

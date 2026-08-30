@@ -36,6 +36,9 @@ inline cJSON* handleSecurityConfigGet(SecurityManager* sec_mgr, const SecurityCo
     // Expose effective status (includes optional physical GPIO gate).
     cJSON_AddBoolToObject(config, "fuzzing_allowed_effective", sec_mgr->isFuzzingAllowed());
     cJSON_AddStringToObject(config, "fuzzing_block_reason", sec_mgr->getFuzzingBlockReason());
+    const bool interlock_bypass_allowed = sec_mgr->isOffensiveInterlockBypassAuthorized();
+    cJSON_AddBoolToObject(config, "offensive_interlock_bypass_allowed", interlock_bypass_allowed);
+    cJSON_AddBoolToObject(config, "fuzzing_gpio_gate_locked", !interlock_bypass_allowed);
 
     cJSON_AddBoolToObject(config, "fuzzing_gpio_gate_enabled", sec_mgr->isFuzzingGpioGateEnabled());
     cJSON_AddBoolToObject(config, "fuzzing_gpio_gate_required", sec_mgr->isFuzzingGpioGateRequired());
@@ -53,6 +56,7 @@ inline cJSON* handleSecurityConfigGet(SecurityManager* sec_mgr, const SecurityCo
         cJSON_AddNumberToObject(offensive, "gpio", sec_mgr->getFuzzingGpioNum());
         cJSON_AddBoolToObject(offensive, "gpio_enabled", sec_mgr->isFuzzingGpioGateEnabled());
         cJSON_AddBoolToObject(offensive, "gpio_required", sec_mgr->isFuzzingGpioGateRequired());
+        cJSON_AddBoolToObject(offensive, "interlock_bypass_allowed", interlock_bypass_allowed);
         cJSON_AddItemToObject(config, "offensive_testing", offensive);
     }
     cJSON_AddBoolToObject(config, "secure_boot_enabled", sec_mgr->isSecureBootEnabled());
@@ -259,28 +263,15 @@ inline cJSON* handleSecurityConfigPost(SecurityManager* sec_mgr, const char* jso
         return make_error(msg);
     };
 
-    // Update fuzzing_allowed if present. Enabling offensive actions requires
-    // administrator re-authentication; disabling remains an emergency action.
-    cJSON* fuzzing_allowed = cJSON_GetObjectItem(request, "fuzzing_allowed");
-    if (fuzzing_allowed && cJSON_IsBool(fuzzing_allowed)) {
-        bool allow = cJSON_IsTrue(fuzzing_allowed);
-        if (allow) {
-            cJSON* password = cJSON_GetObjectItem(request, "admin_password");
-            if (!password || !cJSON_IsString(password) || !password->valuestring ||
-                !sec_mgr->verifyAdminPassword(password->valuestring)) {
-                return cleanup_and_error("Administrator password required");
-            }
-        }
-        sec_mgr->setFuzzingAllowed(allow);
-    }
-
-    // Optional physical GPIO gate configuration for unsafe fuzzing
+    // Parse the physical-gate fields before changing any software state. In a
+    // release build the board profile is authoritative and a request that
+    // weakens the gate is rejected atomically.
     bool gate_cfg_updated = false;
     bool gate_enabled = sec_mgr->isFuzzingGpioGateEnabled();
     bool gate_required = sec_mgr->isFuzzingGpioGateRequired();
     int gate_gpio_num = sec_mgr->getFuzzingGpioNum();
     bool gate_active_high = sec_mgr->isFuzzingGpioActiveHigh();
-    int gate_pull_mode = sec_mgr->getFuzzingGpioPullMode(); // 0 none, 1 pullup, 2 pulldown
+    int gate_pull_mode = sec_mgr->getFuzzingGpioPullMode();
 
     if (auto v = cJSON_GetObjectItem(request, "fuzzing_gpio_gate_enabled"); v && cJSON_IsBool(v)) {
         gate_enabled = cJSON_IsTrue(v);
@@ -301,6 +292,30 @@ inline cJSON* handleSecurityConfigPost(SecurityManager* sec_mgr, const char* jso
     if (auto v = cJSON_GetObjectItem(request, "fuzzing_gpio_pull_mode"); v && cJSON_IsNumber(v)) {
         gate_pull_mode = (int)v->valuedouble;
         gate_cfg_updated = true;
+    }
+
+    if (!sec_mgr->isOffensiveInterlockBypassAuthorized() && gate_cfg_updated &&
+        (gate_enabled != sec_mgr->isFuzzingGpioGateEnabled() ||
+         gate_required != sec_mgr->isFuzzingGpioGateRequired() ||
+         gate_gpio_num != sec_mgr->getFuzzingGpioNum() ||
+         gate_active_high != sec_mgr->isFuzzingGpioActiveHigh() ||
+         gate_pull_mode != sec_mgr->getFuzzingGpioPullMode())) {
+        return cleanup_and_error("hardware_interlock_locked_by_build");
+    }
+
+    // Update fuzzing_allowed if present. Enabling offensive actions requires
+    // administrator re-authentication; disabling remains an emergency action.
+    cJSON* fuzzing_allowed = cJSON_GetObjectItem(request, "fuzzing_allowed");
+    if (fuzzing_allowed && cJSON_IsBool(fuzzing_allowed)) {
+        bool allow = cJSON_IsTrue(fuzzing_allowed);
+        if (allow) {
+            cJSON* password = cJSON_GetObjectItem(request, "admin_password");
+            if (!password || !cJSON_IsString(password) || !password->valuestring ||
+                !sec_mgr->verifyAdminPassword(password->valuestring)) {
+                return cleanup_and_error("Administrator password required");
+            }
+        }
+        sec_mgr->setFuzzingAllowed(allow);
     }
 
     if (gate_cfg_updated) {

@@ -12,6 +12,34 @@ import build_assets  # noqa: E402
 
 
 class OffensiveConfigAssetTests(unittest.TestCase):
+    def test_build_assets_expose_interlock_bypass_authorization_marker(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "ESP32_OT_EMBEDDED_CONFIG": "0",
+                    "ESP32_OT_ALLOW_OFFENSIVE_CONFIG_OVERRIDE": "1",
+                },
+                clear=False,
+            ):
+                header = build_assets.generate_build_assets(root, root / "build", "t-poe-pro").header_path
+            self.assertIn("kOffensiveInterlockBypassAuthorized = false", header.read_text(encoding="utf-8"))
+
+            (root / "device-config.json").write_text(
+                json.dumps({"admin_password": "A" * 20}), encoding="utf-8"
+            )
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "ESP32_OT_EMBEDDED_CONFIG": "1",
+                    "ESP32_OT_ALLOW_OFFENSIVE_CONFIG_OVERRIDE": "1",
+                },
+                clear=False,
+            ):
+                header = build_assets.generate_build_assets(root, root / "dev-build", "t-poe-pro").header_path
+            self.assertIn("kOffensiveInterlockBypassAuthorized = true", header.read_text(encoding="utf-8"))
+
     def test_public_defaults_use_user_selected_board_pins(self):
         expected = {
             "t-poe-pro": 15,

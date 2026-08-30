@@ -196,6 +196,19 @@ class BuildIntegrationTests(unittest.TestCase):
         self.assertIn("response_accepted", source)
         self.assertIn("plc_state_verified", source)
 
+    def test_s7_szl_response_buffer_is_not_allocated_on_discovery_task_stack(self):
+        source = (PROJECT_ROOT / "src/protocols/s7_plugin.cpp").read_text(
+            encoding="utf-8"
+        )
+        read_szl = source.split("bool S7Plugin::readSZL", 1)[1].split(
+            "bool S7Plugin::parseSZLResponse", 1
+        )[0]
+
+        # A 4096-byte automatic receive buffer overflows the 12-KB discovery
+        # task when readSZL is called through legacyDoNetworkDiscovery.
+        self.assertNotRegex(read_szl, r"uint8_t\s+rx\s*\[\s*4096\s*\]")
+        self.assertRegex(read_szl, r"psram_vector<uint8_t>\s+rx")
+
     def test_p4_combined_image_uses_the_partition_table_application_offset(self):
         upload_script = (PROJECT_ROOT / "scripts/p4_upload.py").read_text(encoding="utf-8")
         self.assertIn('ESP32_APP_OFFSET="0x200000"', upload_script)

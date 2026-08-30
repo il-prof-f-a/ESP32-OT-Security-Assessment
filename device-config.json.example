@@ -270,6 +270,7 @@
   },
   "security": {
     "offensive_testing": {
+      "_comment": "Public/release builds force the board-profile GPIO gate enabled and required. Gate bypass is development-only and requires ESP32_OT_ALLOW_OFFENSIVE_CONFIG_OVERRIDE=1 during asset generation.",
       "software_enabled": false,
       "boot_policy": "seed_if_absent",
       "gpio_gate": {

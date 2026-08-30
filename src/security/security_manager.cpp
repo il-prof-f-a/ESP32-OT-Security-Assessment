@@ -9,6 +9,7 @@
 #include "api_key_rotation_manager.h"
 #include "password_hasher.h"
 #include "offensive_testing_board_profile.h"
+#include "esp32_ot_build_assets.h"
 #include <algorithm>
 #include <cstring>
 #include <cctype>
@@ -74,7 +75,8 @@ static inline void log_api_key_preview(const char* token_preview_source) {
 
 bool SecurityManager::readFuzzingGpioGateState() const {
     if (!fuzzing_gpio_gate_enabled_ || fuzzing_gpio_num_ < 0) {
-        return true; // no physical gating
+        // A release build must never treat a missing/disabled gate as asserted.
+        return isOffensiveInterlockBypassAuthorized();
     }
 
     // gpio_get_level returns 0/1. We map it to an "ON" meaning based on active_high.
@@ -83,14 +85,44 @@ bool SecurityManager::readFuzzingGpioGateState() const {
     return fuzzing_gpio_active_high_ ? raw_on : !raw_on;
 }
 
+bool SecurityManager::isOffensiveInterlockBypassAuthorized() const {
+    return esp32_ot_build::kOffensiveInterlockBypassAuthorized;
+}
+
+void SecurityManager::enforceMandatoryInterlockForBuild() {
+    if (isOffensiveInterlockBypassAuthorized()) {
+        return;
+    }
+
+    const auto& profile = getOffensiveTestingBoardProfile();
+    fuzzing_gpio_gate_enabled_ = true;
+    fuzzing_gpio_gate_required_ = true;
+    fuzzing_gpio_num_ = profile.default_gpio;
+    fuzzing_gpio_active_high_ = profile.active_high;
+    fuzzing_gpio_pull_mode_ = profile.pull_mode;
+}
+
 OffensiveTestingDecision SecurityManager::evaluateOffensiveTesting() const {
     OffensiveTestingDecision decision;
     decision.software_enabled = fuzzing_allowed_;
-    decision.gpio_required = fuzzing_gpio_gate_enabled_ && fuzzing_gpio_gate_required_;
+    const auto& profile = getOffensiveTestingBoardProfile();
+    const bool build_locked_config =
+        !isOffensiveInterlockBypassAuthorized() &&
+        fuzzing_gpio_gate_enabled_ && fuzzing_gpio_gate_required_ &&
+        fuzzing_gpio_num_ == profile.default_gpio &&
+        fuzzing_gpio_active_high_ == profile.active_high &&
+        fuzzing_gpio_pull_mode_ == profile.pull_mode;
+    decision.gpio_required = build_locked_config ||
+        (fuzzing_gpio_gate_enabled_ && fuzzing_gpio_gate_required_);
     decision.gpio_asserted = readFuzzingGpioGateState();
     decision.source = offensive_policy_source_.c_str();
     if (!decision.software_enabled) {
         decision.reason = "disabled_in_security_config";
+        return decision;
+    }
+    if (!isOffensiveInterlockBypassAuthorized() && !build_locked_config) {
+        decision.reason = "hardware_interlock_locked_by_build";
+        decision.gpio_asserted = false;
         return decision;
     }
     if (decision.gpio_required && !decision.gpio_asserted) {
@@ -115,6 +147,15 @@ bool SecurityManager::configureFuzzingGpioGate(bool enabled,
                                                bool active_high,
                                                int pull_mode,
                                                bool require_gate) {
+    if (!isOffensiveInterlockBypassAuthorized()) {
+        const auto& profile = getOffensiveTestingBoardProfile();
+        enabled = true;
+        require_gate = true;
+        gpio_num = profile.default_gpio;
+        active_high = profile.active_high;
+        pull_mode = profile.pull_mode;
+    }
+
     fuzzing_gpio_gate_enabled_ = enabled;
     fuzzing_gpio_gate_required_ = require_gate;
     fuzzing_gpio_num_ = gpio_num;
@@ -219,7 +260,8 @@ bool SecurityManager::persistOffensiveTestingPolicy() {
 bool SecurityManager::loadOffensiveTestingPolicyFromStorage() {
     const OffensiveTestingConfig configured = cfg_.offensive_testing;
     const auto& profile = getOffensiveTestingBoardProfile();
-    const bool force_config = configured.boot_policy == "force_config";
+    const bool force_config = configured.boot_policy == "force_config" &&
+                              isOffensiveInterlockBypassAuthorized();
 
     OffensivePolicyRecordV1 record{};
     std::vector<uint8_t> raw;
@@ -230,6 +272,7 @@ bool SecurityManager::loadOffensiveTestingPolicyFromStorage() {
         loaded = validOffensivePolicyRecord(record);
     }
 
+    bool persist_seed = false;
     if (loaded) {
         fuzzing_allowed_ = record.software_enabled != 0;
         fuzzing_gpio_gate_enabled_ = record.gpio_enabled != 0;
@@ -238,6 +281,12 @@ bool SecurityManager::loadOffensiveTestingPolicyFromStorage() {
         fuzzing_gpio_active_high_ = record.active_high != 0;
         fuzzing_gpio_pull_mode_ = record.pull_mode;
         offensive_policy_source_ = "nvs";
+        if (!isOffensiveInterlockBypassAuthorized()) {
+            persist_seed = record.gpio_enabled != 1 || record.gpio_required != 1 ||
+                           record.gpio != profile.default_gpio ||
+                           record.active_high != (profile.active_high ? 1 : 0) ||
+                           record.pull_mode != profile.pull_mode;
+        }
     } else {
         uint8_t legacy = 0;
         const bool has_legacy = !force_config &&
@@ -252,9 +301,12 @@ bool SecurityManager::loadOffensiveTestingPolicyFromStorage() {
         fuzzing_gpio_pull_mode_ = configured.gpio_gate.pull_mode;
         offensive_policy_source_ = force_config ? "config_override"
                                                 : (has_legacy ? "legacy_migration" : "config_seed");
-        if (!force_config && !persistOffensiveTestingPolicy()) {
-            LOG_WARNING(TAG_SEC, "Unable to seed offensive-testing policy; continuing fail-closed");
-        }
+        persist_seed = !force_config;
+    }
+
+    enforceMandatoryInterlockForBuild();
+    if (persist_seed && !persistOffensiveTestingPolicy()) {
+        LOG_WARNING(TAG_SEC, "Unable to seed offensive-testing policy; continuing fail-closed");
     }
 
     if (!configureFuzzingGpioGate(fuzzing_gpio_gate_enabled_, fuzzing_gpio_num_,

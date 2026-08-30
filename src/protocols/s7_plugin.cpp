@@ -4012,11 +4012,16 @@ bool S7Plugin::readSZL(int sock, uint16_t szl_id, uint16_t szl_index, S7DeviceIn
     uint8_t seq_in = 0;
     uint16_t pdu_seq = 2;
     for (unsigned fragment = 0; fragment < 16 && !done; ++fragment) {
-        uint8_t rx[4096];
+        // The discovery task already has a deep call chain (legacy discovery
+        // -> clientOpsPSRAM -> readSZL).  Keep the 4-KB receive frame in PSRAM
+        // instead of consuming it from the task stack, which caused a stack
+        // protection fault on ESP32-P4 during the first SZL response.
+        psram_vector<uint8_t> rx;
+        rx.resize(4096);
         size_t rx_len = 0;
-        if (!recv_tpkt_frame_free(sock, rx, sizeof(rx), rx_len)) return false;
+        if (!recv_tpkt_frame_free(sock, rx.data(), rx.size(), rx_len)) return false;
         size_t s7_len = 0;
-        const uint8_t* s7 = locate_s7_pdu_free(rx, rx_len, s7_len);
+        const uint8_t* s7 = locate_s7_pdu_free(rx.data(), rx_len, s7_len);
         if (!decodeSZLFrame(s7, s7_len, first_frame, records, done, seq_in)) return false;
         first_frame = false;
         if (done) break;

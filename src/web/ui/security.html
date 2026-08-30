@@ -146,12 +146,16 @@
                     Recommended wiring: GPIO input with internal pull-up, switch to GND (active-low).
                 </div>
 
+                <div class="info-box" id="fuzzing-interlock-build-note" style="display:block;">
+                    The build policy is being loaded…
+                </div>
+
                 <div class="form-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="fuzzing-gpio-gate-enabled">
                         <span>
                             <strong>Enable fuzzing GPIO gate</strong><br>
-                            <small style="color: #718096;">Optional physical interlock for unsafe fuzzing</small>
+                            <small style="color: #718096;">Build-enforced physical interlock for unsafe fuzzing; configurable only in an authorized development build</small>
                         </span>
                     </label>
                 </div>
@@ -182,7 +186,7 @@
                         <input type="checkbox" id="fuzzing-gpio-gate-required">
                         <span>
                             <strong>Require switch ON to allow fuzzing</strong><br>
-                            <small style="color: #718096;">If disabled, gate is informational only</small>
+                            <small style="color: #718096;">Mandatory in release builds; configurable only in an authorized development build</small>
                         </span>
                     </label>
                 </div>
@@ -400,6 +404,31 @@
             return ms.toFixed(0) + 'ms';
         }
 
+        function applyInterlockBuildLock(config) {
+            const bypassAllowed = config && config.offensive_interlock_bypass_allowed === true;
+            window._offensiveInterlockBypassAllowed = bypassAllowed;
+            const controls = [
+                'fuzzing-gpio-gate-enabled',
+                'fuzzing-gpio-gate-required',
+                'fuzzing-gpio-num',
+                'fuzzing-gpio-active-high',
+                'fuzzing-gpio-pull-mode'
+            ];
+            controls.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) element.disabled = !bypassAllowed;
+            });
+            const note = document.getElementById('fuzzing-interlock-build-note');
+            if (!note) return;
+            if (bypassAllowed) {
+                note.className = 'info-box warning';
+                note.textContent = 'Development interlock override is enabled for this build. Keep it limited to an isolated lab device.';
+            } else {
+                note.className = 'info-box warning';
+                note.textContent = 'Hardware interlock is mandatory in this build. The gate controls are locked; connect the configured GPIO to GND to authorize unsafe testing. An OFF/open switch keeps Effective Status blocked.';
+            }
+        }
+
         function buildMeta(label, value) {
             const span = document.createElement('span');
             span.textContent = label + ': ' + value;
@@ -598,6 +627,7 @@
                     : await (await fetch('/api/security/config', { cache: 'no-store' })).json();
 
                 const config = data.config || {};
+                applyInterlockBuildLock(config);
                 document.getElementById('fuzzing-allowed').checked = !!config.fuzzing_allowed;
                 window._fuzzingAllowedInitial = !!config.fuzzing_allowed;
                 window._fuzzingPolicySnapshot = {

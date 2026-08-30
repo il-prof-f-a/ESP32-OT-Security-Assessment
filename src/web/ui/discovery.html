@@ -148,6 +148,7 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 <button class="btn" onclick="startGeneralDiscovery()">General discovery</button>
 </div>
 </div>
+<div id="status" class="status" role="status" aria-live="polite" hidden></div>
 <div class="card">
 <h3>🕒 Active Discoveries</h3>
 <div id="active_discoveries">No active discoveries</div>
@@ -160,7 +161,6 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 </div>
 </div>
 </div>
-<div id="status"></div>
 <script>
     // Extract session token from URL and add to all API calls
 (function() {
@@ -219,9 +219,11 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 
 function status(msg,err){
 var s=document.getElementById('status');
+if(!s) return;
+s.hidden=false;
 s.className='status '+(err?'err':'ok');
 s.textContent=msg;
-setTimeout(()=>s.innerHTML='',3000);
+setTimeout(()=>{s.textContent='';s.hidden=true;},3000);
 }
 
 function escHtml(v){
@@ -504,7 +506,7 @@ var response = await fetch('/api/discovery/start', {
 
 var result = await response.json();
 if (result.success) {
-  status('Discovery '+type+' started - ID: '+result.discovery_id);
+  status('Discovery '+type+' started - ID: '+result.discovery_id+'. Results will appear below shortly.');
   activeDiscoveries.set(result.discovery_id, {
     protocol: type,
     target: target,
@@ -626,7 +628,7 @@ async function startGeneralDiscovery(){
     if(!resp.ok) throw new Error('HTTP '+resp.status);
     var result=await resp.json();
     if(result.success){
-      status('General discovery started - ID: '+result.discovery_id);
+      status('General discovery started - ID: '+result.discovery_id+'. Results will appear below shortly.');
       activeDiscoveries.set(result.discovery_id,{
         protocol:'General Discovery',
         target:target,

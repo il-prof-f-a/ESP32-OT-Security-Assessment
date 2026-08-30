@@ -23,12 +23,20 @@ certificates.
 ## Fuzzing and hardware interlock
 
 The fuzzing switch permits active assessment traffic. The **Effective Status** reflects both
-software permission and, when configured, the GPIO interlock. The same global control is also
-available above the tabs on the [Scanner & Fuzzing page](vulnerability-scanner.md). GPIO number,
-active level, pull mode and enforcement define the physical gate. If enforcement is disabled, the
-switch state is informational only. Verify pin availability and the board-specific default pin
-in the [offensive-testing interlock guide](../security/offensive-testing-interlock.md) before
-wiring an interlock.
+software permission and the physical GPIO interlock. The same global control is also available
+above the tabs on the [Scanner & Fuzzing page](vulnerability-scanner.md).
+
+In public/release firmware, **Enable fuzzing GPIO gate**, **Require switch ON to allow fuzzing**,
+GPIO number, active level and pull mode are locked. The firmware always uses the board profile's
+default pin and requires the asserted contact; the API enforces the same rule even if a client
+tries to submit a handcrafted request. With **Switch state = OFF**, **Effective Status** must be
+**Blocked**. The page explains that the configured GPIO must be connected to the adjacent GND.
+
+Only a development image built with the explicit `ESP32_OT_ALLOW_OFFENSIVE_CONFIG_OVERRIDE=1`
+authorization unlocks those controls. This is independent of `ESP32_OT_EMBEDDED_CONFIG`, which
+only selects whether configuration is embedded or provisioned. Verify pin availability and the
+board-specific default pin in the [offensive-testing interlock guide](../security/offensive-testing-interlock.md)
+before wiring an interlock.
 
 ## Alert Policy
 

@@ -7,6 +7,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class DashboardUiTests(unittest.TestCase):
+    def test_security_ui_locks_gpio_interlock_without_build_authorization(self):
+        security = (PROJECT_ROOT / "src/web/ui/security.html").read_text(encoding="utf-8")
+        for token in (
+            "offensive_interlock_bypass_allowed",
+            "Hardware interlock is mandatory",
+            "fuzzing-gpio-gate-enabled",
+            "disabled = !bypassAllowed",
+        ):
+            self.assertIn(token, security)
+
     def test_plugin_status_objects_render_name_and_event_count(self):
         for relative_path in (
             "src/web/ui/dashboard.html",
@@ -45,6 +55,15 @@ class DashboardUiTests(unittest.TestCase):
     def test_dashboard_points_protocol_discovery_to_dedicated_page(self):
         dashboard = (PROJECT_ROOT / "src/web/ui/dashboard.html").read_text(encoding="utf-8")
         self.assertIn('<a href="/discovery" class="nav-btn">🔍 Protocol Discovery</a>', dashboard)
+
+    def test_discovery_start_status_is_inside_configuration_card_before_active_jobs(self):
+        discovery = (PROJECT_ROOT / "src/web/ui/discovery.html").read_text(encoding="utf-8")
+
+        active_heading = discovery.index('<h3>🕒 Active Discoveries</h3>')
+        status_pos = discovery.index('id="status"')
+        self.assertLess(status_pos, active_heading)
+        self.assertIn('id="status" class="status" role="status" aria-live="polite" hidden', discovery)
+        self.assertIn('Results will appear below shortly.', discovery)
 
 
 if __name__ == "__main__":

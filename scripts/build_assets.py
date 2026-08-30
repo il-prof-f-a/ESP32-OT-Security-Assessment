@@ -303,7 +303,12 @@ def _validate_offensive_override(config: dict) -> None:
         )
 
 
-def _header_bytes(config: dict, admin_hash: str, ethernet_dhcp: bool) -> bytes:
+def _header_bytes(
+    config: dict,
+    admin_hash: str,
+    ethernet_dhcp: bool,
+    offensive_interlock_bypass_authorized: bool,
+) -> bytes:
     rendered = json.dumps(
         config, ensure_ascii=True, separators=(",", ":"), sort_keys=True
     )
@@ -317,6 +322,8 @@ def _header_bytes(config: dict, admin_hash: str, ethernet_dhcp: bool) -> bytes:
         'static constexpr char kEmbeddedAdminPasswordHash[] = "'
         f'{admin_hash}";\n'
         f"static constexpr bool kEmbeddedEthernetDhcp = {dhcp};\n"
+        "static constexpr bool kOffensiveInterlockBypassAuthorized = "
+        f"{'true' if offensive_interlock_bypass_authorized else 'false'};\n"
         "}  // namespace esp32_ot_build\n"
     )
     return header.encode("utf-8")
@@ -346,8 +353,12 @@ def generate_build_assets(
 
     admin_hash = ""
     ethernet_dhcp = True
+    embedded_requested = _embedded_requested(project_dir, board or "")
+    offensive_interlock_bypass_authorized = embedded_requested and (
+        os.environ.get("ESP32_OT_ALLOW_OFFENSIVE_CONFIG_OVERRIDE") == "1"
+    )
     config = _public_defaults(board)
-    if _embedded_requested(project_dir, board or ""):
+    if embedded_requested:
         device_config = _load_device_config(project_dir)
         admin_hash = _embedded_admin_hash(device_config)
         overrides = {
@@ -363,7 +374,15 @@ def generate_build_assets(
     legacy_header = header_path.parent / "esp32_ot_generated_credentials.h"
     if legacy_header.exists():
         legacy_header.unlink()
-    _atomic_write(header_path, _header_bytes(config, admin_hash, ethernet_dhcp))
+    _atomic_write(
+        header_path,
+        _header_bytes(
+            config,
+            admin_hash,
+            ethernet_dhcp,
+            offensive_interlock_bypass_authorized,
+        ),
+    )
     return BuildAssetsResult(header_path=header_path)
 
 

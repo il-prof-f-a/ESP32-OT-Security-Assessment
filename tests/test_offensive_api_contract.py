@@ -9,6 +9,17 @@ SECURITY = PROJECT_ROOT / "src" / "security" / "security_manager.cpp"
 
 
 class OffensiveApiContractTests(unittest.TestCase):
+    def test_api_exposes_build_lock_and_rejects_gate_relaxation(self):
+        api = API.read_text(encoding="utf-8")
+        manager = SECURITY.read_text(encoding="utf-8")
+        for token in (
+            '"offensive_interlock_bypass_allowed"',
+            '"hardware_interlock_locked_by_build"',
+            "isOffensiveInterlockBypassAuthorized",
+            "getOffensiveTestingBoardProfile",
+        ):
+            self.assertIn(token, api + manager)
+
     def test_api_exposes_policy_status_and_password_gate(self):
         source = API.read_text(encoding="utf-8")
         for token in (

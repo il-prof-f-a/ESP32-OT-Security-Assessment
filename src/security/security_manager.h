@@ -92,6 +92,9 @@ public:
     bool isFuzzingAllowed() const;
     const char* getFuzzingBlockReason() const;
     OffensiveTestingDecision evaluateOffensiveTesting() const;
+    // True only for an explicitly authorized development build. Public/release
+    // firmware keeps the physical interlock mandatory regardless of NVS/config.
+    bool isOffensiveInterlockBypassAuthorized() const;
     const char* getOffensiveTestingPolicySource() const { return offensive_policy_source_.c_str(); }
     bool loadOffensiveTestingPolicyFromStorage();
     bool persistOffensiveTestingPolicy();
@@ -182,6 +185,7 @@ private:
     void auditApiKeysForRotation();
     void scheduleRotationForKey(const ApiKeyEntry& entry) const;
     void cancelRotationForKey(const psram_string& key_id) const;
+    void enforceMandatoryInterlockForBuild();
     void recordSecurityEvent(const char* type,
                              const char* severity,
                              const psram_string& summary,

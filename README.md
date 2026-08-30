@@ -22,7 +22,7 @@ The illustrated [web interface user guide](docs/user-guide/README.md) is the aut
 | Situational awareness            | Dashboard counters, audit evidence, device-presence tracking, memory diagnostics and a browser serial-reporting view.                                                 | [Dashboard](docs/user-guide/dashboard.md), [Audit manager](docs/user-guide/audit-manager.md), [Network presence](docs/user-guide/network-presence.md), [Diagnostics](docs/user-guide/diagnostics.md), [Serial monitor](docs/user-guide/serial-monitor.md) |
 | Protocol discovery               | Targeted discovery for Modbus TCP, S7, PROFINET DCP, EtherNet/IP and OPC UA, plus ping, port and subnet discovery.                                                    | [Protocol discovery](docs/user-guide/protocol-discovery.md)                                                                                                                                                                                               |
 | Passive detection                | IDS counters, signatures, alerting and protocol-aware visibility for the supported OT protocols. A zero-alert counter is not proof that a network is safe.            | [Intrusion detection](docs/user-guide/intrusion-detection-system.md), [CVE signatures](docs/user-guide/cve-signatures.md)                                                                                                                                 |
-| Authorised active assessment     | Reusable vulnerability-scanner jobs, scheduled work and protocol fuzzing behind explicit controls and, when configured, a physical GPIO interlock.                    | [Vulnerability scanner](docs/user-guide/vulnerability-scanner.md), [Fuzzing](docs/user-guide/fuzzing.md), [Offensive-testing interlock](docs/security/offensive-testing-interlock.md)                                                                       |
+| Authorised active assessment     | Reusable vulnerability-scanner jobs, scheduled work and protocol fuzzing behind explicit controls and a mandatory physical GPIO interlock in public/release firmware. | [Vulnerability scanner](docs/user-guide/vulnerability-scanner.md), [Fuzzing](docs/user-guide/fuzzing.md), [Offensive-testing interlock](docs/security/offensive-testing-interlock.md) |
 | Reporting and evidence           | Filtered events and exports through serial, files, MQTT, webhooks, email and other configured channels; files and endpoint exports can contain sensitive information. | [Reporting](docs/user-guide/reporting.md), [Logging](docs/user-guide/logging.md)                                                                                                                                                                          |
 | Network and device controls      | Network utilities, protocol configuration and GPIO-driven indicators or controls.                                                                                     | [Network tools](docs/user-guide/network-tools.md), [Protocol configuration](docs/user-guide/protocol-configuration.md), [GPIO reporter](docs/user-guide/gpio-reporter.md)                                                                                 |
 
@@ -199,6 +199,14 @@ By default S3/P4 generate a unique self-signed certificate at first boot and sto
 --include-filesystem`; a normal firmware update preserves the existing on-device identity. The key must match the certificate; an invalid pair is discarded and regenerated.
 
 Release/CI builds always use interactive provisioning: the workflow forces the flag to 0, so downloadable firmware never contains an embedded password.
+
+The hardware interlock is enforced independently of provisioning. Public/release firmware always
+keeps the configured board GPIO gate enabled and required; an open switch blocks effective
+offensive testing even when the administrator software toggle is enabled. For an isolated,
+authorized development device only, set both `ESP32_OT_EMBEDDED_CONFIG=1` and
+`ESP32_OT_ALLOW_OFFENSIVE_CONFIG_OVERRIDE=1` for the build, then remove both variables from the
+shell before producing any release artifact. The second variable is the explicit build-time
+authorization for changing or bypassing the GPIO interlock; it is never set by public CI.
 
 > Security: embedded config bake a fixed credential into the firmware image, so anyone who extracts the binary can recover the hash and attempt offline cracking. Use this mode only for internal or lab devices whose password must be documented.
 
