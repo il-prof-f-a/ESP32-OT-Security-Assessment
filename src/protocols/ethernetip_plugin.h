@@ -37,7 +37,7 @@ public:
     bool isPacketWriter(const NetworkPacket& pkt) const override;
 
     // IDS/packet path
-    bool doPacketAnalysis(const NetworkPacket& pkt) override;
+    bool doPacketIDSAnalysisOfProtocol(const NetworkPacket& pkt) override;
     bool isTargetPacket(const NetworkPacket& pkt) override;
     void loadIDSRules(const std::string& rules_json) override;
 

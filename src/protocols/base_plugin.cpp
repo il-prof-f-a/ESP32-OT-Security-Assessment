@@ -173,25 +173,84 @@ namespace {
 }
 
 
-void BasePlugin::onPacket(const NetworkPacket& pkt, bool bypassAuthorization) {
-    if (isTargetPacket(pkt)) {
+bool BasePlugin::isIdsAnalysisEnabled() const {
+    return !cfg_ || cfg_->getIDSConfig().enabled;
+}
 
-        // Base-level writers authorization/reporting (PSRAM-only data).
-        // Writer events are always evaluated/logged even when IDS requests bypass.
-        enforceWritersAuthorization(pkt, bypassAuthorization);
-
-        // Call consolidated IDS analysis only if IDS is enabled
-        bool ids_enabled = true;
-        if (cfg_) { ids_enabled = cfg_->getIDSConfig().enabled; }
-        if (ids_enabled) {
-            doPacketAnalysis(pkt);
-        } else {
-            // Active protocol discovery is orthogonal to passive IDS.  Allow
-            // a plugin to consume only the response needed by its current
-            // discovery transaction without re-enabling IDS globally.
-            processDiscoveryPacketWhenIdsDisabled(pkt);
-        }
+BasePlugin::DiscoveryScope BasePlugin::beginDiscovery() {
+    std::lock_guard<std::mutex> lock(discovery_state_mutex_);
+    if (discovery_scope_count_ == UINT32_MAX) {
+        return DiscoveryScope{};
     }
+    ++discovery_scope_count_;
+    discovery_active_.store(true, std::memory_order_release);
+    return DiscoveryScope(this);
+}
+
+BasePlugin::DiscoveryScope::DiscoveryScope(DiscoveryScope&& other) noexcept
+    : owner_(other.owner_) {
+    other.owner_ = nullptr;
+}
+
+BasePlugin::DiscoveryScope& BasePlugin::DiscoveryScope::operator=(DiscoveryScope&& other) noexcept {
+    if (this != &other) {
+        if (owner_) owner_->releaseDiscoveryScope();
+        owner_ = other.owner_;
+        other.owner_ = nullptr;
+    }
+    return *this;
+}
+
+BasePlugin::DiscoveryScope::~DiscoveryScope() {
+    if (owner_) owner_->releaseDiscoveryScope();
+}
+
+void BasePlugin::releaseDiscoveryScope() {
+    std::unique_lock<std::mutex> lock(discovery_state_mutex_);
+    if (discovery_scope_count_ == 0) return;
+    --discovery_scope_count_;
+    if (discovery_scope_count_ != 0) return;
+    discovery_active_.store(false, std::memory_order_release);
+    discovery_state_cv_.wait(lock, [this] { return discovery_inflight_ == 0; });
+}
+
+bool BasePlugin::beginDiscoveryPacket() {
+    std::lock_guard<std::mutex> lock(discovery_state_mutex_);
+    if (!discovery_active_.load(std::memory_order_acquire)) return false;
+    if (discovery_inflight_ == UINT32_MAX) return false;
+    ++discovery_inflight_;
+    return true;
+}
+
+void BasePlugin::endDiscoveryPacket() {
+    std::lock_guard<std::mutex> lock(discovery_state_mutex_);
+    if (discovery_inflight_ == 0) return;
+    --discovery_inflight_;
+    if (discovery_inflight_ == 0) discovery_state_cv_.notify_all();
+}
+
+bool BasePlugin::doPacketAnalysis(const NetworkPacket& pkt) {
+    bool ids_alert = false;
+    // The IDS gate is deliberately here, once, for every derived plugin.
+    if (isIdsAnalysisEnabled() && isTargetPacket(pkt)) {
+        ids_alert = doPacketIDSAnalysisOfProtocol(pkt);
+    }
+
+    // Discovery is independent of IDS and is selected per protocol instance.
+    if (isDiscoveryActive() && acceptsDiscoveryPacket(pkt) && beginDiscoveryPacket()) {
+        processDiscoveryOfProtocol(pkt);
+        endDiscoveryPacket();
+    }
+    return ids_alert;
+}
+
+void BasePlugin::onPacket(const NetworkPacket& pkt, bool bypassAuthorization) {
+    // Writer audit remains tied to the protocol's existing target predicate;
+    // discovery may have a broader acceptance predicate in the template.
+    if (isTargetPacket(pkt)) {
+        enforceWritersAuthorization(pkt, bypassAuthorization);
+    }
+    doPacketAnalysis(pkt);
 }
 
 static inline bool is_hex_digit(char c) {

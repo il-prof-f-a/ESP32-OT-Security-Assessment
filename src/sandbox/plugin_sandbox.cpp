@@ -124,6 +124,11 @@ std::string SandboxedPlugin::doNetworkDiscovery(const std::string& target_networ
 bool SandboxedPlugin::doNetworkDiscoveryPSRAM(const psram_string& target_network,
                                               uint32_t timeout_ms,
                                               psram_string& out_report) {
+    auto discovery_scope = beginDiscovery();
+    if (!discovery_scope) {
+        out_report = PSRAMUtils::createPSRAMString("{\"error\":\"discovery_scope_unavailable\"}");
+        return false;
+    }
     if (!hasFlag(box_.policy().allowed, SandboxAction::NETWORK_ACTIVE)) {
         if (rep_) {
             std::string msg = std::string("{\"plugin\":\"") + name() + "\",\"op\":\"discovery\",\"reason\":\"NETWORK_ACTIVE not allowed\"}";
@@ -137,7 +142,14 @@ bool SandboxedPlugin::doNetworkDiscoveryPSRAM(const psram_string& target_network
     return inner_->doNetworkDiscoveryPSRAM(target_network, timeout_ms, out_report);
 }
 
-bool SandboxedPlugin::doPacketAnalysis(const NetworkPacket& pkt) {
-    // Passive path is allowed; but we can skip if plugin is misbehaving (no rate control here)
-    return inner_->doPacketAnalysis(pkt);
+bool SandboxedPlugin::doPacketIDSAnalysisOfProtocol(const NetworkPacket& pkt) {
+    return inner_->doPacketIDSAnalysisOfProtocol(pkt);
+}
+
+void SandboxedPlugin::processDiscoveryOfProtocol(const NetworkPacket& pkt) {
+    inner_->processDiscoveryOfProtocol(pkt);
+}
+
+bool SandboxedPlugin::acceptsDiscoveryPacket(const NetworkPacket& pkt) {
+    return inner_->acceptsDiscoveryPacket(pkt);
 }

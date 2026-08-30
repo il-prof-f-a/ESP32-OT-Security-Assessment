@@ -164,8 +164,8 @@ public:
     bool isPacketWriter(const NetworkPacket& pkt) const override;
 
     // Passive analysis from capture engine
-    bool doPacketAnalysis(const NetworkPacket& pkt) override;
-    bool processDiscoveryPacketWhenIdsDisabled(const NetworkPacket& pkt) override;
+    bool doPacketIDSAnalysisOfProtocol(const NetworkPacket& pkt) override;
+    void processDiscoveryOfProtocol(const NetworkPacket& pkt) override;
     void loadIDSRules(const std::string& rules_json) override;
 
     // Flow Management API (BasePlugin overrides)
@@ -249,10 +249,10 @@ private:
     EthernetTxIf* eth_ = nullptr;
     std::atomic<uint64_t> ids_events_{0}, scans_{0};
 
-    // Active DCP discovery window: identifyAll() sends the request and collects Identify responses
-    // observed by doPacketAnalysis() during the timeout.
+    // Active DCP discovery transaction buffers. The activity flag and packet
+    // lifetime gate are owned by BasePlugin; this mutex protects results.
     mutable std::mutex discovery_mutex_;
-    std::atomic<bool> discovery_active_{false};
+    mutable std::mutex discovery_transaction_mutex_;
     psram_set<uint64_t> discovery_keys_;
     psram_vector<PROFINETDeviceInfo> discovery_devices_;
 

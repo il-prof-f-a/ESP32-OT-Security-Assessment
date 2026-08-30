@@ -765,7 +765,8 @@ extern "C" void app_main(void) {
     }
 
 
-    // Register packet callback - plugins now handle both protocol processing and IDS
+    // Register packet callback - general IDS/signatures stay centralized;
+    // protocol plugins receive the BasePlugin template-method dispatch.
     net.registerPacketCallback([&](const NetworkPacket& pkt){
         // DEBUG: Direct log to serial for network packet monitoring
         /*printf("[PACKET_DEBUG] 📦 Packet captured: %s:%d -> %s:%d (proto=%d, len=%d)\n",

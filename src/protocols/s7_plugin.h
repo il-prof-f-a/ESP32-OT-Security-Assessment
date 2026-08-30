@@ -106,7 +106,7 @@ public:
     bool isPacketWriter(const NetworkPacket& pkt) const override;
 
     // IDS passive hooks
-    bool doPacketAnalysis(const NetworkPacket& pkt) override;
+    bool doPacketIDSAnalysisOfProtocol(const NetworkPacket& pkt) override;
     bool isTargetPacket(const NetworkPacket& pkt) override;
     void loadIDSRules(const std::string& rules_json) override;
 

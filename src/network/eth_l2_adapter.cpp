@@ -147,7 +147,7 @@ bool EthL2Adapter::attachL2Tap() {
     // so relying only on the glue-installed callback can leave the TAP queue
     // empty even though the TAP fd is valid.
     const esp_err_t path_err = esp_eth_update_input_path_info(
-        eth_, &EthL2Adapter::l2tapInputTrampoline, netif_);
+        eth_, &EthL2Adapter::l2tapInputTrampoline, this);
     if (path_err != ESP_OK) {
         LOG_WARNINGF(TAG, "Installing L2 TAP Ethernet input path failed: %s",
                      esp_err_to_name(path_err));
@@ -171,22 +171,25 @@ bool EthL2Adapter::attachL2Tap() {
 
 esp_err_t EthL2Adapter::l2tapInputTrampoline(esp_eth_handle_t h, uint8_t* buffer,
                                              uint32_t length, void* priv, void* info) {
-    auto* netif = static_cast<esp_netif_t*>(priv);
+    auto* self = static_cast<EthL2Adapter*>(priv);
     size_t filtered_length = length;
-    const uint16_t ether_type = (buffer && length >= sizeof(EthHdr))
-                                    ? be16(buffer + offsetof(EthHdr, type)) : 0;
     const esp_err_t filter_err = esp_vfs_l2tap_eth_filter_frame(
         h, buffer, &filtered_length, info);
-    (void)ether_type;
     (void)filter_err;
     if (filtered_length == 0) {
         return ESP_OK;
     }
-    if (!netif) {
+    if (!self || !self->netif_) {
         free(buffer);
         return ESP_ERR_INVALID_STATE;
     }
-    return esp_netif_receive(netif, buffer, filtered_length, nullptr);
+    // The TAP consumes the configured EtherType (currently PROFINET DCP).
+    // Every other frame remains on the normal netif path, but must still be
+    // observed by NetworkEngine so P4 has the same L2 coverage as the legacy
+    // Ethernet callback.  ingestL2 copies synchronously before lwIP ownership
+    // is transferred, so the driver buffer is never retained by the engine.
+    self->dispatchFrameToEngine(buffer, static_cast<uint32_t>(filtered_length));
+    return esp_netif_receive(self->netif_, buffer, filtered_length, nullptr);
 }
 
 void EthL2Adapter::detachL2Tap() {
@@ -215,10 +218,7 @@ void EthL2Adapter::tapTask() {
     while (tap_running_.load()) {
         const ssize_t n = ::read(tap_fd_, frame, sizeof(frame));
         if (n >= static_cast<ssize_t>(sizeof(EthHdr)) && eng_) {
-            const auto* eh = reinterpret_cast<const EthHdr*>(frame);
-            const uint16_t et = be16(&eh->type);
-            const uint16_t plen = static_cast<uint16_t>(n - sizeof(EthHdr));
-            eng_->ingestL2(eh->src, eh->dst, et, frame + sizeof(EthHdr), plen);
+            dispatchFrameToEngine(frame, static_cast<uint32_t>(n));
         } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
             LOG_WARNINGF(TAG, "L2 TAP read failed: errno=%d", errno);
             break;
@@ -273,20 +273,21 @@ bool EthL2Adapter::enablePromiscuousMode() {
     }
 }
 
+void EthL2Adapter::dispatchFrameToEngine(const uint8_t* buffer, uint32_t length) {
+    if (!eng_ || !buffer || length < sizeof(EthHdr)) return;
+    const auto* eh = reinterpret_cast<const EthHdr*>(buffer);
+    const uint16_t et = be16(&eh->type);
+    const uint16_t plen = static_cast<uint16_t>(length - sizeof(EthHdr));
+    eng_->ingestL2(eh->src, eh->dst, et, buffer + sizeof(EthHdr), plen);
+}
+
 esp_err_t EthL2Adapter::input_trampoline(esp_eth_handle_t h, uint8_t* buffer, uint32_t length, void* priv){
     EthL2Adapter* self = reinterpret_cast<EthL2Adapter*>(priv);
-    if (self && self->eng_ && buffer && length >= sizeof(EthHdr)){
-
-        EthHdr* eh = (EthHdr*)buffer;
-        uint16_t et = be16(&eh->type);
-        const uint8_t* payload = buffer + sizeof(EthHdr);
-        uint16_t plen = (length > sizeof(EthHdr)) ? (length - sizeof(EthHdr)) : 0;
-
-        self->eng_->ingestL2(eh->src, eh->dst, et, payload, plen);
-
+    if (self && buffer && length >= sizeof(EthHdr)) {
+        self->dispatchFrameToEngine(buffer, length);
     }
 
-    if (self->netif_) {
+    if (self && self->netif_) {
         ///LOG_INFO("PacketCapture", "FORWARDING PACKET TO IP STACK ENABLED!!!! Test PING");
         return esp_netif_receive(self->netif_, buffer, length, nullptr);
     } else {

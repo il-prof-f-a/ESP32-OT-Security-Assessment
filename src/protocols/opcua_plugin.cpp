@@ -1291,6 +1291,11 @@ std::string OPCUAPlugin::doNetworkDiscovery(const std::string& target_network,
 bool OPCUAPlugin::doNetworkDiscoveryPSRAM(const psram_string& target_network,
                                           uint32_t timeout_ms,
                                           psram_string& out_report) {
+    auto discovery_scope = beginDiscovery();
+    if (!discovery_scope) {
+        out_report = PSRAMUtils::createPSRAMString("{\"error\":\"discovery_scope_unavailable\"}");
+        return false;
+    }
     std::string legacy_target = PSRAMUtils::fromPSRAMString(target_network);
     std::string legacy_report = legacyDoNetworkDiscovery(legacy_target, timeout_ms);
     if (legacy_report.empty()) {
@@ -1471,7 +1476,7 @@ std::string OPCUAPlugin::legacyDoNetworkDiscovery(const std::string& target_netw
     return out;
 }
 
-bool OPCUAPlugin::doPacketAnalysis(const NetworkPacket& packet) {
+bool OPCUAPlugin::doPacketIDSAnalysisOfProtocol(const NetworkPacket& packet) {
     packets_analyzed_++;
 
     const uint8_t* frame = nullptr;

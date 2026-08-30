@@ -85,7 +85,7 @@ public:
     bool isPacketWriter(const NetworkPacket& pkt) const override;
 
     // Passive IDS
-    bool doPacketAnalysis(const NetworkPacket& pkt) override;
+    bool doPacketIDSAnalysisOfProtocol(const NetworkPacket& pkt) override;
     bool isTargetPacket(const NetworkPacket& pkt) override { return pkt.src_port==502 || pkt.dst_port==502; }
     void loadIDSRules(const std::string& rules_json) override;
 

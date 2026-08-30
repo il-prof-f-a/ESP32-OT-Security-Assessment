@@ -1612,6 +1612,11 @@ std::string EtherNetIPPlugin::doNetworkDiscovery(const std::string& target_netwo
 bool EtherNetIPPlugin::doNetworkDiscoveryPSRAM(const psram_string& target_network,
                                                uint32_t timeout_ms,
                                                psram_string& out_report) {
+    auto discovery_scope = beginDiscovery();
+    if (!discovery_scope) {
+        out_report = PSRAMUtils::createPSRAMString("{\"error\":\"discovery_scope_unavailable\"}");
+        return false;
+    }
     std::string legacy_target = PSRAMUtils::fromPSRAMString(target_network);
     std::string legacy_report = legacyDoNetworkDiscovery(legacy_target, timeout_ms);
     if (legacy_report.empty()) {
@@ -2854,7 +2859,7 @@ bool checkENIP(uint32_t now_ms, uint32_t src, uint32_t dst, uint8_t cip_service,
 }
 
 // Complete doPacketAnalysis implementation with 5 IDS rules
-bool EtherNetIPPlugin::doPacketAnalysis(const NetworkPacket& pkt) {
+bool EtherNetIPPlugin::doPacketIDSAnalysisOfProtocol(const NetworkPacket& pkt) {
     // ===== FLOW MANAGEMENT: Track the packet in the flow tracking system =====
     trackPacketInFlow(pkt);
 

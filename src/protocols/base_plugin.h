@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <atomic>
 #include <vector>
+#include <mutex>
+#include <condition_variable>
 
 #include "../core/types.h"
 #include "../core/psram_allocator.h"
@@ -16,6 +18,7 @@ class ReportingEngine;
 class WritersTracker;
 class NetworkPresenceTracker;
 class SecurityManager;
+class SandboxedPlugin;
 
 // Forward declarations for fuzzing structures
 struct FuzzTestCase;
@@ -48,7 +51,7 @@ public:
     void setSecurityManager(SecurityManager* sec) { sec_ = sec; }
 
     // Network packet callback for real-time analysis (implemented at base level)
-    void onPacket(const NetworkPacket& pkt, bool bypassAuthorization = false);
+    virtual void onPacket(const NetworkPacket& pkt, bool bypassAuthorization = false) final;
 
     // Protocol-specific packet analysis is handled via doPacketAnalysis()
     // Base class enforces writers authorization via enforceWritersAuthorization()
@@ -78,16 +81,43 @@ public:
     virtual NetworkPresenceTracker& getNetworkPresenceTracker() = 0;
     virtual const NetworkPresenceTracker& getNetworkPresenceTracker() const = 0;
 
-    // Passive IDS API
-    virtual bool doPacketAnalysis(const NetworkPacket& packet) = 0;
+    // Passive IDS API. The template method is final so every plugin, including
+    // future plugins and sandbox wrappers, receives the same policy gates.
+    virtual bool doPacketAnalysis(const NetworkPacket& packet) final;
     virtual bool isTargetPacket(const NetworkPacket& packet) = 0;
-    // Active discovery must still be able to consume its protocol replies when
-    // passive IDS is disabled in configuration.  Implementations should keep
-    // this path limited to the active operation and avoid IDS reporting.
-    virtual bool processDiscoveryPacketWhenIdsDisabled(const NetworkPacket& packet) {
+
+    // A discovery scope is per plugin instance/protocol. It is independent of
+    // the IDS configuration and remains active while at least one scope lives.
+    class DiscoveryScope {
+    public:
+        DiscoveryScope() = default;
+        DiscoveryScope(const DiscoveryScope&) = delete;
+        DiscoveryScope& operator=(const DiscoveryScope&) = delete;
+        DiscoveryScope(DiscoveryScope&& other) noexcept;
+        DiscoveryScope& operator=(DiscoveryScope&& other) noexcept;
+        ~DiscoveryScope();
+        explicit operator bool() const { return owner_ != nullptr; }
+    private:
+        friend class BasePlugin;
+        explicit DiscoveryScope(BasePlugin* owner) : owner_(owner) {}
+        BasePlugin* owner_ = nullptr;
+    };
+
+    DiscoveryScope beginDiscovery();
+    bool isDiscoveryActive() const { return discovery_active_.load(std::memory_order_acquire); }
+
+protected:
+    // Template-method hooks. Protocols implement behavior only; policy stays
+    // centralized in BasePlugin::doPacketAnalysis().
+    virtual bool doPacketIDSAnalysisOfProtocol(const NetworkPacket& packet) = 0;
+    virtual void processDiscoveryOfProtocol(const NetworkPacket& packet) {
         (void)packet;
-        return false;
     }
+    virtual bool acceptsDiscoveryPacket(const NetworkPacket& packet) {
+        return isTargetPacket(packet);
+    }
+
+public:
     virtual void loadIDSRules(const std::string& rules_json) { (void)rules_json; }
     virtual void loadIDSRulesPSRAM(const psram_string& rules_json);
 
@@ -212,8 +242,8 @@ protected:
      * 6. Updates the state by calling updateProtocolState()
      * 7. Assigns a label by calling assignFlowLabel()
      *
-     * Plugins must call this method from doPacketAnalysis() for
-     * every packet they want to track.
+     * Protocol IDS hooks may call this method for every packet they want to
+     * track; the template method invokes those hooks only after policy gates.
      *
      * @param packet Network packet to track
      * @return true if tracking succeeded, false on error
@@ -225,7 +255,7 @@ protected:
      *
      * Called periodically (e.g., every minute) to remove
      * inactive flows from the table. Plugins can call it from a dedicated task
-     * or from doPacketAnalysis() itself.
+     * or from the protocol IDS hook itself.
      */
     void cleanupExpiredFlows();
 
@@ -290,4 +320,17 @@ protected:
     void loadAllowedWritersFromConfig();
     bool isWriterAuthorized(const std::string& src_ip, const std::string& src_mac) const;
     void enforceWritersAuthorization(const NetworkPacket& pkt, bool bypassAuthorization);
+
+private:
+    friend class SandboxedPlugin;
+    bool isIdsAnalysisEnabled() const;
+    bool beginDiscoveryPacket();
+    void endDiscoveryPacket();
+    void releaseDiscoveryScope();
+
+    mutable std::mutex discovery_state_mutex_;
+    mutable std::condition_variable discovery_state_cv_;
+    uint32_t discovery_scope_count_ = 0;
+    uint32_t discovery_inflight_ = 0;
+    std::atomic<bool> discovery_active_{false};
 };

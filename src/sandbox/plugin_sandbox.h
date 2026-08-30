@@ -45,7 +45,6 @@ public:
     bool doNetworkDiscoveryPSRAM(const psram_string& target_network,
                                  uint32_t timeout_ms,
                                  psram_string& out_report) override;
-    bool doPacketAnalysis(const NetworkPacket& pkt) override;
     bool isTargetPacket(const NetworkPacket& pkt) override { return inner_->isTargetPacket(pkt); }
     void loadIDSRules(const std::string& r) override { inner_->loadIDSRules(r); }
 
@@ -58,6 +57,10 @@ public:
     const SandboxPolicy& sandboxPolicy() const { return box_.policy(); }
 
 private:
+    bool doPacketIDSAnalysisOfProtocol(const NetworkPacket& pkt) override;
+    void processDiscoveryOfProtocol(const NetworkPacket& pkt) override;
+    bool acceptsDiscoveryPacket(const NetworkPacket& pkt) override;
+
     std::unique_ptr<BasePlugin> inner_;
     PluginSandbox box_;
     std::unique_ptr<EthernetTxGuard> tx_guard_;

@@ -13,7 +13,7 @@ Run these tests from the repository root; no ESP32 hardware is required:
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-They cover credential-directory resolution, secure first-build provisioning, idempotency, recovery from partial TLS state, certificate/key validation, build integration, board metadata, transport-policy selection, and isolation of generated secrets from tracked source paths.
+They cover credential-directory resolution, secure first-build provisioning, idempotency, recovery from partial TLS state, certificate/key validation, build integration, board metadata, transport-policy selection, packet-dispatch policy, L2 ingress coverage, and isolation of generated secrets from tracked source paths.
 
 ## Live-device tools
 

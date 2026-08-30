@@ -54,7 +54,7 @@ public:
     bool doNetworkDiscoveryPSRAM(const psram_string& target_network,
                                  uint32_t timeout_ms,
                                  psram_string& out_report) override;
-    bool doPacketAnalysis(const NetworkPacket& packet) override;
+    bool doPacketIDSAnalysisOfProtocol(const NetworkPacket& packet) override;
     bool isTargetPacket(const NetworkPacket& packet) override;
     void loadIDSRules(const std::string& rules_json) override;
     bool isPacketWriter(const NetworkPacket& pkt) const override;

@@ -1042,6 +1042,11 @@ std::string ModbusTCPPlugin::doNetworkDiscovery(const std::string& target_networ
 bool ModbusTCPPlugin::doNetworkDiscoveryPSRAM(const psram_string& target_network,
                                               uint32_t timeout_ms,
                                               psram_string& out_report) {
+    auto discovery_scope = beginDiscovery();
+    if (!discovery_scope) {
+        out_report = PSRAMUtils::createPSRAMString("{\"error\":\"discovery_scope_unavailable\"}");
+        return false;
+    }
     std::string legacy_target = PSRAMUtils::fromPSRAMString(target_network);
     std::string legacy_report = legacyDoNetworkDiscovery(legacy_target, timeout_ms);
     if (legacy_report.empty()) {
@@ -1745,7 +1750,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
     return out;
 }
 
-bool ModbusTCPPlugin::doPacketAnalysis(const NetworkPacket& pkt) {
+bool ModbusTCPPlugin::doPacketIDSAnalysisOfProtocol(const NetworkPacket& pkt) {
     const uint8_t* p = nullptr;
     size_t p_len = 0;
     if (!locateModbusAdu(pkt, p, p_len) || p_len < 8) return false;

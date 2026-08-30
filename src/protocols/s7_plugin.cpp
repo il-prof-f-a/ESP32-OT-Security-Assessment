@@ -2732,6 +2732,11 @@ std::string S7Plugin::doNetworkDiscovery(const std::string& target_network,
 bool S7Plugin::doNetworkDiscoveryPSRAM(const psram_string& target_network,
                                        uint32_t timeout_ms,
                                        psram_string& out_report) {
+    auto discovery_scope = beginDiscovery();
+    if (!discovery_scope) {
+        out_report = PSRAMUtils::createPSRAMString("{\"error\":\"discovery_scope_unavailable\"}");
+        return false;
+    }
     std::string legacy_target = PSRAMUtils::fromPSRAMString(target_network);
     std::string legacy_report = legacyDoNetworkDiscovery(legacy_target, timeout_ms);
     if (legacy_report.empty()) {
@@ -3001,7 +3006,7 @@ bool S7Plugin::isTargetPacket(const NetworkPacket& pkt) {
 
 // ==================== FASE 3: IDS Rules Implementation ====================
 
-bool S7Plugin::doPacketAnalysis(const NetworkPacket& pkt) {
+bool S7Plugin::doPacketIDSAnalysisOfProtocol(const NetworkPacket& pkt) {
     // ===== FLOW MANAGEMENT: Traccia pacchetto nel sistema di flow tracking =====
     trackPacketInFlow(pkt);
 

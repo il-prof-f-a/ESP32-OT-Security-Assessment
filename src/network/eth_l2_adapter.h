@@ -58,5 +58,6 @@ private:
 
 
     static esp_err_t input_trampoline(esp_eth_handle_t h, uint8_t* buffer, uint32_t length, void* priv);
+    void dispatchFrameToEngine(const uint8_t* buffer, uint32_t length);
     bool enablePromiscuousMode();
 };

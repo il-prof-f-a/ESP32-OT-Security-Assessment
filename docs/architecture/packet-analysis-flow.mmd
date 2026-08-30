@@ -1,0 +1,105 @@
+%% ESP32 OT Security Assessment - packet and frame analysis flow
+%% Generated 2026-08-30. Keep class and method names aligned with the firmware.
+flowchart TD
+    subgraph ING["1. Layer-2 / Layer-3 ingress"]
+        ETH["Ethernet driver frame\n(destination MAC, source MAC, EtherType)"]
+        TAP["EthL2Adapter::l2tapInputTrampoline()\nESP32-P4 TAP callback"]
+        LEGACY["EthL2Adapter::input_trampoline()\nlegacy Ethernet callback"]
+        FILTER{"esp_vfs_l2tap_eth_filter_frame()\nEtherType filter"}
+        TAPREAD["EthL2Adapter::tapTask()\nreads the DCP TAP queue"]
+        HELPER["EthL2Adapter::dispatchFrameToEngine()\nvalidates Ethernet header; synchronous copy boundary"]
+        NETIF["esp_netif_receive()\nnormal lwIP ownership path"]
+        ETH --> TAP
+        ETH --> LEGACY
+        TAP --> FILTER
+        FILTER -->|DCP consumed by TAP| TAPREAD
+        FILTER -->|non-DCP frame| HELPER
+        FILTER -->|non-DCP frame| NETIF
+        TAPREAD --> HELPER
+        LEGACY --> HELPER
+        LEGACY --> NETIF
+    end
+
+    subgraph ENGINE["2. Normalized packet queue"]
+        INGEST["NetworkEngine::ingestL2() / ingestIP()\ncopy bounded payload into PSRAM ring"]
+        PARSE["NetworkEngine::ingestL2()\nVLAN/IP/L4 parsing and ProtocolType inference\n(PROFINET DCP/LLDP, S7, Modbus, OPC UA, EtherNet/IP)"]
+        RING["NetworkEngine ring buffer\nsem_space_ + sem_items_\npacket drop counter on overflow"]
+        ANA["NetworkEngine::anaLoop()\npop slot, invoke registered callbacks, release slot"]
+        HELPER --> INGEST
+        INGEST --> PARSE
+        PARSE --> RING
+        RING --> ANA
+    end
+
+    subgraph CENTRAL["3. Central callback in src/main.cpp"]
+        CALLBACK["registered packet callback\none execution per dispatched NetworkPacket"]
+        IDS{"cfg.getIDSConfig().enabled?"}
+        GIDS["IntrusionDetectionSystem::onPacket(pkt)\ngeneral IDS, baseline and trust side effects\ncalled at most once here"]
+        SIG["SignatureDetection::SignatureDetector::analyzePacketWithReport()\nCVE/signature matching and threat report"]
+        LOOKUP{"PluginManager::findByProtocol(pkt.proto)\nplugin registered?"}
+        CALLBACK --> IDS
+        IDS -->|yes| GIDS
+        IDS -->|no| SIG
+        GIDS --> SIG
+        SIG --> LOOKUP
+    end
+    ANA --> CALLBACK
+
+    subgraph TEMPLATE["4. Non-overridable protocol template method"]
+        ON["BasePlugin::onPacket(pkt, bypassAuthorization) [final]\nwriter audit only when isTargetPacket(pkt)"]
+        ANALYSIS["BasePlugin::doPacketAnalysis(pkt) [final]\nreturns protocol IDS alert status"]
+        IDSGATE{"isIdsAnalysisEnabled()\nAND isTargetPacket(pkt)?"}
+        IDSHOOK["doPacketIDSAnalysisOfProtocol(pkt)\nabstract protocol hook"]
+        DISC_GATE{"isDiscoveryActive()\nAND acceptsDiscoveryPacket(pkt)?"}
+        INFLIGHT["beginDiscoveryPacket()\nregister in-flight RX packet"]
+        DISCHOOK["processDiscoveryOfProtocol(pkt)\nprotocol discovery hook; default no-op"]
+        END["endDiscoveryPacket()\ndecrement in-flight count and notify waiters"]
+        ON --> ANALYSIS
+        ANALYSIS --> IDSGATE
+        IDSGATE -->|yes| IDSHOOK
+        IDSGATE -->|no| DISC_GATE
+        IDSHOOK --> DISC_GATE
+        DISC_GATE -->|yes| INFLIGHT
+        DISC_GATE -->|no| DONE["return to caller"]
+        INFLIGHT --> DISCHOOK --> END --> DONE
+    end
+    LOOKUP -->|plugin found| ON
+    LOOKUP -->|no plugin| NO_PLUGIN["No protocol plugin\ncentral IDS/signatures already completed"]
+
+    subgraph PROTOCOLS["5. Protocol hooks and discovery lifecycle"]
+        HOOKS["ModbusTCPPlugin / S7Plugin / PROFINETPlugin /\nOPCUAPlugin / EtherNetIPPlugin\ndoPacketIDSAnalysisOfProtocol(pkt)"]
+        DISC["processDiscoveryOfProtocol(pkt)\nonly consumes packets while that protocol is active"]
+        START["protocol discovery task\ndoNetworkDiscoveryPSRAM() / identifyAll()"]
+        SCOPE["BasePlugin::beginDiscovery()\nDiscoveryScope RAII: active=true"]
+        TX["send discovery probes\nresponses return through the same ingress pipeline"]
+        CLOSE["DiscoveryScope destructor\nactive=false; wait until discovery_inflight_ == 0"]
+        PNLOCK["PROFINETPlugin::discovery_transaction_mutex_\ntry-lock prevents overlapping DCP transactions"]
+        START --> SCOPE --> TX --> CLOSE
+        TX -. response packets .-> ING
+        PNLOCK -. guards .-> START
+        IDSHOOK --> HOOKS
+        DISCHOOK --> DISC
+    end
+
+    subgraph OUTPUT["6. Observable effects"]
+        REPORT["ReportingEngine / AuditManager\nstructured events, audit records and exports"]
+        FLOW["BasePlugin flow tracking\nFlowTable, SessionStateMachine and metrics"]
+        UI["Web API / dashboard / serial logs"]
+        GIDS --> REPORT
+        SIG --> REPORT
+        IDSHOOK --> FLOW
+        DISCHOOK --> REPORT
+        REPORT --> UI
+        FLOW --> UI
+    end
+
+    classDef ingress fill:#e8f1ff,stroke:#2563eb,color:#0f172a;
+    classDef engine fill:#ecfdf5,stroke:#059669,color:#064e3b;
+    classDef gate fill:#fff7ed,stroke:#ea580c,color:#431407;
+    classDef hook fill:#f5f3ff,stroke:#7c3aed,color:#2e1065;
+    classDef output fill:#fefce8,stroke:#ca8a04,color:#422006;
+    class ETH,TAP,LEGACY,FILTER,TAPREAD,HELPER,NETIF ingress;
+    class INGEST,PARSE,RING,ANA engine;
+    class IDS,IDSGATE,DISC_GATE,LOOKUP,FILTER gate;
+    class ON,ANALYSIS,IDSHOOK,INFLIGHT,DISCHOOK,END,HOOKS,DISC,SCOPE,CLOSE,PNLOCK hook;
+    class REPORT,FLOW,UI output;

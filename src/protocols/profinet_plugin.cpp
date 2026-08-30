@@ -402,12 +402,12 @@ bool PROFINETPlugin::isTargetPacket(const NetworkPacket& packet) {
 
 // ==================== PHASE 6: PROFINET IDS Rules Implementation ====================
 
-bool PROFINETPlugin::doPacketAnalysis(const NetworkPacket& pkt) {
+bool PROFINETPlugin::doPacketIDSAnalysisOfProtocol(const NetworkPacket& pkt) {
     const uint8_t* b = pkt.data;
     const size_t n = pkt.length;
     if (!b || n < 2) return false;
 
-    const bool discovery_mode = discovery_active_.load(std::memory_order_relaxed);
+    const bool discovery_mode = isDiscoveryActive();
 
     // LLDP is not PROFINET-DCP, but is commonly used for PROFINET topology/neighbor data.
     if (pkt.ether_type == htons(0x88CC)) {
@@ -601,19 +601,6 @@ bool PROFINETPlugin::doPacketAnalysis(const NetworkPacket& pkt) {
                 if (discovery_mode) {
                     discovery_parse_ok_.fetch_add(1, std::memory_order_relaxed);
                 }
-                // If an active discovery window is running, capture the device info for identifyAll().
-                {
-                    std::lock_guard<std::mutex> lk(discovery_mutex_);
-                    if (discovery_active_.load(std::memory_order_relaxed)) {
-                        PROFINETDeviceInfo stored = dev_info;
-                        maccpy(stored.mac_address, pkt.src_mac);
-                        const uint64_t key = macToKey(pkt.src_mac);
-                        if (discovery_keys_.insert(key).second) {
-                            discovery_devices_.push_back(stored);
-                        }
-                    }
-                }
-
                 // During an active discovery window we must stay lightweight: avoid emitting vulnerability events
                 // or doing heavy signature/sync reporting on net_ana (core 1), otherwise the web server can stall.
                 if (!discovery_mode) {
@@ -632,10 +619,9 @@ bool PROFINETPlugin::doPacketAnalysis(const NetworkPacket& pkt) {
     return alert_generated;
 }
 
-bool PROFINETPlugin::processDiscoveryPacketWhenIdsDisabled(const NetworkPacket& pkt) {
-    if (!discovery_active_.load(std::memory_order_relaxed) ||
-        pkt.ether_type != htons(0x8892) || !pkt.data || pkt.length < 12) {
-        return false;
+void PROFINETPlugin::processDiscoveryOfProtocol(const NetworkPacket& pkt) {
+    if (pkt.ether_type != htons(0x8892) || !pkt.data || pkt.length < 12) {
+        return;
     }
 
     const uint8_t* b = pkt.data;
@@ -647,7 +633,7 @@ bool PROFINETPlugin::processDiscoveryPacketWhenIdsDisabled(const NetworkPacket& 
     const uint8_t service_type = b[3];
     if (service_id != PROFINET::DCP_SERVICE_IDENTIFY ||
         service_type < PROFINET::DCP_RESPONSE_SUCCESS) {
-        return false;
+        return;
     }
     discovery_rx_identify_.fetch_add(1, std::memory_order_relaxed);
 
@@ -655,27 +641,23 @@ bool PROFINETPlugin::processDiscoveryPacketWhenIdsDisabled(const NetworkPacket& 
     const size_t dcp_total_len = static_cast<size_t>(12) + dcp_data_len;
     if (dcp_total_len > n) {
         discovery_parse_fail_.fetch_add(1, std::memory_order_relaxed);
-        return false;
+        return;
     }
 
     PROFINETDeviceInfo dev_info;
     if (!parseDcpIdentifyResponse(b, dcp_total_len, dev_info)) {
         discovery_parse_fail_.fetch_add(1, std::memory_order_relaxed);
-        return false;
+        return;
     }
     discovery_parse_ok_.fetch_add(1, std::memory_order_relaxed);
 
     std::lock_guard<std::mutex> lk(discovery_mutex_);
-    if (!discovery_active_.load(std::memory_order_relaxed)) {
-        return true;
-    }
     PROFINETDeviceInfo stored = dev_info;
     maccpy(stored.mac_address, pkt.src_mac);
     const uint64_t key = macToKey(pkt.src_mac);
     if (discovery_keys_.insert(key).second) {
         discovery_devices_.push_back(stored);
     }
-    return true;
 }
 
 std::string PROFINETPlugin::doVulnerabilityScan(const std::string& target) {
@@ -751,7 +733,7 @@ std::string PROFINETPlugin::legacyDoVulnerabilityScan(const std::string& target)
 
     if (wants("dcp_identify_all")) {
         identify_ok = identifyAll(devices_json, timeout_ms);
-        // Copy discovered devices captured by doPacketAnalysis() during the discovery window.
+        // Copy discovered devices captured by processDiscoveryOfProtocol() during the window.
         {
             std::lock_guard<std::mutex> lk(discovery_mutex_);
             devices.assign(discovery_devices_.begin(), discovery_devices_.end());
@@ -951,6 +933,16 @@ std::string PROFINETPlugin::legacyDoNetworkDiscovery(const std::string& target_n
 }
 
 bool PROFINETPlugin::identifyAll(std::string& out_json, uint32_t timeout_ms) {
+    std::unique_lock<std::mutex> transaction_lock(discovery_transaction_mutex_, std::try_to_lock);
+    if (!transaction_lock.owns_lock()) {
+        out_json = "{\"error\":\"discovery_busy\"}";
+        return false;
+    }
+    auto discovery_scope = beginDiscovery();
+    if (!discovery_scope) {
+        out_json = "{\"error\":\"discovery_scope_unavailable\"}";
+        return false;
+    }
     if (!eth_) {
         out_json = "{\"error\":\"raw_tx_unavailable\"}";
         return false;
@@ -963,10 +955,10 @@ bool PROFINETPlugin::identifyAll(std::string& out_json, uint32_t timeout_ms) {
     discovery_parse_fail_.store(0, std::memory_order_relaxed);
     discovery_last_frame_id_.store(0, std::memory_order_relaxed);
 
-    // Arm discovery window: doPacketAnalysis() will populate discovery_devices_.
+    // Arm the per-protocol discovery scope; the base template method routes
+    // matching DCP responses to processDiscoveryOfProtocol().
     {
         std::lock_guard<std::mutex> lk(discovery_mutex_);
-        discovery_active_.store(true, std::memory_order_relaxed);
         discovery_keys_.clear();
         discovery_devices_.clear();
         discovery_last_detail_json_.clear();
@@ -978,7 +970,6 @@ bool PROFINETPlugin::identifyAll(std::string& out_json, uint32_t timeout_ms) {
         psram_string detail;
         {
             std::lock_guard<std::mutex> lk(discovery_mutex_);
-            discovery_active_.store(false, std::memory_order_relaxed);
             detail = PSRAMUtils::createPSRAMString(
                 "{\"error\":\"tx_fail\",\"rx_frames\":0,\"rx_identify\":0,\"parse_ok\":0,\"parse_fail\":0,\"devices\":0}"
             );
@@ -1012,7 +1003,6 @@ bool PROFINETPlugin::identifyAll(std::string& out_json, uint32_t timeout_ms) {
             arr += one;
         }
         devices_found = discovery_devices_.size();
-        discovery_active_.store(false, std::memory_order_relaxed);
     }
     arr += PSRAMUtils::createPSRAMString("]");
 
@@ -1549,7 +1539,7 @@ bool PROFINETPlugin::sendDcpIdentifyAll(uint32_t timeout_ms, std::vector<PROFINE
     LOG_INFO(TAG_PN, "DCP Identify-All request sent (variants), waiting for responses...");
 
     // NOTE: On ESP32, we rely on the packet capture engine to receive responses
-    // The responses will be processed via doPacketAnalysis() callback
+    // The responses are processed via the BasePlugin template-method callback.
     // This is a limitation of the platform - we cannot directly receive raw packets here
 
     // In a real implementation with AF_PACKET or similar, we would:
@@ -1559,7 +1549,8 @@ bool PROFINETPlugin::sendDcpIdentifyAll(uint32_t timeout_ms, std::vector<PROFINE
     // 4. Fill devices vector
 
     // For now, return success indicating the request was sent
-    // The actual device discovery happens via passive monitoring in doPacketAnalysis()
+    // The actual device discovery happens via passive monitoring in the base
+    // template method and the PROFINET discovery hook.
 
     scans_++;
     return true;

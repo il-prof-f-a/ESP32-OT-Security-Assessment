@@ -33,6 +33,18 @@ void PluginManager::shutdown() {
 void PluginManager::registerPlugin(std::unique_ptr<BasePlugin> plugin){
     if (!plugin) return;
 
+    const ProtocolType type = plugin->getProtocolType();
+    {
+        std::lock_guard<std::mutex> lock(plugins_mutex_);
+        for (const auto& existing : plugins_) {
+            if (existing && existing->getProtocolType() == type) {
+                LOG_WARNINGF("Plugins", "Ignoring duplicate plugin registration for protocol %s",
+                             protocolTypeToString(type));
+                return;
+            }
+        }
+    }
+
     // AUDIT: Log plugin start event
     const char* plugin_name = plugin->getName().empty() ? "unnamed_plugin" : plugin->getName().c_str();
     AuditManager::getInstance().logPluginEvent(plugin_name, "registered", "Plugin registered and initialized in PluginManager");
@@ -41,7 +53,6 @@ void PluginManager::registerPlugin(std::unique_ptr<BasePlugin> plugin){
     plugin->setSecurityManager(sec_);
     plugin->initialize(cfg_, rep_);
 
-    const ProtocolType type = plugin->getProtocolType();
     const std::string friendly = plugin->getName().empty()
         ? std::string(protocolTypeToFriendly(type))
         : plugin->getName();
