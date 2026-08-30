@@ -165,6 +165,7 @@ public:
 
     // Passive analysis from capture engine
     bool doPacketAnalysis(const NetworkPacket& pkt) override;
+    bool processDiscoveryPacketWhenIdsDisabled(const NetworkPacket& pkt) override;
     void loadIDSRules(const std::string& rules_json) override;
 
     // Flow Management API (BasePlugin overrides)

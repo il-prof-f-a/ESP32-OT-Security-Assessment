@@ -632,6 +632,52 @@ bool PROFINETPlugin::doPacketAnalysis(const NetworkPacket& pkt) {
     return alert_generated;
 }
 
+bool PROFINETPlugin::processDiscoveryPacketWhenIdsDisabled(const NetworkPacket& pkt) {
+    if (!discovery_active_.load(std::memory_order_relaxed) ||
+        pkt.ether_type != htons(0x8892) || !pkt.data || pkt.length < 12) {
+        return false;
+    }
+
+    const uint8_t* b = pkt.data;
+    const size_t n = pkt.length;
+    discovery_rx_frames_.fetch_add(1, std::memory_order_relaxed);
+    discovery_last_frame_id_.store(rd16be(b), std::memory_order_relaxed);
+
+    const uint8_t service_id = b[2];
+    const uint8_t service_type = b[3];
+    if (service_id != PROFINET::DCP_SERVICE_IDENTIFY ||
+        service_type < PROFINET::DCP_RESPONSE_SUCCESS) {
+        return false;
+    }
+    discovery_rx_identify_.fetch_add(1, std::memory_order_relaxed);
+
+    const uint16_t dcp_data_len = rd16be(b + 10);
+    const size_t dcp_total_len = static_cast<size_t>(12) + dcp_data_len;
+    if (dcp_total_len > n) {
+        discovery_parse_fail_.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+
+    PROFINETDeviceInfo dev_info;
+    if (!parseDcpIdentifyResponse(b, dcp_total_len, dev_info)) {
+        discovery_parse_fail_.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+    discovery_parse_ok_.fetch_add(1, std::memory_order_relaxed);
+
+    std::lock_guard<std::mutex> lk(discovery_mutex_);
+    if (!discovery_active_.load(std::memory_order_relaxed)) {
+        return true;
+    }
+    PROFINETDeviceInfo stored = dev_info;
+    maccpy(stored.mac_address, pkt.src_mac);
+    const uint64_t key = macToKey(pkt.src_mac);
+    if (discovery_keys_.insert(key).second) {
+        discovery_devices_.push_back(stored);
+    }
+    return true;
+}
+
 std::string PROFINETPlugin::doVulnerabilityScan(const std::string& target) {
     psram_string target_ps = PSRAMUtils::createPSRAMString(target.c_str());
     psram_string report_ps;

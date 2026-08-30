@@ -7,6 +7,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <sys/ioctl.h>
 extern "C" {
     #include "lwip/inet.h"
     #include "lwip/ip4_addr.h"
@@ -49,6 +52,20 @@ bool EthL2Adapter::attach(esp_eth_handle_t eth, esp_netif_t* netif, NetworkEngin
     netif_ = netif;
     eng_ = engine;
 
+#if defined(CONFIG_IDF_TARGET_ESP32P4) && defined(CONFIG_ESP_NETIF_L2_TAP) && CONFIG_ESP_NETIF_L2_TAP
+    // Do not replace the ESP-NETIF callback on ESP32-P4. The stock glue
+    // callback feeds ESP-NETIF's L2 TAP filter; replacing it bypasses that
+    // filter and leaves non-IP frames invisible to the application.
+    if (attachL2Tap()) {
+        if (!enablePromiscuousMode()) {
+            LOG_WARNING(TAG, "L2 TAP attached but promiscuous mode could not be enabled");
+        }
+        LOG_INFO(TAG, "ESP32-P4 L2 capture attached through ESP-NETIF TAP");
+        return true;
+    }
+    LOG_WARNING(TAG, "ESP32-P4 L2 TAP unavailable; falling back to input callback");
+#endif
+
     // Try the original ESP-IDF approach with better error handling
     esp_err_t e = esp_eth_update_input_path(eth_, &EthL2Adapter::input_trampoline, this);
     if (e == ESP_OK) {
@@ -82,10 +99,136 @@ bool EthL2Adapter::attach(esp_eth_handle_t eth, esp_netif_t* netif, NetworkEngin
 
 void EthL2Adapter::detach(){
     if (!eth_) return;
+#if defined(CONFIG_IDF_TARGET_ESP32P4) && defined(CONFIG_ESP_NETIF_L2_TAP) && CONFIG_ESP_NETIF_L2_TAP
+    detachL2Tap();
+#endif
     // Note: ESP-IDF doesn't provide a way to restore previous input path
     // This is acceptable since we're intercepting packets, not replacing the stack
     eth_ = nullptr; eng_ = nullptr; promiscuous_enabled_ = false;
 }
+
+#if defined(CONFIG_IDF_TARGET_ESP32P4) && defined(CONFIG_ESP_NETIF_L2_TAP) && CONFIG_ESP_NETIF_L2_TAP
+bool EthL2Adapter::attachL2Tap() {
+    // Registration is process-wide. ESP_ERR_INVALID_STATE means another
+    // component already registered the default VFS, which is safe to reuse.
+    const esp_err_t reg = esp_vfs_l2tap_intf_register(nullptr);
+    if (reg != ESP_OK && reg != ESP_ERR_INVALID_STATE) {
+        LOG_WARNINGF(TAG, "L2 TAP VFS registration failed: %s", esp_err_to_name(reg));
+        return false;
+    }
+
+    tap_fd_ = ::open(L2TAP_VFS_DEFAULT_PATH, O_NONBLOCK);
+    if (tap_fd_ < 0) {
+        LOG_WARNINGF(TAG, "Opening %s failed: errno=%d", L2TAP_VFS_DEFAULT_PATH, errno);
+        tap_fd_ = -1;
+        return false;
+    }
+
+    if (::ioctl(tap_fd_, L2TAP_S_DEVICE_DRV_HNDL,
+                static_cast<l2tap_iodriver_handle>(eth_)) < 0) {
+        LOG_WARNINGF(TAG, "Binding L2 TAP to Ethernet driver failed: errno=%d", errno);
+        ::close(tap_fd_);
+        tap_fd_ = -1;
+        return false;
+    }
+
+    // ioctl expects the host-order EtherType; the frame itself remains
+    // network byte order (0x8892 on the wire).
+    uint16_t filter = 0x8892;
+    if (::ioctl(tap_fd_, L2TAP_S_RCV_FILTER, &filter) < 0) {
+        LOG_WARNINGF(TAG, "Setting PROFINET EtherType filter failed: errno=%d", errno);
+        ::close(tap_fd_);
+        tap_fd_ = -1;
+        return false;
+    }
+
+    // Install the same L2-TAP-aware input path used by ESP-NETIF's Ethernet
+    // glue.  Some P4 Ethernet integrations replace the callback during start,
+    // so relying only on the glue-installed callback can leave the TAP queue
+    // empty even though the TAP fd is valid.
+    const esp_err_t path_err = esp_eth_update_input_path_info(
+        eth_, &EthL2Adapter::l2tapInputTrampoline, netif_);
+    if (path_err != ESP_OK) {
+        LOG_WARNINGF(TAG, "Installing L2 TAP Ethernet input path failed: %s",
+                     esp_err_to_name(path_err));
+        ::close(tap_fd_);
+        tap_fd_ = -1;
+        return false;
+    }
+
+    tap_running_.store(true);
+    if (xTaskCreate(&EthL2Adapter::tapTaskThunk, "profinet_l2tap", 4096, this,
+                    tskIDLE_PRIORITY + 2, &tap_task_) != pdPASS) {
+        LOG_WARNING(TAG, "Creating L2 TAP reader task failed");
+        tap_running_.store(false);
+        ::close(tap_fd_);
+        tap_fd_ = -1;
+        tap_task_ = nullptr;
+        return false;
+    }
+    return true;
+}
+
+esp_err_t EthL2Adapter::l2tapInputTrampoline(esp_eth_handle_t h, uint8_t* buffer,
+                                             uint32_t length, void* priv, void* info) {
+    auto* netif = static_cast<esp_netif_t*>(priv);
+    size_t filtered_length = length;
+    const uint16_t ether_type = (buffer && length >= sizeof(EthHdr))
+                                    ? be16(buffer + offsetof(EthHdr, type)) : 0;
+    const esp_err_t filter_err = esp_vfs_l2tap_eth_filter_frame(
+        h, buffer, &filtered_length, info);
+    (void)ether_type;
+    (void)filter_err;
+    if (filtered_length == 0) {
+        return ESP_OK;
+    }
+    if (!netif) {
+        free(buffer);
+        return ESP_ERR_INVALID_STATE;
+    }
+    return esp_netif_receive(netif, buffer, filtered_length, nullptr);
+}
+
+void EthL2Adapter::detachL2Tap() {
+    tap_running_.store(false);
+    for (int i = 0; i < 100 && tap_task_ != nullptr; ++i) {
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+    if (tap_task_ != nullptr) {
+        vTaskDelete(tap_task_);
+        tap_task_ = nullptr;
+    }
+    if (tap_fd_ >= 0) {
+        ::close(tap_fd_);
+        tap_fd_ = -1;
+    }
+}
+
+void EthL2Adapter::tapTaskThunk(void* arg) {
+    auto* self = static_cast<EthL2Adapter*>(arg);
+    if (self) self->tapTask();
+    vTaskDelete(nullptr);
+}
+
+void EthL2Adapter::tapTask() {
+    uint8_t frame[1600];
+    while (tap_running_.load()) {
+        const ssize_t n = ::read(tap_fd_, frame, sizeof(frame));
+        if (n >= static_cast<ssize_t>(sizeof(EthHdr)) && eng_) {
+            const auto* eh = reinterpret_cast<const EthHdr*>(frame);
+            const uint16_t et = be16(&eh->type);
+            const uint16_t plen = static_cast<uint16_t>(n - sizeof(EthHdr));
+            eng_->ingestL2(eh->src, eh->dst, et, frame + sizeof(EthHdr), plen);
+        } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+            LOG_WARNINGF(TAG, "L2 TAP read failed: errno=%d", errno);
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+    tap_running_.store(false);
+    tap_task_ = nullptr;
+}
+#endif
 
 bool EthL2Adapter::enablePromiscuousMode() {
     if (!eth_) {

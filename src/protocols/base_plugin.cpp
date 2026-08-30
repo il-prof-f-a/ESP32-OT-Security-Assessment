@@ -185,6 +185,11 @@ void BasePlugin::onPacket(const NetworkPacket& pkt, bool bypassAuthorization) {
         if (cfg_) { ids_enabled = cfg_->getIDSConfig().enabled; }
         if (ids_enabled) {
             doPacketAnalysis(pkt);
+        } else {
+            // Active protocol discovery is orthogonal to passive IDS.  Allow
+            // a plugin to consume only the response needed by its current
+            // discovery transaction without re-enabling IDS globally.
+            processDiscoveryPacketWhenIdsDisabled(pkt);
         }
     }
 }

@@ -81,6 +81,13 @@ public:
     // Passive IDS API
     virtual bool doPacketAnalysis(const NetworkPacket& packet) = 0;
     virtual bool isTargetPacket(const NetworkPacket& packet) = 0;
+    // Active discovery must still be able to consume its protocol replies when
+    // passive IDS is disabled in configuration.  Implementations should keep
+    // this path limited to the active operation and avoid IDS reporting.
+    virtual bool processDiscoveryPacketWhenIdsDisabled(const NetworkPacket& packet) {
+        (void)packet;
+        return false;
+    }
     virtual void loadIDSRules(const std::string& rules_json) { (void)rules_json; }
     virtual void loadIDSRulesPSRAM(const psram_string& rules_json);
 

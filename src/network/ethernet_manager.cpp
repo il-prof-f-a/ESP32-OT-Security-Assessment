@@ -13,6 +13,7 @@
 
 extern "C" {
     #include "esp_log.h"
+    #include "esp_heap_caps.h"
     #include "lwip/inet.h"
     #include "lwip/ip4_addr.h"
     #include "lwip/sockets.h"
@@ -373,8 +374,28 @@ bool EthernetManager::rawTx(const uint8_t* frame, size_t len) {
     if (!eth_ || !frame || len < 14) {
         return false;
     }
-    // esp_eth_transmit expects a full Ethernet frame.
-    const esp_err_t err = esp_eth_transmit(eth_, (void*)frame, (uint32_t)len);
+
+    // The ESP32-P4 EMAC DMA cannot read from PSRAM. Protocol builders use
+    // PSRAM-backed vectors by design, so stage raw Ethernet frames in an
+    // internal DMA-capable buffer before handing them to the driver.
+    const uint8_t* tx_frame = frame;
+#if CONFIG_IDF_TARGET_ESP32P4
+    void* dma_frame = nullptr;
+    dma_frame = heap_caps_malloc(len, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    if (!dma_frame) {
+        LOG_WARNINGF(TAG, "rawTx DMA staging allocation failed (len=%u)", (unsigned)len);
+        return false;
+    }
+    memcpy(dma_frame, frame, len);
+    tx_frame = static_cast<const uint8_t*>(dma_frame);
+#endif
+
+    // esp_eth_transmit expects a full Ethernet frame and consumes it
+    // synchronously before returning.
+    const esp_err_t err = esp_eth_transmit(eth_, (void*)tx_frame, (uint32_t)len);
+#if CONFIG_IDF_TARGET_ESP32P4
+    heap_caps_free(dma_frame);
+#endif
     if (err != ESP_OK) {
         LOG_WARNINGF(TAG, "rawTx failed: %s (len=%u)", esp_err_to_name(err), (unsigned)len);
         return false;
