@@ -273,25 +273,8 @@ class BuildIntegrationTests(unittest.TestCase):
             source,
         )
 
-        opcua_vulnerability = (
-            PROJECT_ROOT / "src/protocols/opcua_vulnerability_tests.cpp"
-        ).read_text(encoding="utf-8")
-        self.assertIn(
-            'PSRAMUtils::createPSRAMString("Endpoint allows anonymous: ") +',
-            opcua_vulnerability,
-        )
-        self.assertIn(
-            'psram_string key = cert.subject_common_name + PSRAMUtils::createPSRAMString(":") +',
-            opcua_vulnerability,
-        )
-
-        opcua_plugin = (PROJECT_ROOT / "src/protocols/opcua_plugin.cpp").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn(
-            '\\"server_url\\":\\\"" +',
-            opcua_plugin,
-        )
+        # OPC UA string/assessment paths are now compiled and executed by
+        # test_opcua_certificate_cpp, instead of preserving obsolete heuristics.
 
         security = (PROJECT_ROOT / "src/security/security_manager.cpp").read_text(
             encoding="utf-8"

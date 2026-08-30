@@ -66,6 +66,16 @@ namespace X509DER {
                                                X509CertificateInfo& out_info,
                                                psram_string& out_error);
 
+        // Re-evaluate cached metadata against wall-clock UTC, never device uptime.
+        // A zero/implausible clock means unknown, not valid or expired.
+        static void evaluateValidity(X509CertificateInfo& info, int64_t unix_ms);
+        static int64_t currentUnixTimeMs();
+
+        // OPC UA Part 6: certificate ByteStrings may concatenate leaf + issuers.
+        // Bounded framing only; this never establishes a trusted certificate path.
+        static bool certificateChainLengths(const uint8_t* data, size_t len,
+                                            psram_vector<size_t>& lengths);
+
     private:
         // Low-level ASN.1 parsers
         static bool parseTLV(const uint8_t* data, size_t len, size_t& offset, TLV& out_tlv);
@@ -73,7 +83,9 @@ namespace X509DER {
         static bool parseOID(const uint8_t* data, size_t len, psram_string& out_oid);
         static bool parseInteger(const uint8_t* data, size_t len, psram_vector<uint8_t>& out_bytes);
         static bool parseString(const uint8_t* data, size_t len, uint8_t tag, psram_string& out_str);
-        static bool parseTime(const uint8_t* data, size_t len, uint8_t tag, uint64_t& out_timestamp);
+        static bool parseTime(const uint8_t* data, size_t len, uint8_t tag, int64_t& out_timestamp);
+        static bool parseCertificateContents(const uint8_t* data, size_t len,
+                                             X509CertificateInfo& info, psram_string& error);
 
         // High-level certificate structure parsers
         static bool parseName(const uint8_t* data, size_t len, size_t& offset,
@@ -87,7 +99,6 @@ namespace X509DER {
         // Security assessment helpers
         static bool isWeakSignatureAlgorithm(const psram_string& sig_alg);
         static bool isWeakKeySize(uint16_t key_size_bits);
-        static bool isSelfSigned(const psram_string& subject_cn, const psram_string& issuer_cn);
 
         // Utility functions
         static bool hexToBytes(const psram_string& hex, psram_vector<uint8_t>& out_bytes);

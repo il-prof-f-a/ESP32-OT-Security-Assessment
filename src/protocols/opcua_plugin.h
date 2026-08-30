@@ -6,6 +6,7 @@
 #include <map>
 #include <cstdint>
 #include "base_plugin.h"
+#include "opcua_binary_codec.h"
 #include "../core/configuration_manager.h"
 #include "../assessment/network_presence_tracker.h"
 
@@ -18,8 +19,11 @@ struct OPCUAServer {
     std::string certificate_subject;
     std::string certificate_issuer;
     std::vector<std::string> certificate_issues;
-    uint64_t certificate_not_before = 0;
-    uint64_t certificate_not_after = 0;
+    int64_t certificate_not_before = 0;
+    int64_t certificate_not_after = 0;
+    X509CertificateInfo certificate_info{};
+    psram_string endpoints_json;
+    bool certificate_validation_checked = false;
     bool anonymous_login_allowed = false;
     bool encryption_available = false;
     bool certificate_present = false;
@@ -96,11 +100,9 @@ private:
     void disconnectFromServer();
 
     bool discoverEndpoints(const std::string& server_url, OPCUAServer& server);
-    bool testAnonymousConnection(const std::string& server_url);
+    bool inspectAnonymousAdvertisement(const std::string& server_url);
     bool validateServerCertificate(const OPCUAServer& server);
     bool checkSecurityConfiguration(const OPCUAServer& server);
-    void assessServerSecurity(OPCUAServer& server);
-    void checkForDefaultConfiguration(OPCUAServer& server);
 
     bool parseOPCUAPacket(const NetworkPacket& packet, std::string& message_type,
                           uint32_t& secure_channel_id, uint32_t& sequence_number);

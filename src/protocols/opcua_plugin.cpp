@@ -2,6 +2,7 @@
 #include "opcua_plugin.h"
 #include "../security/security_manager.h"
 #include "opcua_binary_codec.h"
+#include "opcua_x509_parser.h"
 #include "opcua_vulnerability_tests.h"
 #include "opcua_fuzzing_seeds.h"
 #include "../assessment/fuzzing_engine.h"
@@ -51,6 +52,48 @@ static JsonHookGuard kJsonHookGuard;
 
 namespace {
 constexpr size_t kMaxOpcUaFrameSize = 64 * 1024;
+
+// GetEndpoints exposes metadata, not a verified certificate chain or a login.
+cJSON* certificateMetadata(X509CertificateInfo info, bool present) {
+    X509DER::Parser::evaluateValidity(info, X509DER::Parser::currentUnixTimeMs());
+    cJSON* cert = cJSON_CreateObject();
+    if (!cert) return nullptr;
+    cJSON_AddBoolToObject(cert, "present", present);
+    cJSON_AddBoolToObject(cert, "parse_ok", info.parse_ok);
+    cJSON_AddNumberToObject(cert, "certificates_in_blob", info.certificates_in_blob);
+    cJSON_AddStringToObject(cert, "metadata_subject", "leaf_certificate");
+    cJSON_AddNullToObject(cert, "valid");
+    cJSON_AddStringToObject(cert, "validation_status", "not_performed");
+    cJSON_AddStringToObject(cert, "assessment_scope", "metadata_only");
+    cJSON_AddNullToObject(cert, "self_signed");
+    cJSON_AddBoolToObject(cert, "time_checked", info.time_checked);
+    if (!info.parse_ok) {
+        if (!info.parse_error.empty()) cJSON_AddStringToObject(cert, "parse_error", info.parse_error.c_str());
+        cJSON_AddNullToObject(cert, "self_issued");
+        cJSON_AddNullToObject(cert, "is_ca");
+    } else {
+        cJSON_AddBoolToObject(cert, "self_issued", info.is_self_issued);
+        cJSON_AddBoolToObject(cert, "is_ca", info.is_ca);
+        cJSON_AddStringToObject(cert, "subject", info.subject_common_name.c_str());
+        cJSON_AddStringToObject(cert, "issuer", info.issuer_common_name.c_str());
+        cJSON_AddStringToObject(cert, "serial_number", info.serial_number.c_str());
+        cJSON_AddStringToObject(cert, "signature_algorithm", info.signature_algorithm.c_str());
+        cJSON_AddNumberToObject(cert, "not_before_ms", static_cast<double>(info.not_before_timestamp));
+        cJSON_AddNumberToObject(cert, "not_after_ms", static_cast<double>(info.not_after_timestamp));
+        cJSON_AddBoolToObject(cert, "key_size_known", info.key_size_known);
+        if (info.key_size_known) cJSON_AddNumberToObject(cert, "key_size_bits", info.key_size_bits);
+    }
+    if (info.parse_ok && info.time_checked) {
+        cJSON_AddBoolToObject(cert, "expired", info.is_expired);
+        cJSON_AddBoolToObject(cert, "not_yet_valid", info.is_not_yet_valid);
+        cJSON_AddBoolToObject(cert, "time_valid", !info.is_expired && !info.is_not_yet_valid);
+    } else {
+        cJSON_AddNullToObject(cert, "expired");
+        cJSON_AddNullToObject(cert, "not_yet_valid");
+        cJSON_AddNullToObject(cert, "time_valid");
+    }
+    return cert;
+}
 
 bool recvExact(int sock_fd, uint8_t* buffer, size_t length) {
     size_t received = 0;
@@ -939,6 +982,7 @@ bool OPCUAPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
     scanner.setAggressiveMode(wants("chunk_flooding_dos"));
 
     const bool need_endpoints =
+        wants("anonymous_access") ||
         wants("weak_security_policies") ||
         wants("certificate_validation") ||
         wants("certificate_chain_loop");
@@ -994,7 +1038,7 @@ bool OPCUAPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
         if (skipped) {
             f += PSRAMUtils::createPSRAMString("skipped");
         } else {
-            f += PSRAMUtils::createPSRAMString(tr.vulnerable ? "detected" : "not_detected");
+            f += PSRAMUtils::createPSRAMString(tr.inconclusive ? "inconclusive" : (tr.vulnerable ? "detected" : "not_detected"));
         }
         f += PSRAMUtils::createPSRAMString("\",\"description\":\"");
         jsonAppendEscaped(f, tr.description.c_str());
@@ -1010,6 +1054,11 @@ bool OPCUAPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
         f += PSRAMUtils::createPSRAMString((meta && meta->active_test) ? "true" : "false");
         f += PSRAMUtils::createPSRAMString(",\"vulnerable\":");
         f += PSRAMUtils::createPSRAMString((!skipped && tr.vulnerable) ? "true" : "false");
+        f += PSRAMUtils::createPSRAMString(",\"assessment_complete\":");
+        f += PSRAMUtils::createPSRAMString((!skipped && !tr.inconclusive && !tr.evidence_incomplete) ? "true" : "false");
+        f += PSRAMUtils::createPSRAMString(",\"evidence_source\":\"");
+        jsonAppendEscaped(f, tr.evidence_source.c_str());
+        f += PSRAMUtils::createPSRAMString("\"");
         char cvss_buf[48];
         snprintf(cvss_buf, sizeof(cvss_buf), ",\"cvss_score\":%.1f", tr.cvss_score);
         f += PSRAMUtils::createPSRAMString(cvss_buf);
@@ -1034,7 +1083,7 @@ bool OPCUAPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
 
         const char* execution_status = skipped
             ? "skipped"
-            : (tr.vulnerable ? "detected" : "not_detected");
+            : (tr.inconclusive ? "inconclusive" : (tr.vulnerable ? "detected" : "not_detected"));
         LOG_INFOF("OPCUA_PLUGIN",
                   "OPC UA vulnerability check completed: id=%s status=%s vulnerable=%s",
                   scan_id ? scan_id : "unknown",
@@ -1070,7 +1119,9 @@ bool OPCUAPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
 
     if (wants("anonymous_access")) {
         tests_executed++;
-        append_finding("anonymous_access", scanner.testAnonymousAccess(host_ps.c_str(), port), false);
+        if (endpoints_ok) append_finding("anonymous_access", scanner.assessAnonymousAccess(endpoints), false);
+        else append_finding("anonymous_access", make_skipped("Anonymous Access Assessment",
+            "Skipped: endpoint discovery failed; login was not attempted"), true);
     }
     if (wants("weak_security_policies")) {
         tests_executed++;
@@ -1158,7 +1209,7 @@ bool OPCUAPlugin::doVulnerabilityScanPSRAM(const psram_string& target,
     rep += PSRAMUtils::createPSRAMString(sbuf);
 
     rep += PSRAMUtils::createPSRAMString("\"asset\":{");
-    rep += PSRAMUtils::createPSRAMString("\"vendor\":\"OPC Foundation\",");
+    rep += PSRAMUtils::createPSRAMString("\"vendor\":\"Unknown\",");
     rep += PSRAMUtils::createPSRAMString("\"product\":\"OPC UA Server\",");
     rep += PSRAMUtils::createPSRAMString("\"application_uri\":\"");
     if (endpoints_ok) {
@@ -1262,7 +1313,7 @@ std::string OPCUAPlugin::legacyDoVulnerabilityScan(const std::string& target) {
             LogLevel::INFO);
 
         // Test for common vulnerabilities
-        testAnonymousConnection("opc.tcp://" + ip + ":" + std::to_string(port));
+        inspectAnonymousAdvertisement("opc.tcp://" + ip + ":" + std::to_string(port));
 
         vulnerabilities_found_++;
 
@@ -1414,28 +1465,16 @@ std::string OPCUAPlugin::legacyDoNetworkDiscovery(const std::string& target_netw
                 cJSON_AddItemToObject(item, "security_modes", sec_modes);
             }
 
-            cJSON* cert = cJSON_CreateObject();
-            if (cert) {
-                cJSON_AddBoolToObject(cert, "present", server_info.certificate_present);
-                cJSON_AddBoolToObject(cert, "valid", server_info.certificate_valid);
-                cJSON_AddBoolToObject(cert, "self_signed", server_info.certificate_self_signed);
-                cJSON_AddBoolToObject(cert, "expired", server_info.certificate_expired);
-                cJSON_AddBoolToObject(cert, "is_ca", server_info.certificate_is_ca);
-                if (!server_info.certificate_subject.empty()) {
-                    cJSON_AddStringToObject(cert, "subject", server_info.certificate_subject.c_str());
-                }
-                if (!server_info.certificate_issuer.empty()) {
-                    cJSON_AddStringToObject(cert, "issuer", server_info.certificate_issuer.c_str());
-                }
-                if (server_info.certificate_not_before != 0) {
-                    cJSON_AddNumberToObject(cert, "not_before_ms",
-                                            static_cast<double>(server_info.certificate_not_before));
-                }
-                if (server_info.certificate_not_after != 0) {
-                    cJSON_AddNumberToObject(cert, "not_after_ms",
-                                            static_cast<double>(server_info.certificate_not_after));
-                }
-                cJSON_AddItemToObject(item, "certificate", cert);
+            cJSON_AddStringToObject(item, "evidence_source", "get_endpoints");
+            cJSON_AddBoolToObject(item, "anonymous_advertised", server_info.anonymous_login_allowed);
+            cJSON_AddBoolToObject(item, "authentication_tested", false);
+            cJSON_AddStringToObject(item, "anonymous_login_allowed_semantics", "advertised_not_tested");
+            cJSON_AddStringToObject(item, "certificate_summary_scope", "first_advertised_certificate");
+            cJSON_AddItemToObject(item, "certificate",
+                certificateMetadata(server_info.certificate_info, server_info.certificate_present));
+            if (!server_info.endpoints_json.empty()) {
+                cJSON* details = cJSON_Parse(server_info.endpoints_json.c_str());
+                if (details) cJSON_AddItemToObject(item, "endpoints", details);
             }
 
             cJSON* vulns = cJSON_CreateArray();
@@ -1843,10 +1882,17 @@ bool OPCUAPlugin::connectToServer(const std::string& endpoint_url) {
         cJSON_AddBoolToObject(root, "anonymous_allowed", info.anonymous_login_allowed);
         cJSON_AddBoolToObject(root, "encryption_available", info.encryption_available);
         cJSON_AddBoolToObject(root, "certificate_present", info.certificate_present);
-        cJSON_AddBoolToObject(root, "certificate_valid", info.certificate_valid);
-        cJSON_AddBoolToObject(root, "certificate_expired", info.certificate_expired);
-        cJSON_AddBoolToObject(root, "certificate_self_signed", info.certificate_self_signed);
-        cJSON_AddBoolToObject(root, "certificate_is_ca", info.certificate_is_ca);
+        if (info.certificate_validation_checked) cJSON_AddBoolToObject(root, "certificate_valid", info.certificate_valid);
+        else cJSON_AddNullToObject(root, "certificate_valid");
+        cJSON_AddStringToObject(root, "certificate_validation_scope", "configured_connection_policy");
+        cJSON_AddBoolToObject(root, "certificate_validation_checked", info.certificate_validation_checked);
+        cJSON_AddItemToObject(root, "certificate", certificateMetadata(info.certificate_info, info.certificate_present));
+        if (info.certificate_info.parse_ok && info.certificate_info.time_checked) {
+            cJSON_AddBoolToObject(root, "certificate_expired", info.certificate_info.is_expired);
+        } else cJSON_AddNullToObject(root, "certificate_expired");
+        cJSON_AddNullToObject(root, "certificate_self_signed");
+        if (info.certificate_info.parse_ok) cJSON_AddBoolToObject(root, "certificate_is_ca", info.certificate_is_ca);
+        else cJSON_AddNullToObject(root, "certificate_is_ca");
         if (!info.certificate_subject.empty()) {
             cJSON_AddStringToObject(root, "certificate_subject", info.certificate_subject.c_str());
         }
@@ -1915,11 +1961,11 @@ bool OPCUAPlugin::connectToServer(const std::string& endpoint_url) {
     };
 
     if (have_snapshot) {
+        X509DER::Parser::evaluateValidity(endpoint_info.certificate_info, X509DER::Parser::currentUnixTimeMs());
         bool secure_ok = checkSecurityConfiguration(endpoint_info);
         bool certificate_ok = validateServerCertificate(endpoint_info);
         endpoint_info.certificate_valid = certificate_ok;
-        assessServerSecurity(endpoint_info);
-        checkForDefaultConfiguration(endpoint_info);
+        endpoint_info.certificate_validation_checked = true;
 
         {
             std::lock_guard<std::mutex> lock(servers_mutex_);
@@ -2241,197 +2287,92 @@ bool OPCUAPlugin::discoverEndpoints(const std::string& server_url, OPCUAServer& 
 
     LOG_INFOF("OPCUA_PLUGIN", "Successfully discovered %zu endpoints", endpoints.size());
 
-    // Convert PSRAM endpoints to legacy OPCUAServer structure
+    // Keep per-endpoint relationships: policy, mode, token types and certificate.
+    // The legacy summary certificate refers to the first advertised certificate,
+    // never to a synthetic validity interval merged from different certificates.
+    server = OPCUAServer{};
     server.endpoint_url = server_url;
-    server.security_policies.clear();
-    server.security_modes.clear();
-    server.vulnerabilities.clear();
-    server.server_certificate.clear();
-    server.certificate_subject.clear();
-    server.certificate_issuer.clear();
-    server.certificate_issues.clear();
-    server.certificate_not_before = 0;
-    server.certificate_not_after = 0;
-    server.certificate_present = false;
-    server.certificate_valid = false;
-    server.certificate_self_signed = false;
-    server.certificate_expired = false;
-    server.certificate_is_ca = false;
-
+    auto push_unique = [](std::vector<std::string>& values, const std::string& value) {
+        if (std::find(values.begin(), values.end(), value) == values.end()) values.push_back(value);
+    };
+    cJSON* endpoint_details = cJSON_CreateArray();
     for (const auto& ep : endpoints) {
-        // Store endpoint URL
-        if (server.server_name.empty() && !ep.server_application_name.empty()) {
-            server.server_name = PSRAMUtils::fromPSRAMString(ep.server_application_name);
-        }
+        if (server.server_name.empty()) server.server_name = ep.server_application_name.c_str();
+        push_unique(server.security_policies, ep.security_policy_uri.c_str());
+        const char* mode = ep.security_mode == OPCUA::SECURITY_MODE_NONE ? "None" :
+            ep.security_mode == OPCUA::SECURITY_MODE_SIGN ? "Sign" :
+            ep.security_mode == OPCUA::SECURITY_MODE_SIGNANDENCRYPT ? "SignAndEncrypt" : "Invalid";
+        push_unique(server.security_modes, mode);
+        server.anonymous_login_allowed |= ep.allows_anonymous; // Advertised, not tested.
+        server.encryption_available |= ep.security_mode == OPCUA::SECURITY_MODE_SIGNANDENCRYPT;
+        for (const auto& issue : ep.vulnerabilities) push_unique(server.vulnerabilities, issue.c_str());
 
-        // Collect security policies
-        std::string policy_uri = PSRAMUtils::fromPSRAMString(ep.security_policy_uri);
-        if (std::find(server.security_policies.begin(), server.security_policies.end(),
-                     policy_uri) == server.security_policies.end()) {
-            server.security_policies.push_back(policy_uri);
-        }
-
-        // Collect security modes
-        std::string mode_str;
-        if (ep.security_mode == OPCUA::SECURITY_MODE_NONE) mode_str = "None";
-        else if (ep.security_mode == OPCUA::SECURITY_MODE_SIGN) mode_str = "Sign";
-        else if (ep.security_mode == OPCUA::SECURITY_MODE_SIGNANDENCRYPT) mode_str = "SignAndEncrypt";
-
-        if (!mode_str.empty() && std::find(server.security_modes.begin(),
-            server.security_modes.end(), mode_str) == server.security_modes.end()) {
-            server.security_modes.push_back(mode_str);
-        }
-
-        // Check for anonymous access
-        if (ep.allows_anonymous) {
-            server.anonymous_login_allowed = true;
-        }
-
-        // Check for encryption
-        if (ep.security_mode != OPCUA::SECURITY_MODE_NONE) {
-            server.encryption_available = true;
-        }
-
-        // Collect vulnerabilities
-        auto push_unique = [&](std::vector<std::string>& container, const std::string& value) {
-            if (std::find(container.begin(), container.end(), value) == container.end()) {
-                container.push_back(value);
+        X509CertificateInfo info = ep.server_certificate_info;
+        X509DER::Parser::evaluateValidity(info, X509DER::Parser::currentUnixTimeMs());
+        const bool present = !ep.server_certificate_der_hex.empty();
+        if (present) {
+            if (!info.parse_ok) push_unique(server.vulnerabilities, "INFO: Certificate metadata could not be parsed; assessment incomplete");
+            else {
+                if (!info.time_checked) push_unique(server.vulnerabilities, "INFO: Certificate validity period not checked; device UTC clock unavailable");
+                if (info.is_expired) push_unique(server.vulnerabilities, "HIGH: Advertised certificate has expired");
+                if (info.is_not_yet_valid) push_unique(server.vulnerabilities, "HIGH: Advertised certificate is not yet valid");
             }
-        };
-
-        for (const auto& vuln_str : ep.vulnerabilities) {
-            std::string vuln = PSRAMUtils::fromPSRAMString(vuln_str);
-            push_unique(server.vulnerabilities, vuln);
-        }
-
-        if (!ep.server_certificate_der_hex.empty()) {
-            std::string cert_hex = PSRAMUtils::fromPSRAMString(ep.server_certificate_der_hex);
-            if (!cert_hex.empty() && server.server_certificate.empty()) {
-                server.server_certificate = cert_hex;
-            }
-            if (!cert_hex.empty()) {
+            if (!server.certificate_present) {
                 server.certificate_present = true;
-            }
-
-            const X509CertificateInfo& cert_info = ep.server_certificate_info;
-            if (!cert_info.subject_common_name.empty() && server.certificate_subject.empty()) {
-                server.certificate_subject = PSRAMUtils::fromPSRAMString(cert_info.subject_common_name);
-            }
-            if (!cert_info.issuer_common_name.empty() && server.certificate_issuer.empty()) {
-                server.certificate_issuer = PSRAMUtils::fromPSRAMString(cert_info.issuer_common_name);
-            }
-
-            if (cert_info.not_before_timestamp != 0 &&
-                (server.certificate_not_before == 0 ||
-                 cert_info.not_before_timestamp < server.certificate_not_before)) {
-                server.certificate_not_before = cert_info.not_before_timestamp;
-            }
-            if (cert_info.not_after_timestamp > server.certificate_not_after) {
-                server.certificate_not_after = cert_info.not_after_timestamp;
-            }
-
-            server.certificate_self_signed = server.certificate_self_signed || cert_info.is_self_signed;
-            server.certificate_expired = server.certificate_expired || cert_info.is_expired;
-            server.certificate_is_ca = server.certificate_is_ca || cert_info.is_ca;
-
-            for (const auto& cert_issue_ps : cert_info.vulnerabilities) {
-                std::string issue = PSRAMUtils::fromPSRAMString(cert_issue_ps);
-                push_unique(server.certificate_issues, issue);
-                push_unique(server.vulnerabilities, issue);
+                server.server_certificate = ep.server_certificate_der_hex.c_str();
+                server.certificate_info = info;
+                if (info.parse_ok) {
+                    server.certificate_subject = info.subject_common_name.c_str();
+                    server.certificate_issuer = info.issuer_common_name.c_str();
+                    server.certificate_not_before = info.not_before_timestamp;
+                    server.certificate_not_after = info.not_after_timestamp;
+                    server.certificate_expired = info.is_expired;
+                    server.certificate_is_ca = info.is_ca;
+                    for (const auto& issue : info.vulnerabilities) push_unique(server.certificate_issues, issue.c_str());
+                }
             }
         }
-    }
-
-    // Add basic vulnerability assessments
-    if (server.anonymous_login_allowed) {
-        server.vulnerabilities.push_back("CRITICAL: Anonymous authentication enabled");
-    }
-
-    if (std::find(server.security_policies.begin(), server.security_policies.end(),
-                 std::string(OPCUA::POLICY_NONE)) != server.security_policies.end()) {
-        server.vulnerabilities.push_back("HIGH: SecurityPolicy#None available (no encryption)");
-    }
-
-    if (!server.encryption_available) {
-        server.vulnerabilities.push_back("HIGH: No encrypted endpoints available");
-    }
-
-    if (!server.certificate_present) {
-        const std::string missing_cert = "CRITICAL: No server certificate advertised";
-        if (std::find(server.vulnerabilities.begin(), server.vulnerabilities.end(), missing_cert) ==
-            server.vulnerabilities.end()) {
-            server.vulnerabilities.push_back(missing_cert);
+        if (endpoint_details) {
+            cJSON* detail = cJSON_CreateObject();
+            if (!detail) continue;
+            cJSON_AddStringToObject(detail, "endpoint_url", ep.endpoint_url.c_str());
+            cJSON_AddStringToObject(detail, "application_uri", ep.server_application_uri.c_str());
+            cJSON_AddStringToObject(detail, "product_uri", ep.server_product_uri.c_str());
+            cJSON_AddStringToObject(detail, "application_name", ep.server_application_name.c_str());
+            cJSON_AddStringToObject(detail, "security_policy", ep.security_policy_uri.c_str());
+            cJSON_AddStringToObject(detail, "security_mode", mode);
+            cJSON_AddBoolToObject(detail, "anonymous_advertised", ep.allows_anonymous);
+            cJSON_AddBoolToObject(detail, "authentication_tested", false);
+            cJSON_AddBoolToObject(detail, "encryption_available", ep.security_mode == OPCUA::SECURITY_MODE_SIGNANDENCRYPT);
+            cJSON_AddItemToObject(detail, "certificate", certificateMetadata(info, present));
+            cJSON_AddItemToArray(endpoint_details, detail);
         }
     }
-
-    assessServerSecurity(server);
-    checkForDefaultConfiguration(server);
-
+    if (!server.encryption_available) push_unique(server.vulnerabilities, "HIGH: No encrypted endpoints advertised");
+    if (endpoint_details) {
+        char* json = cJSON_PrintUnformatted(endpoint_details);
+        if (json) { server.endpoints_json = PSRAMUtils::createPSRAMString(json); cJSON_free(json); }
+        cJSON_Delete(endpoint_details);
+    }
+    // Discovery never validates trust/identity. Cache only the finalized metadata.
     {
         std::lock_guard<std::mutex> lock(servers_mutex_);
-        auto it = std::find_if(discovered_servers_.begin(),
-                               discovered_servers_.end(),
-                               [&](const OPCUAServer& s) {
-                                   return s.endpoint_url == server.endpoint_url;
-                               });
-        if (it != discovered_servers_.end()) {
-            *it = server;
-        } else {
-            discovered_servers_.push_back(server);
-        }
+        auto it = std::find_if(discovered_servers_.begin(), discovered_servers_.end(),
+            [&](const OPCUAServer& s) { return s.endpoint_url == server.endpoint_url; });
+        if (it != discovered_servers_.end()) *it = server;
+        else discovered_servers_.push_back(server);
     }
-
-    LOG_INFOF("OPCUA_PLUGIN", "Endpoint discovery complete: %zu vulnerabilities found",
+    LOG_INFOF("OPCUA_PLUGIN", "Endpoint discovery complete: %zu posture observations",
               server.vulnerabilities.size());
-
-    uint64_t now_ms_validation = esp_timer_get_time() / 1000ULL;
-    bool high_or_critical_issue = false;
-    for (const auto& issue : server.certificate_issues) {
-        if (!issue.empty() &&
-            (issue.rfind("CRITICAL", 0) == 0 || issue.rfind("HIGH", 0) == 0)) {
-            high_or_critical_issue = true;
-            break;
-        }
-    }
-    bool not_yet_valid = (server.certificate_not_before != 0 &&
-                          now_ms_validation + 60000ULL < server.certificate_not_before);
-    bool already_expired = (server.certificate_not_after != 0 &&
-                            now_ms_validation > server.certificate_not_after);
-
-    server.certificate_valid = server.certificate_present &&
-                               !server.certificate_expired &&
-                               !high_or_critical_issue &&
-                               !not_yet_valid &&
-                               !already_expired;
-
     return true;
 }
 
-bool OPCUAPlugin::testAnonymousConnection(const std::string& server_url) {
-    // Test if server allows anonymous connections (security vulnerability)
-    LOG_INFOF("OPCUA_PLUGIN", "Testing anonymous connection for %s", server_url.c_str());
-
+bool OPCUAPlugin::inspectAnonymousAdvertisement(const std::string& server_url) {
     OPCUAServer server_info;
-    if (!discoverEndpoints(server_url, server_info)) {
-        LOG_ERROR("OPCUA_PLUGIN", "Failed to discover endpoints for anonymous test");
-        return false;
-    }
-
-    // Check if anonymous login is allowed
-    if (server_info.anonymous_login_allowed) {
-        std::string vuln_json = "{\"type\":\"opcua.anonymous.enabled\",\"server_url\":\"" +
-                               server_url + "\",\"severity\":\"CRITICAL\"}";
-        psram_string target_ps = PSRAMUtils::createPSRAMString(server_url.c_str());
-        reportVulnerabilityPSRAM(
-            target_ps,
-            PSRAMUtils::createPSRAMString(vuln_json.c_str()),
-            PSRAMUtils::createPSRAMString("CRITICAL: Server allows anonymous authentication"),
-            LogLevel::ERROR);
-        return true;
-    }
-
-    LOG_INFO("OPCUA_PLUGIN", "Anonymous authentication not enabled");
-    return false;
+    if (!discoverEndpoints(server_url, server_info)) return false;
+    LOG_INFOF("OPCUA_PLUGIN", "Anonymous user token advertised: %s; login/permissions not tested",
+              server_info.anonymous_login_allowed ? "yes" : "no");
+    return server_info.anonymous_login_allowed;
 }
 
 bool OPCUAPlugin::validateServerCertificate(const OPCUAServer& server) {
@@ -2447,7 +2388,13 @@ bool OPCUAPlugin::validateServerCertificate(const OPCUAServer& server) {
                   server.certificate_issuer.c_str());
     }
 
-    uint64_t now_ms = esp_timer_get_time() / 1000ULL;
+    X509CertificateInfo metadata;
+    psram_string metadata_error;
+    if (!X509DER::Parser::parseCertificate(PSRAMUtils::createPSRAMString(server.server_certificate.c_str()),
+                                         metadata, metadata_error) || !metadata.time_checked) {
+        LOG_WARNING("OPCUA_PLUGIN", "Certificate metadata invalid or UTC clock unavailable; validation refused");
+        return false;
+    }
     bool valid = true;
     bool has_high_or_critical = false;
     bool chain_validated = false;
@@ -2460,9 +2407,16 @@ bool OPCUAPlugin::validateServerCertificate(const OPCUAServer& server) {
     } else {
         mbedtls_x509_crt cert;
         mbedtls_x509_crt_init(&cert);
-        int ret = mbedtls_x509_crt_parse_der(&cert,
-                                             certificate_der.data(),
-                                             certificate_der.size());
+        psram_vector<size_t> lengths;
+        int ret = -1;
+        if (X509DER::Parser::certificateChainLengths(certificate_der.data(), certificate_der.size(), lengths)) {
+            size_t offset = 0;
+            for (size_t length : lengths) {
+                ret = mbedtls_x509_crt_parse_der(&cert, certificate_der.data() + offset, length);
+                if (ret != 0) break;
+                offset += length;
+            }
+        }
         if (ret != 0) {
             char err_buf[128];
             mbedtls_strerror(ret, err_buf, sizeof(err_buf));
@@ -2526,32 +2480,14 @@ bool OPCUAPlugin::validateServerCertificate(const OPCUAServer& server) {
         mbedtls_x509_crt_free(&cert);
     }
 
-    if (server.certificate_not_before != 0 && now_ms + 60000ULL < server.certificate_not_before) {
-        LOG_WARNING("OPCUA_PLUGIN", "Certificate not yet valid (system time before notBefore)");
+    if (metadata.is_not_yet_valid || metadata.is_expired) {
+        LOG_WARNING("OPCUA_PLUGIN", "Certificate is outside its validity period");
         valid = false;
     }
-
-    if (server.certificate_not_after != 0 && now_ms > server.certificate_not_after) {
-        LOG_WARNING("OPCUA_PLUGIN", "Certificate expired (current time beyond notAfter)");
+    has_high_or_critical = metadata.has_weak_key || metadata.has_weak_signature;
+    if (has_high_or_critical) {
+        LOG_WARNING("OPCUA_PLUGIN", "Certificate advertises a weak key or signature algorithm");
         valid = false;
-    }
-
-    if (server.certificate_expired) {
-        LOG_WARNING("OPCUA_PLUGIN", "Certificate flagged as expired by parser");
-        valid = false;
-    }
-
-    if (server.certificate_self_signed) {
-        LOG_WARNING("OPCUA_PLUGIN", "Certificate is self-signed; requires trust anchor validation");
-    }
-
-    for (const auto& issue : server.certificate_issues) {
-        LOG_WARNINGF("OPCUA_PLUGIN", "Certificate issue detected: %s", issue.c_str());
-        if (!issue.empty() &&
-            (issue.rfind("CRITICAL", 0) == 0 || issue.rfind("HIGH", 0) == 0)) {
-            has_high_or_critical = true;
-            valid = false;
-        }
     }
 
     if (require_certificate_validation_) {
@@ -2566,9 +2502,7 @@ bool OPCUAPlugin::validateServerCertificate(const OPCUAServer& server) {
 
     if (valid &&
         (!require_certificate_validation_ || chain_validated) &&
-        !has_high_or_critical &&
-        server.certificate_issues.empty() &&
-        !server.certificate_self_signed) {
+        !has_high_or_critical) {
         LOG_INFO("OPCUA_PLUGIN", "Certificate validation completed with no blocking findings");
     }
 
@@ -2588,10 +2522,9 @@ bool OPCUAPlugin::checkSecurityConfiguration(const OPCUAServer& server) {
         LOG_INFOF("OPCUA_PLUGIN", "  Security Policy: %s", policy.c_str());
 
         // Consider only the policies with encryption as secure
-        if (policy.find("#Basic256") != std::string::npos ||
-            policy.find("#Basic256Sha256") != std::string::npos ||
-            policy.find("#Aes128_Sha256_RsaOaep") != std::string::npos ||
-            policy.find("#Aes256_Sha256_RsaPss") != std::string::npos) {
+        if (policy == OPCUA::POLICY_BASIC256SHA256 ||
+            policy == "http://opcfoundation.org/UA/SecurityPolicy#Aes128_Sha256_RsaOaep" ||
+            policy == "http://opcfoundation.org/UA/SecurityPolicy#Aes256_Sha256_RsaPss") {
             has_secure_policy = true;
         }
 
@@ -2608,8 +2541,7 @@ bool OPCUAPlugin::checkSecurityConfiguration(const OPCUAServer& server) {
     for (const auto& mode : server.security_modes) {
         LOG_INFOF("OPCUA_PLUGIN", "  Security Mode: %s", mode.c_str());
 
-        if (mode.find("Sign") != std::string::npos ||
-            mode.find("SignAndEncrypt") != std::string::npos) {
+        if (mode == "SignAndEncrypt") {
             has_secure_mode = true;
         }
 
@@ -2625,7 +2557,7 @@ bool OPCUAPlugin::checkSecurityConfiguration(const OPCUAServer& server) {
 
     // Verify anonymous login
     if (server.anonymous_login_allowed) {
-        LOG_WARNING("OPCUA_PLUGIN", "  WARNING: Anonymous login is allowed!");
+        LOG_WARNING("OPCUA_PLUGIN", "  WARNING: Anonymous user token advertised (login not tested)");
     }
 
     bool certificate_ok = true;
@@ -2660,49 +2592,6 @@ bool OPCUAPlugin::checkSecurityConfiguration(const OPCUAServer& server) {
     return is_secure;
 }
 
-void OPCUAPlugin::assessServerSecurity(OPCUAServer& server) {
-    // Assess overall security posture
-    auto add_unique = [&](const std::string& vuln) {
-        if (std::find(server.vulnerabilities.begin(),
-                      server.vulnerabilities.end(),
-                      vuln) == server.vulnerabilities.end()) {
-            server.vulnerabilities.push_back(vuln);
-        }
-    };
-
-    if (server.anonymous_login_allowed) {
-        add_unique("Anonymous login enabled");
-    }
-
-    if (!server.encryption_available) {
-        add_unique("No encryption available");
-    }
-
-    // Check for weak security policies
-    for (const auto& policy : server.security_policies) {
-        if (policy.find("#None") != std::string::npos) {
-            add_unique("Insecure SecurityPolicy#None detected");
-        }
-    }
-}
-
-void OPCUAPlugin::checkForDefaultConfiguration(OPCUAServer& server) {
-    // Check for default/weak configurations
-    if (server.endpoint_url.find(":4840") != std::string::npos) {
-        // Using default port - not necessarily a vulnerability but worth noting
-    }
-
-    if (server.server_certificate.empty()) {
-        auto add_unique = [&](const std::string& vuln) {
-            if (std::find(server.vulnerabilities.begin(),
-                          server.vulnerabilities.end(),
-                          vuln) == server.vulnerabilities.end()) {
-                server.vulnerabilities.push_back(vuln);
-            }
-        };
-        add_unique("No server certificate configured");
-    }
-}
 
 bool OPCUAPlugin::parseOPCUAPacket(const NetworkPacket& packet, std::string& message_type,
                                   uint32_t& secure_channel_id, uint32_t& sequence_number) {

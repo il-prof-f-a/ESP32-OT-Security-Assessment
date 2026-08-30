@@ -569,9 +569,8 @@ bool OPCUABinaryCodec::buildCloseSecureChannelRequest(psram_vector<uint8_t>& out
 // ==================== TIMESTAMP HELPERS ====================
 
 uint64_t OPCUABinaryCodec::getCurrentTimestamp() {
-    // Get current Unix time in milliseconds
-    uint64_t unix_ms = esp_timer_get_time() / 1000;
-    return unixToOPCUA(unix_ms);
+    const int64_t unix_ms = X509DER::Parser::currentUnixTimeMs();
+    return unix_ms > 0 ? unixToOPCUA(static_cast<uint64_t>(unix_ms)) : 0;
 }
 
 uint64_t OPCUABinaryCodec::unixToOPCUA(uint64_t unix_timestamp_ms) {
@@ -1044,7 +1043,7 @@ bool OPCUABinaryCodec::parseGetEndpointsResponse(const uint8_t* data, size_t len
             if (!X509DER::Parser::parseCertificate(endpoint.server_certificate_der_hex,
                                                    endpoint.server_certificate_info,
                                                    parse_error)) {
-                LOG_WARNING(TAG_OPCUA_CODEC, "Failed to parse certificate");
+                LOG_WARNINGF(TAG_OPCUA_CODEC, "Failed to parse certificate: %s", parse_error.c_str());
             }
         }
 
@@ -1129,11 +1128,11 @@ bool OPCUABinaryCodec::parseGetEndpointsResponse(const uint8_t* data, size_t len
 
         // Additional security checks
         if (endpoint.security_mode == OPCUA::SECURITY_MODE_NONE) {
-            endpoint.vulnerabilities.push_back(PSRAMUtils::createPSRAMString("HIGH: No message security (SecurityMode=None)"));
+            endpoint.vulnerabilities.push_back(PSRAMUtils::createPSRAMString("HIGH: Endpoint advertises SecurityMode=None; application access not tested"));
         }
 
-        if (endpoint.allows_anonymous && endpoint.security_mode == OPCUA::SECURITY_MODE_NONE) {
-            endpoint.vulnerabilities.push_back(PSRAMUtils::createPSRAMString("CRITICAL: Anonymous access with no encryption"));
+        if (endpoint.allows_anonymous) {
+            endpoint.vulnerabilities.push_back(PSRAMUtils::createPSRAMString("INFO: Anonymous user token advertised; login and permissions not tested"));
         }
 
         out_endpoints.push_back(endpoint);

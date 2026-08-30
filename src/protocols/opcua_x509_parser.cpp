@@ -3,10 +3,6 @@
 #include <cstring>
 #include <ctime>
 
-extern "C" {
-    #include "esp_timer.h"
-}
-
 #define TAG_X509 "X509Parser"
 
 namespace X509DER {
@@ -101,26 +97,21 @@ bool Parser::parseLength(const uint8_t* data, size_t len, size_t& offset, size_t
 }
 
 bool Parser::parseTLV(const uint8_t* data, size_t len, size_t& offset, TLV& out_tlv) {
-    if (offset >= len) return false;
-
-    size_t start_offset = offset;
-
-    // Parse tag
-    out_tlv.tag = data[offset++];
-
-    // Parse length
-    if (!parseLength(data, len, offset, out_tlv.length)) {
+    if (!data || offset >= len) return false;
+    // Peek only: callers explicitly advance by total_size or descend to
+    // value_offset. Advancing here as well skipped every ASN.1 header twice.
+    size_t cursor = offset;
+    out_tlv.tag = data[cursor++];
+    if (!parseLength(data, len, cursor, out_tlv.length)) {
         return false;
     }
-
-    // Validate length
-    if (offset + out_tlv.length > len) {
+    if (out_tlv.length > len - cursor) {
         LOG_ERROR(TAG_X509, "TLV length exceeds buffer");
         return false;
     }
 
-    out_tlv.value_offset = offset;
-    out_tlv.total_size = (offset - start_offset) + out_tlv.length;
+    out_tlv.value_offset = cursor;
+    out_tlv.total_size = (cursor - offset) + out_tlv.length;
 
     return true;
 }
@@ -197,11 +188,15 @@ bool Parser::parseString(const uint8_t* data, size_t len, uint8_t tag, psram_str
     return true;
 }
 
-bool Parser::parseTime(const uint8_t* data, size_t len, uint8_t tag, uint64_t& out_timestamp) {
+bool Parser::parseTime(const uint8_t* data, size_t len, uint8_t tag, int64_t& out_timestamp) {
     // UTCTime: YYMMDDhhmmssZ (13 bytes)
     // GeneralizedTime: YYYYMMDDhhmmssZ (15 bytes)
 
-    if (len < 13) return false;
+    if (!data || !((tag == TAG_UTC_TIME && len == 13) ||
+                   (tag == TAG_GENERALIZED_TIME && len == 15)) || data[len - 1] != 'Z') return false;
+    for (size_t i = 0; i + 1 < len; ++i) {
+        if (data[i] < '0' || data[i] > '9') return false;
+    }
 
     char time_buf[32];
     size_t copy_len = (len < sizeof(time_buf) - 1) ? len : (sizeof(time_buf) - 1);
@@ -239,9 +234,22 @@ bool Parser::parseTime(const uint8_t* data, size_t len, uint8_t tag, uint64_t& o
         return false;
     }
 
-    // Convert to Unix timestamp (simplified - assumes UTC)
-    time_t unix_time = mktime(&tm_time);
-    out_timestamp = (uint64_t)unix_time * 1000; // Convert to milliseconds
+    // Calendar arithmetic avoids mktime's local timezone and 32-bit time_t limits.
+    const int year = tm_time.tm_year + 1900;
+    const int month = tm_time.tm_mon + 1;
+    const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    static const int month_days[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+    if (year < 1 || month < 1 || month > 12 || tm_time.tm_mday < 1 ||
+        tm_time.tm_mday > month_days[month - 1] + ((month == 2 && leap) ? 1 : 0) ||
+        tm_time.tm_hour > 23 || tm_time.tm_min > 59 || tm_time.tm_sec > 59) return false;
+    auto days_before_year = [](int y) -> int64_t {
+        const int64_t previous = y - 1;
+        return previous * 365 + previous / 4 - previous / 100 + previous / 400;
+    };
+    int64_t days = days_before_year(year) - days_before_year(1970);
+    for (int m = 1; m < month; ++m) days += month_days[m - 1] + ((m == 2 && leap) ? 1 : 0);
+    days += tm_time.tm_mday - 1;
+    out_timestamp = (days * 86400 + tm_time.tm_hour * 3600 + tm_time.tm_min * 60 + tm_time.tm_sec) * 1000;
 
     return true;
 }
@@ -266,26 +274,24 @@ bool Parser::parseName(const uint8_t* data, size_t len, size_t& offset,
 
     while (name_offset < name_end) {
         TLV rdn_set;
-        if (!parseTLV(data, len, name_offset, rdn_set) || rdn_set.tag != TAG_SET) {
-            break;
+        if (!parseTLV(data, name_end, name_offset, rdn_set) || rdn_set.tag != TAG_SET) {
+            return false;
         }
 
         size_t rdn_offset = rdn_set.value_offset;
 
         // Parse AttributeTypeAndValue SEQUENCE
         TLV attr_seq;
-        if (!parseTLV(data, len, rdn_offset, attr_seq) || attr_seq.tag != TAG_SEQUENCE) {
-            name_offset += rdn_set.total_size;
-            continue;
+        if (!parseTLV(data, rdn_set.value_offset + rdn_set.length, rdn_offset, attr_seq) || attr_seq.tag != TAG_SEQUENCE) {
+            return false;
         }
 
         size_t attr_offset = attr_seq.value_offset;
 
         // Parse OID
         TLV oid_tlv;
-        if (!parseTLV(data, len, attr_offset, oid_tlv) || oid_tlv.tag != TAG_OID) {
-            name_offset += rdn_set.total_size;
-            continue;
+        if (!parseTLV(data, attr_seq.value_offset + attr_seq.length, attr_offset, oid_tlv) || oid_tlv.tag != TAG_OID) {
+            return false;
         }
 
         psram_string oid;
@@ -298,9 +304,8 @@ bool Parser::parseName(const uint8_t* data, size_t len, size_t& offset,
 
         // Parse Value (string)
         TLV value_tlv;
-        if (!parseTLV(data, len, attr_offset, value_tlv)) {
-            name_offset += rdn_set.total_size;
-            continue;
+        if (!parseTLV(data, attr_seq.value_offset + attr_seq.length, attr_offset, value_tlv)) {
+            return false;
         }
 
         psram_string value;
@@ -331,6 +336,11 @@ bool Parser::parseSubjectAltName(const uint8_t* data, size_t len,
 
     size_t offset = 0;
 
+    TLV sequence;
+    if (!parseTLV(data, len, offset, sequence) || sequence.tag != TAG_SEQUENCE ||
+        sequence.total_size != len) return false;
+    offset = sequence.value_offset;
+
     while (offset < len) {
         if (offset >= len) break;
 
@@ -338,9 +348,9 @@ bool Parser::parseSubjectAltName(const uint8_t* data, size_t len,
         offset++;
 
         size_t value_len;
-        if (!parseLength(data, len, offset, value_len)) break;
+        if (!parseLength(data, len, offset, value_len)) return false;
 
-        if (offset + value_len > len) break;
+        if (value_len > len - offset) return false;
 
         if (tag == 0x82) { // dNSName [2]
             psram_string dns_name;
@@ -377,38 +387,38 @@ bool Parser::parseExtensions(const uint8_t* data, size_t len, size_t& offset,
 
     while (ext_offset < ext_end) {
         TLV extension;
-        if (!parseTLV(data, len, ext_offset, extension) || extension.tag != TAG_SEQUENCE) {
-            break;
+        if (!parseTLV(data, ext_end, ext_offset, extension) || extension.tag != TAG_SEQUENCE) {
+            return false;
         }
 
         size_t inner_offset = extension.value_offset;
+        const size_t inner_end = inner_offset + extension.length;
 
         // Parse extnID (OID)
         TLV oid_tlv;
-        if (!parseTLV(data, len, inner_offset, oid_tlv) || oid_tlv.tag != TAG_OID) {
-            ext_offset += extension.total_size;
-            continue;
+        if (!parseTLV(data, inner_end, inner_offset, oid_tlv) || oid_tlv.tag != TAG_OID) {
+            return false;
         }
 
         psram_string oid;
         if (!parseOID(data + oid_tlv.value_offset, oid_tlv.length, oid)) {
-            ext_offset += extension.total_size;
-            continue;
+            return false;
         }
 
         inner_offset += oid_tlv.total_size;
 
         // Check for critical flag (optional BOOLEAN)
         TLV next_tlv;
-        if (parseTLV(data, len, inner_offset, next_tlv) && next_tlv.tag == 0x01) {
+        if (parseTLV(data, inner_end, inner_offset, next_tlv) && next_tlv.tag == 0x01) {
+            if (next_tlv.length != 1) return false;
             inner_offset += next_tlv.total_size;
         }
 
         // Parse extnValue (OCTET STRING)
         TLV value_tlv;
-        if (!parseTLV(data, len, inner_offset, value_tlv) || value_tlv.tag != TAG_OCTET_STRING) {
-            ext_offset += extension.total_size;
-            continue;
+        if (!parseTLV(data, inner_end, inner_offset, value_tlv) || value_tlv.tag != TAG_OCTET_STRING ||
+            inner_offset + value_tlv.total_size != inner_end) {
+            return false;
         }
 
         // Process specific extensions
@@ -416,16 +426,20 @@ bool Parser::parseExtensions(const uint8_t* data, size_t len, size_t& offset,
             // BasicConstraints ::= SEQUENCE { cA BOOLEAN }
             size_t bc_offset = value_tlv.value_offset;
             TLV bc_seq;
-            if (parseTLV(data, len, bc_offset, bc_seq) && bc_seq.tag == TAG_SEQUENCE) {
+            const size_t value_end = value_tlv.value_offset + value_tlv.length;
+            if (!parseTLV(data, value_end, bc_offset, bc_seq) || bc_seq.tag != TAG_SEQUENCE ||
+                bc_offset + bc_seq.total_size != value_end) return false;
+            {
                 bc_offset = bc_seq.value_offset;
                 TLV ca_tlv;
-                if (parseTLV(data, len, bc_offset, ca_tlv) && ca_tlv.tag == 0x01) {
+                if (parseTLV(data, value_end, bc_offset, ca_tlv) && ca_tlv.tag == 0x01) {
+                    if (ca_tlv.length != 1) return false;
                     info.is_ca = (data[ca_tlv.value_offset] != 0);
                 }
             }
         } else if (oidMatches(oid, OID::SUBJECT_ALT_NAME)) {
-            parseSubjectAltName(data + value_tlv.value_offset, value_tlv.length,
-                              info.san_dns_names, info.san_ip_addresses);
+            if (!parseSubjectAltName(data + value_tlv.value_offset, value_tlv.length,
+                                    info.san_dns_names, info.san_ip_addresses)) return false;
         }
 
         ext_offset += extension.total_size;
@@ -440,6 +454,7 @@ bool Parser::parseExtensions(const uint8_t* data, size_t len, size_t& offset,
 bool Parser::isWeakSignatureAlgorithm(const psram_string& sig_alg) {
     // Check for MD5 or SHA1
     return (sig_alg.find("MD5") != psram_string::npos) ||
+           (sig_alg.find("md5") != psram_string::npos) ||
            (sig_alg.find("SHA1") != psram_string::npos) ||
            (sig_alg.find("sha1") != psram_string::npos);
 }
@@ -449,15 +464,68 @@ bool Parser::isWeakKeySize(uint16_t key_size_bits) {
     return key_size_bits < 2048;
 }
 
-bool Parser::isSelfSigned(const psram_string& subject_cn, const psram_string& issuer_cn) {
-    return subject_cn == issuer_cn && !subject_cn.empty();
+int64_t Parser::currentUnixTimeMs() {
+    const time_t now = time(nullptr);
+    return now >= 1577836800LL && now <= 253402300799LL ? static_cast<int64_t>(now) * 1000 : 0;
+}
+
+void Parser::evaluateValidity(X509CertificateInfo& info, int64_t unix_ms) {
+    info.time_checked = info.parse_ok && unix_ms >= 1577836800000LL && unix_ms <= 253402300799999LL;
+    info.is_expired = info.time_checked && unix_ms > info.not_after_timestamp;
+    info.is_not_yet_valid = info.time_checked && unix_ms < info.not_before_timestamp;
 }
 
 // ==================== MAIN PARSER ====================
 
+bool Parser::certificateChainLengths(const uint8_t* data, size_t len,
+                                     psram_vector<size_t>& lengths) {
+    lengths.clear();
+    if (!data || len == 0 || len > 64 * 1024) return false;
+    size_t offset = 0;
+    while (offset < len) {
+        TLV certificate;
+        if (lengths.size() >= 16 || !parseTLV(data, len, offset, certificate) ||
+            certificate.tag != TAG_SEQUENCE || certificate.length == 0) {
+            lengths.clear();
+            return false;
+        }
+        lengths.push_back(certificate.total_size);
+        offset += certificate.total_size;
+    }
+    return true;
+}
+
 bool Parser::parseCertificateFromBinary(const uint8_t* der_data, size_t der_len,
                                        X509CertificateInfo& out_info,
                                        psram_string& out_error) {
+    out_info = X509CertificateInfo{};
+    out_error.clear();
+    X509CertificateInfo parsed{};
+    psram_vector<size_t> lengths;
+    if (!certificateChainLengths(der_data, der_len, lengths)) {
+        out_error = PSRAMUtils::createPSRAMString("Invalid certificate chain framing or resource limit");
+        out_info.parse_error = out_error;
+        return false;
+    }
+    size_t offset = 0;
+    for (size_t index = 0; index < lengths.size(); ++index) {
+        X509CertificateInfo member{};
+        if (!parseCertificateContents(der_data + offset, lengths[index], member, out_error)) {
+            out_info.parse_error = out_error;
+            return false;
+        }
+        if (index == 0) parsed = std::move(member);
+        offset += lengths[index];
+    }
+    parsed.certificates_in_blob = static_cast<uint16_t>(lengths.size());
+    parsed.parse_ok = true;
+    evaluateValidity(parsed, currentUnixTimeMs());
+    out_info = std::move(parsed);
+    return true;
+}
+
+bool Parser::parseCertificateContents(const uint8_t* der_data, size_t der_len,
+                                      X509CertificateInfo& out_info, psram_string& out_error) {
     if (!der_data || der_len == 0) {
         out_error = PSRAMUtils::createPSRAMString("Empty certificate data");
         return false;
@@ -474,7 +542,8 @@ bool Parser::parseCertificateFromBinary(const uint8_t* der_data, size_t der_len,
     // }
 
     TLV cert_seq;
-    if (!parseTLV(der_data, der_len, offset, cert_seq) || cert_seq.tag != TAG_SEQUENCE) {
+    if (!parseTLV(der_data, der_len, offset, cert_seq) || cert_seq.tag != TAG_SEQUENCE ||
+        cert_seq.total_size != der_len) {
         out_error = PSRAMUtils::createPSRAMString("Invalid certificate structure");
         return false;
     }
@@ -489,6 +558,19 @@ bool Parser::parseCertificateFromBinary(const uint8_t* der_data, size_t der_len,
     }
 
     size_t tbs_inner = tbs_seq.value_offset;
+    const size_t tbs_end = tbs_seq.value_offset + tbs_seq.length;
+    // Require the outer signature fields as well; metadata parsing is not signature verification.
+    size_t signature_offset = tbs_offset + tbs_seq.total_size;
+    TLV outer_algorithm, outer_signature;
+    if (!parseTLV(der_data, der_len, signature_offset, outer_algorithm) || outer_algorithm.tag != TAG_SEQUENCE) {
+        out_error = PSRAMUtils::createPSRAMString("Invalid outer signature algorithm"); return false;
+    }
+    signature_offset += outer_algorithm.total_size;
+    if (!parseTLV(der_data, der_len, signature_offset, outer_signature) || outer_signature.tag != TAG_BIT_STRING ||
+        outer_signature.length < 2 || signature_offset + outer_signature.total_size != der_len) {
+        out_error = PSRAMUtils::createPSRAMString("Invalid signature value"); return false;
+    }
+    der_len = tbs_end; // No TBSCertificate field may consume outer signature bytes.
 
     // Parse version [0] EXPLICIT (optional, default v1)
     TLV version_tlv;
@@ -519,7 +601,7 @@ bool Parser::parseCertificateFromBinary(const uint8_t* der_data, size_t der_len,
     // Extract signature algorithm OID
     size_t sig_alg_offset = sig_alg_tlv.value_offset;
     TLV sig_oid_tlv;
-    if (parseTLV(der_data, der_len, sig_alg_offset, sig_oid_tlv) && sig_oid_tlv.tag == TAG_OID) {
+    if (parseTLV(der_data, sig_alg_tlv.value_offset + sig_alg_tlv.length, sig_alg_offset, sig_oid_tlv) && sig_oid_tlv.tag == TAG_OID) {
         psram_string sig_oid;
         if (parseOID(der_data + sig_oid_tlv.value_offset, sig_oid_tlv.length, sig_oid)) {
             if (oidMatches(sig_oid, OID::SHA256_RSA)) {
@@ -537,11 +619,13 @@ bool Parser::parseCertificateFromBinary(const uint8_t* der_data, size_t der_len,
     tbs_inner += sig_alg_tlv.total_size;
 
     // Parse issuer Name
+    const size_t issuer_start = tbs_inner;
     if (!parseName(der_data, der_len, tbs_inner,
                    out_info.issuer_common_name, out_info.issuer_organization)) {
         out_error = PSRAMUtils::createPSRAMString("Failed to parse issuer");
         return false;
     }
+    const size_t issuer_size = tbs_inner - issuer_start;
 
     // Parse validity (SEQUENCE of two times)
     TLV validity_tlv;
@@ -554,27 +638,35 @@ bool Parser::parseCertificateFromBinary(const uint8_t* der_data, size_t der_len,
 
     // Parse notBefore
     TLV not_before_tlv;
-    if (parseTLV(der_data, der_len, validity_offset, not_before_tlv)) {
-        parseTime(der_data + not_before_tlv.value_offset, not_before_tlv.length,
-                 not_before_tlv.tag, out_info.not_before_timestamp);
-        validity_offset += not_before_tlv.total_size;
+    const size_t validity_end = validity_tlv.value_offset + validity_tlv.length;
+    if (!parseTLV(der_data, validity_end, validity_offset, not_before_tlv) ||
+        !parseTime(der_data + not_before_tlv.value_offset, not_before_tlv.length,
+                   not_before_tlv.tag, out_info.not_before_timestamp)) {
+        out_error = PSRAMUtils::createPSRAMString("Invalid notBefore"); return false;
     }
+    validity_offset += not_before_tlv.total_size;
 
     // Parse notAfter
     TLV not_after_tlv;
-    if (parseTLV(der_data, der_len, validity_offset, not_after_tlv)) {
-        parseTime(der_data + not_after_tlv.value_offset, not_after_tlv.length,
-                 not_after_tlv.tag, out_info.not_after_timestamp);
+    if (!parseTLV(der_data, validity_end, validity_offset, not_after_tlv) ||
+        !parseTime(der_data + not_after_tlv.value_offset, not_after_tlv.length,
+                   not_after_tlv.tag, out_info.not_after_timestamp) ||
+        validity_offset + not_after_tlv.total_size != validity_end ||
+        out_info.not_after_timestamp < out_info.not_before_timestamp) {
+        out_error = PSRAMUtils::createPSRAMString("Invalid validity interval"); return false;
     }
 
     tbs_inner += validity_tlv.total_size;
 
     // Parse subject Name
+    const size_t subject_start = tbs_inner;
     if (!parseName(der_data, der_len, tbs_inner,
                    out_info.subject_common_name, out_info.subject_organization)) {
         out_error = PSRAMUtils::createPSRAMString("Failed to parse subject");
         return false;
     }
+    out_info.is_self_issued = issuer_size == tbs_inner - subject_start &&
+        memcmp(der_data + issuer_start, der_data + subject_start, issuer_size) == 0;
 
     // Parse subjectPublicKeyInfo
     TLV spki_tlv;
@@ -583,49 +675,92 @@ bool Parser::parseCertificateFromBinary(const uint8_t* der_data, size_t der_len,
         return false;
     }
 
-    // Extract key size (simplified - just estimate from BIT STRING length)
+    // Extract the RSA modulus bit length; DER wrappers/exponent are not key bits.
     size_t spki_offset = spki_tlv.value_offset;
+    const size_t spki_end = spki_offset + spki_tlv.length;
     TLV alg_id_tlv;
-    if (parseTLV(der_data, der_len, spki_offset, alg_id_tlv) && alg_id_tlv.tag == TAG_SEQUENCE) {
+    if (parseTLV(der_data, spki_end, spki_offset, alg_id_tlv) && alg_id_tlv.tag == TAG_SEQUENCE) {
+        size_t alg_offset = alg_id_tlv.value_offset;
+        TLV key_oid;
+        psram_string key_algorithm;
+        if (!parseTLV(der_data, alg_offset + alg_id_tlv.length, alg_offset, key_oid) || key_oid.tag != TAG_OID ||
+            !parseOID(der_data + key_oid.value_offset, key_oid.length, key_algorithm)) {
+            out_error = PSRAMUtils::createPSRAMString("Invalid public key algorithm"); return false;
+        }
         spki_offset += alg_id_tlv.total_size;
 
         TLV pub_key_tlv;
-        if (parseTLV(der_data, der_len, spki_offset, pub_key_tlv) && pub_key_tlv.tag == TAG_BIT_STRING) {
-            // Estimate key size from bit string length (rough approximation)
-            size_t bit_len = (pub_key_tlv.length - 1) * 8; // -1 for unused bits byte
-            out_info.key_size_bits = (uint16_t)bit_len;
-
-            // More accurate: RSA keys typically have modulus around 75% of total
-            if (bit_len > 1024) {
-                out_info.key_size_bits = (uint16_t)(bit_len * 0.75);
+        if (parseTLV(der_data, spki_end, spki_offset, pub_key_tlv) && pub_key_tlv.tag == TAG_BIT_STRING &&
+            spki_offset + pub_key_tlv.total_size == spki_end) {
+            if (pub_key_tlv.length < 2 || der_data[pub_key_tlv.value_offset] != 0) {
+                out_error = PSRAMUtils::createPSRAMString("Invalid public key bit string"); return false;
             }
+            if (oidMatches(key_algorithm, OID::RSA_ENCRYPTION)) {
+                size_t rsa_offset = pub_key_tlv.value_offset + 1;
+                const size_t rsa_end = pub_key_tlv.value_offset + pub_key_tlv.length;
+                TLV rsa_seq, modulus;
+                if (!parseTLV(der_data, rsa_end, rsa_offset, rsa_seq) || rsa_seq.tag != TAG_SEQUENCE ||
+                    rsa_offset + rsa_seq.total_size != rsa_end) {
+                    out_error = PSRAMUtils::createPSRAMString("Invalid RSA key"); return false;
+                }
+                rsa_offset = rsa_seq.value_offset;
+                if (!parseTLV(der_data, rsa_end, rsa_offset, modulus) || modulus.tag != TAG_INTEGER || modulus.length == 0) {
+                    out_error = PSRAMUtils::createPSRAMString("Invalid RSA modulus"); return false;
+                }
+                rsa_offset += modulus.total_size;
+                TLV exponent;
+                if (!parseTLV(der_data, rsa_end, rsa_offset, exponent) || exponent.tag != TAG_INTEGER ||
+                    exponent.length == 0 || (der_data[exponent.value_offset] & 0x80) != 0 ||
+                    rsa_offset + exponent.total_size != rsa_end) {
+                    out_error = PSRAMUtils::createPSRAMString("Invalid RSA exponent"); return false;
+                }
+                size_t first = modulus.value_offset, end = first + modulus.length;
+                while (first < end && der_data[first] == 0) ++first;
+                if (first == end || end - first > 8191) {
+                    out_error = PSRAMUtils::createPSRAMString("Invalid RSA modulus size"); return false;
+                }
+                unsigned high_bits = 0;
+                for (uint8_t value = der_data[first]; value; value >>= 1) ++high_bits;
+                out_info.key_size_bits = static_cast<uint16_t>((end - first - 1) * 8 + high_bits);
+                out_info.key_size_known = true;
+            }
+        } else {
+            out_error = PSRAMUtils::createPSRAMString("Invalid public key"); return false;
         }
+    } else {
+        out_error = PSRAMUtils::createPSRAMString("Invalid public key algorithm"); return false;
     }
 
     tbs_inner += spki_tlv.total_size;
 
+    // Skip optional issuerUniqueID/subjectUniqueID before the v3 extensions.
+    while (tbs_inner < tbs_end && (der_data[tbs_inner] == 0x81 || der_data[tbs_inner] == 0x82)) {
+        TLV unique_id;
+        if (!parseTLV(der_data, tbs_end, tbs_inner, unique_id)) {
+            out_error = PSRAMUtils::createPSRAMString("Invalid unique identifier"); return false;
+        }
+        tbs_inner += unique_id.total_size;
+    }
     // Parse extensions [3] EXPLICIT (optional)
     TLV ext_context_tlv;
     if (parseTLV(der_data, der_len, tbs_inner, ext_context_tlv) && ext_context_tlv.tag == TAG_CONTEXT_3) {
         size_t ext_offset = ext_context_tlv.value_offset;
-        parseExtensions(der_data, der_len, ext_offset, out_info);
+        if (!parseExtensions(der_data, ext_context_tlv.value_offset + ext_context_tlv.length, ext_offset, out_info) ||
+            ext_offset != ext_context_tlv.value_offset + ext_context_tlv.length) {
+            out_error = PSRAMUtils::createPSRAMString("Invalid extensions"); return false;
+        }
+        tbs_inner += ext_context_tlv.total_size;
+    }
+    if (tbs_inner != tbs_end) {
+        out_error = PSRAMUtils::createPSRAMString("Unexpected trailing certificate fields"); return false;
     }
 
     // Security assessment
-    out_info.is_self_signed = isSelfSigned(out_info.subject_common_name, out_info.issuer_common_name);
     out_info.has_weak_signature = isWeakSignatureAlgorithm(out_info.signature_algorithm);
-    out_info.has_weak_key = isWeakKeySize(out_info.key_size_bits);
-
-    // Check expiration
-    uint64_t now_ms = esp_timer_get_time() / 1000;
-    out_info.is_expired = (now_ms > out_info.not_after_timestamp);
+    out_info.has_weak_key = out_info.key_size_known && isWeakKeySize(out_info.key_size_bits);
 
     // Populate vulnerabilities
     out_info.vulnerabilities.clear();
-
-    if (out_info.is_expired) {
-        out_info.vulnerabilities.push_back(PSRAMUtils::createPSRAMString("CRITICAL: Certificate expired"));
-    }
 
     if (out_info.has_weak_key) {
         char buf[64];
@@ -637,9 +772,6 @@ bool Parser::parseCertificateFromBinary(const uint8_t* der_data, size_t der_len,
         out_info.vulnerabilities.push_back(PSRAMUtils::createPSRAMString("HIGH: Weak signature algorithm (MD5/SHA1)"));
     }
 
-    if (out_info.is_self_signed) {
-        out_info.vulnerabilities.push_back(PSRAMUtils::createPSRAMString("MEDIUM: Self-signed certificate"));
-    }
 
     LOG_INFOF(TAG_X509, "Certificate parsed: CN=%s, Issuer=%s, KeySize=%u, SigAlg=%s",
               PSRAMUtils::fromPSRAMString(out_info.subject_common_name).c_str(),
@@ -653,15 +785,19 @@ bool Parser::parseCertificateFromBinary(const uint8_t* der_data, size_t der_len,
 bool Parser::parseCertificate(const psram_string& cert_der_hex,
                              X509CertificateInfo& out_info,
                              psram_string& out_error) {
+    out_info = X509CertificateInfo{};
+    out_error.clear();
     // Convert hex string to binary
     psram_vector<uint8_t> der_bytes;
     if (!hexToBytes(cert_der_hex, der_bytes)) {
         out_error = PSRAMUtils::createPSRAMString("Failed to decode hex certificate");
+        out_info.parse_error = out_error;
         return false;
     }
 
     if (der_bytes.empty()) {
         out_error = PSRAMUtils::createPSRAMString("Empty certificate after hex decode");
+        out_info.parse_error = out_error;
         return false;
     }
 

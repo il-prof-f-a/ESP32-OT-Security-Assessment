@@ -82,19 +82,26 @@ struct X509CertificateInfo {
     psram_string issuer_common_name;
     psram_string issuer_organization;
     psram_string serial_number;          // Hex string
-    uint64_t not_before_timestamp;       // Unix timestamp
-    uint64_t not_after_timestamp;
+    int64_t not_before_timestamp = 0;    // UTC Unix milliseconds (may predate 1970)
+    int64_t not_after_timestamp = 0;
     psram_string signature_algorithm;    // "sha256WithRSAEncryption", etc.
-    uint16_t key_size_bits;              // 1024, 2048, 4096
-    bool is_self_signed;
-    bool is_expired;
-    bool is_ca;
+    uint16_t key_size_bits = 0;
+    bool key_size_known = false;
+    bool is_self_signed = false;        // Never inferred from matching names
+    bool is_self_issued = false;        // Exact issuer/subject DER match; not trust
+    bool is_expired = false;
+    bool is_not_yet_valid = false;
+    bool is_ca = false;
+    bool parse_ok = false;
+    uint16_t certificates_in_blob = 0;  // Leaf metadata only; appended issuers are not trusted.
+    bool time_checked = false;
+    psram_string parse_error;
     psram_string_vector san_dns_names;   // Subject Alternative Names
     psram_string_vector san_ip_addresses;
 
     // Security assessment flags
-    bool has_weak_key;                   // <2048 bits
-    bool has_weak_signature;             // MD5, SHA1
+    bool has_weak_key = false;           // RSA <2048 bits; unknown algorithms not guessed
+    bool has_weak_signature = false;     // MD5, SHA1
     psram_string_vector vulnerabilities; // "WEAK_KEY_SIZE", "EXPIRED", etc.
 };
 

@@ -1303,12 +1303,12 @@ const VULN_SCAN_TYPES = {
   3: { // OPC UA
     help: 'OPC UA scanner supports baseline checks by default; DoS-oriented checks are available but disabled by default.',
     types: [
-      { id: 'anonymous_access', label: 'Anonymous access', def: true },
+      { id: 'anonymous_access', label: 'Anonymous token advertisement (no login test)', def: true },
       { id: 'weak_security_policies', label: 'Weak security policies', def: true },
-      { id: 'certificate_validation', label: 'Certificate validation', def: true },
+      { id: 'certificate_validation', label: 'Certificate metadata (no trust validation)', def: true },
       { id: 'default_credentials', label: 'Manual: default credentials (session support required)', def: false },
       { id: 'idor_vulnerability', label: 'Manual: authorization/IDOR (session support required)', def: false },
-      { id: 'certificate_chain_loop', label: 'Certificate chain loop', def: true },
+      { id: 'certificate_chain_loop', label: 'Certificate reuse / chain assessment (manual)', def: true },
       { id: 'brute_force_resilience', label: 'Brute force resilience', def: false, requires_offensive_testing: true, risk: 'unsafe' },
       { id: 'condition_refresh_dos', label: 'ConditionRefresh DoS (active)', def: false, requires_offensive_testing: true, risk: 'unsafe' },
       { id: 'chunk_flooding_dos', label: 'Chunk flooding DoS (active)', def: false, requires_offensive_testing: true, risk: 'unsafe' },
