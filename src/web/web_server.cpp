@@ -3342,6 +3342,7 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
 
     // Web pages
     httpd_uri_t page_protocols = { .uri="/protocols", .method=HTTP_GET, .handler=&WebServer::h_page_protocols, .user_ctx=nullptr };
+    httpd_uri_t page_discovery = { .uri="/discovery", .method=HTTP_GET, .handler=&WebServer::h_page_discovery, .user_ctx=nullptr };
     httpd_uri_t page_scanner = { .uri="/scanner", .method=HTTP_GET, .handler=&WebServer::h_page_scanner, .user_ctx=nullptr };
     // Aliases to keep "offensive" actions separated in the UI while reusing the same HTML payload.
     httpd_uri_t page_vuln_scanner = { .uri="/vulnerability-scanner", .method=HTTP_GET, .handler=&WebServer::h_page_scanner, .user_ctx=nullptr };
@@ -3359,9 +3360,12 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     httpd_uri_t page_audit = { .uri="/audit", .method=HTTP_GET, .handler=&WebServer::h_page_audit, .user_ctx=nullptr };
     httpd_uri_t page_style = { .uri="/static/style.css", .method=HTTP_GET, .handler=&WebServer::h_page_style, .user_ctx=nullptr };
     httpd_register_uri_handler(active_server_, &page_protocols);
+    httpd_register_uri_handler(active_server_, &page_discovery);
     httpd_register_uri_handler(active_server_, &page_scanner);
     httpd_register_uri_handler(active_server_, &page_vuln_scanner);
     httpd_register_uri_handler(active_server_, &page_fuzzing);
+    httpd_uri_t page_scheduled_scans = { .uri="/scheduled-scans", .method=HTTP_GET, .handler=&WebServer::h_page_scanner, .user_ctx=nullptr };
+    httpd_register_uri_handler(active_server_, &page_scheduled_scans);
     httpd_register_uri_handler(active_server_, &page_ids);
     httpd_register_uri_handler(active_server_, &page_signatures);
     httpd_register_uri_handler(active_server_, &page_security);
@@ -6259,6 +6263,19 @@ esp_err_t WebServer::h_page_protocols(httpd_req_t* req) {
     }
 
     return send_html_chunked(req, PROTOCOLS_HTML_GEN, PROTOCOLS_HTML_GEN_SIZE);
+}
+
+esp_err_t WebServer::h_page_discovery(httpd_req_t* req) {
+    AccessLogger::getInstance().logRequest(req);
+
+    if (!check_session(req)) {
+        AccessLogger::getInstance().logResponse(req, 302, "REDIRECT_UNAUTHENTICATED");
+        httpd_resp_set_status(req,"302 Found");
+        httpd_resp_set_hdr(req,"Location","/login");
+        return httpd_resp_send(req,"",0);
+    }
+
+    return send_html_chunked(req, DISCOVERY_HTML_GEN, DISCOVERY_HTML_GEN_SIZE);
 }
 
 esp_err_t WebServer::h_page_scanner(httpd_req_t* req) {

@@ -97,6 +97,16 @@ class BuildIntegrationTests(unittest.TestCase):
         self.assertEqual(metadata["upload"]["flash_size"], "16MB")
         self.assertEqual(metadata["vendor"], "GUITION")
 
+    def test_discovery_page_has_dedicated_handler_and_legacy_offensive_aliases(self):
+        source = (PROJECT_ROOT / "src/web/web_server.cpp").read_text(encoding="utf-8")
+        header = (PROJECT_ROOT / "src/web/web_server.h").read_text(encoding="utf-8")
+
+        self.assertIn('uri="/discovery"', source)
+        self.assertIn("h_page_discovery", source)
+        self.assertIn("h_page_discovery", header)
+        for alias in ("/vulnerability-scanner", "/fuzzing", "/scheduled-scans"):
+            self.assertIn(f'uri="{alias}"', source)
+
     def test_direct_p4_build_requires_an_explicit_board_profile(self):
         cmake = (PROJECT_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
 

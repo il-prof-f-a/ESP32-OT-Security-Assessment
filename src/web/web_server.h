@@ -380,6 +380,7 @@ private:
 
     // Web pages
     static esp_err_t h_page_protocols(httpd_req_t* req);
+    static esp_err_t h_page_discovery(httpd_req_t* req);
     static esp_err_t h_page_scanner(httpd_req_t* req);
     static esp_err_t h_page_ids(httpd_req_t* req);
     static esp_err_t h_page_network_presence(httpd_req_t* req);

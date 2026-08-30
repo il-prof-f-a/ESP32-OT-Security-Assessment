@@ -1,0 +1,807 @@
+<!doctype html>
+<html><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Protocol Discovery</title>
+<style>
+body{font-family:system-ui;margin:1rem;background:#f6f6f6}
+.card{background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);padding:1rem;margin-bottom:1rem}
+.btn{background:#007;color:#fff;border:none;padding:.5rem 1rem;border-radius:6px;cursor:pointer;margin-right:.5rem}
+.btn:hover{background:#008}
+.btn.danger{background:#c33}
+.btn.danger:hover{background:#d44}
+.form-group{margin-bottom:.8rem}
+label{display:block;margin-bottom:.3rem;font-weight:600}
+input,select{width:100%;padding:.4rem;border:1px solid #ccc;border-radius:4px}
+.status{padding:.5rem;border-radius:4px;margin-bottom:.8rem}
+.status.ok{background:#d4edda;color:#155724}
+.status.err{background:#f8d7da;color:#721c24}
+table{width:100%;border-collapse:collapse}
+th,td{padding:.5rem;text-align:left;border-bottom:1px solid #ddd}
+th{background:#f8f9fa}
+pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:200px}
+.tabs{display:flex;gap:.5rem;margin-bottom:1rem}
+.tab{padding:.5rem 1rem;background:#ddd;border:none;border-radius:4px;cursor:pointer}
+.tab.active{background:#007;color:#fff}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.disabled{opacity:.5;pointer-events:none}
+.nav-btn{
+    background:#06a;
+    color:#fff;
+    border:none;
+    padding:.6rem 1rem;
+    border-radius:8px;
+    cursor:pointer;
+    text-decoration:none;
+    display:inline-block
+}
+.nav-btn:hover{
+    background:#07b
+}
+.job-status{
+    padding:.2rem .5rem;
+    border-radius:12px;
+    font-size:.8rem;
+    font-weight:600
+}
+.status-ready{background:#e3f2fd;color:#1976d2}
+.status-running{background:#e8f5e8;color:#388e3c;animation:pulse 2s infinite}
+.status-completed{background:#f3e5f5;color:#7b1fa2}
+.status-error{background:#ffebee;color:#d32f2f}
+.btn-sm{padding:.2rem .4rem;font-size:.8rem;margin-left:.5rem}
+#active_discoveries{max-height:300px;overflow-y:auto}
+.discovery-section{margin-bottom:.5rem}
+@keyframes pulse{
+    0%{opacity:1}
+    50%{opacity:0.7}
+    100%{opacity:1}
+}
+ .fuzz-actions{
+     display:flex;
+     gap:.3rem;
+     flex-wrap:wrap
+ }
+.helpbox{background:#f0f7ff;border:1px solid #cfe4ff;color:#083a6b;padding:.6rem .7rem;border-radius:6px;margin:.6rem 0}
+.helpbox strong{display:block;margin-bottom:.2rem}
+.helpbox code{background:rgba(0,0,0,.06);padding:.05rem .3rem;border-radius:4px}
+.result-summary{background:#eef9f0;border:1px solid #cdebd3;color:#123f1a;padding:.6rem .7rem;border-radius:6px;margin:.6rem 0}
+.proto-btns{display:flex;gap:.4rem;flex-wrap:wrap;margin:.4rem 0 .6rem 0}
+ .proto-btns .btn{margin-right:0}
+ .proto-btns .btn.active{background:#014}
+ .discovery-panel{border:1px solid #e1e5ec;border-radius:8px;padding:.8rem;background:#fbfcfe}
+ .discovery-panel[hidden]{display:none}
+ </style>
+<div class="card">
+<h1>🔎 Protocol Discovery</h1>
+<a href="/" class="btn nav-btn">← Dashboard</a>
+<div class="helpbox" style="margin-top:.8rem">
+  <strong>Discovery scope</strong>
+  Identify and characterize OT hosts and protocol endpoints. Active assessment tools are available separately at <code>/scanner</code>.
+</div>
+</div>
+<!-- Discovery Tab -->
+<div class="tab-content active" id="discovery">
+<div class="card">
+<h2>🔎 Protocol Discovery</h2>
+<div class="helpbox" id="disc_guide">
+  <strong>Quick guide</strong>
+  Select a protocol, check the target format, then start the discovery. Note: PROFINET DCP is L2 and does not require an IP subnet.
+</div>
+<div class="proto-btns">
+  <button class="btn disc-proto-btn" id="disc_btn_general" onclick="showDiscoveryPanel('general', this)">General Discovery</button>
+  <button class="btn active disc-proto-btn" id="disc_btn_modbus" onclick="setDiscProto('modbus')">Modbus</button>
+  <button class="btn disc-proto-btn" id="disc_btn_s7" onclick="setDiscProto('s7')">S7</button>
+  <button class="btn disc-proto-btn" id="disc_btn_profinet" onclick="setDiscProto('profinet')">PROFINET DCP</button>
+  <button class="btn disc-proto-btn" id="disc_btn_ethernetip" onclick="setDiscProto('ethernetip')">EtherNet/IP</button>
+  <button class="btn disc-proto-btn" id="disc_btn_opcua" onclick="setDiscProto('opcua')">OPC UA Hello</button>
+</div>
+<div class="discovery-panel" id="protocol_discovery_panel">
+<div id="protocol_discovery_controls">
+<div class="form-group">
+<label id="disc_target_label">Target</label>
+<input id="disc_target" placeholder="192.168.1.100:502">
+<small id="disc_target_help">Target format depends on the selected protocol.</small>
+</div>
+<div class="form-group">
+<label>Timeout (ms)</label>
+<input id="disc_timeout" placeholder="2000" type="number">
+</div>
+<button class="btn" onclick="startDiscovery()">Start Discovery</button>
+</div>
+<!-- S7 Protocol Discovery is integrated into the normal S7 discovery flow (Start Discovery). -->
+<div id="general_discovery_controls" hidden>
+<h3>General Discovery</h3>
+<div class="form-group">
+<label>Mode</label>
+<select id="general_mode">
+<option value="ping">ICMP ping sweep</option>
+<option value="ports">Port scan</option>
+</select>
+</div>
+<div class="form-group">
+<label>Target subnet or IP</label>
+<input id="general_target" placeholder="192.168.1.0/24">
+</div>
+<div class="form-group">
+<label>Interface</label>
+<select id="general_iface">
+<option value="eth">Ethernet (ETH)</option>
+</select>
+<small>Assessment traffic is always bound to the OT Ethernet interface.</small>
+</div>
+<div class="form-group">
+<label>Port list (comma separated)</label>
+<input id="general_ports" placeholder="502,102,44818,4840">
+<small>ICMP ping sweep sends Echo Requests; Port scan uses TCP connections to the selected ports.</small>
+</div>
+<div class="form-group">
+<label>Per host timeout (ms)</label>
+<input id="general_timeout" type="number" placeholder="500">
+</div>
+<div class="form-group">
+<label>Connection timeout (ms)</label>
+<input id="general_connect_timeout" type="number" placeholder="400">
+</div>
+<div class="form-group">
+<label>Max hosts</label>
+<input id="general_max_hosts" type="number" placeholder="512">
+</div>
+<button class="btn" onclick="startGeneralDiscovery()">General discovery</button>
+</div>
+</div>
+<div class="card">
+<h3>🕒 Active Discoveries</h3>
+<div id="active_discoveries">No active discoveries</div>
+</div>
+
+<div class="card">
+<h3>📋 Discovery Results</h3>
+<button class="btn btn-sm" onclick="downloadDiscoveryResultsJson()">Download JSON</button>
+<pre id="disc_result">Results will appear here...</pre>
+</div>
+</div>
+</div>
+<div id="status"></div>
+<script>
+    // Extract session token from URL and add to all API calls
+(function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionToken = urlParams.get('sid');
+
+    // Expose original fetch and queue helpers
+    const originalFetch = window.fetch.bind(window);
+    window.__originalFetch = originalFetch;
+    if (!window.__apiFetchQueue) {
+        window.__apiFetchQueue = Promise.resolve();
+    }
+    // Keep API concurrency low to avoid exhausting sockets/RAM on the device.
+    // Only let user-triggered "start/cancel" bypass the queue.
+    const NO_QUEUE = [/^\/api\/discovery\/start$/, /^\/api\/discovery\/cancel$/];
+
+     window.fetch = function(url, options = {}) {
+         const isApiCall = typeof url === 'string' && url.startsWith('/api/');
+         if (!isApiCall) {
+             return originalFetch(url, options);
+         }
+         const path = (typeof url === 'string') ? url : (url && url.url) || '';
+         const noQueue = NO_QUEUE.some(re => re.test(path));
+ 
+         const opts = {...options};
+        // Use an explicit conditional here: some JS engines are picky with spread + logical OR.
+        opts.headers = { ...((options && options.headers) ? options.headers : {}) };
+         if (sessionToken) {
+             opts.headers['Authorization'] = 'Bearer ' + sessionToken;
+         }
+
+        if (noQueue) {
+            console.log('API call (direct):', path);
+            return originalFetch(url, opts);
+        }
+
+        console.log('API call (queued):', path);
+        const runner = () => originalFetch(url, opts);
+        const queued = window.__apiFetchQueue.then(runner, runner);
+        window.__apiFetchQueue = queued.catch(() => {});
+        return queued;
+    };
+
+    // Update navigation links to include session token
+    if (sessionToken) {
+        document.querySelectorAll('.nav-btn').forEach(link => {
+            const href = link.getAttribute('href');
+            if (href && !href.includes('sid=')) {
+                link.setAttribute('href', href + '?sid=' + encodeURIComponent(sessionToken));
+            }
+        });
+    } else {
+        console.warn('No session token found in URL - API calls may be unauthorized');
+    }
+})();;
+
+function status(msg,err){
+var s=document.getElementById('status');
+s.className='status '+(err?'err':'ok');
+s.textContent=msg;
+setTimeout(()=>s.innerHTML='',3000);
+}
+
+function escHtml(v){
+  return String(v==null?'':v)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+function parseJsonSafe(text){
+  try { return JSON.parse(text); } catch(_) { return null; }
+}
+
+function setSummaryBox(id, html){
+  var box = document.getElementById(id);
+  if(!box) return;
+  if(!html){
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  box.style.display = 'block';
+  box.innerHTML = html;
+}
+
+function buildScannerSummary(obj){
+  if(!obj || typeof obj !== 'object') return '';
+  var protocol = ((obj.scan||{}).protocol || obj.protocol || '').toString();
+  var target = ((obj.scan||{}).target || obj.target_network || '').toString();
+  var summary = obj.summary || {};
+  var risk = obj.risk_assessment || {};
+  var findings = Array.isArray(obj.findings) ? obj.findings.length : 0;
+  var testsExec = summary.tests_executed;
+  var testsSkip = summary.tests_skipped;
+  var hasCore = protocol || target || findings || Object.keys(summary).length || Object.keys(risk).length;
+  if(!hasCore) return '';
+  var rows = [];
+  if(protocol) rows.push('<div><strong>Protocol:</strong> '+escHtml(protocol)+'</div>');
+  if(target) rows.push('<div><strong>Target:</strong> '+escHtml(target)+'</div>');
+  rows.push('<div><strong>Findings:</strong> '+escHtml(findings)+'</div>');
+  rows.push('<div><strong>Severity:</strong> C='+escHtml(summary.critical||0)+' H='+escHtml(summary.high||0)+' M='+escHtml(summary.medium||0)+' L='+escHtml(summary.low||0)+' I='+escHtml(summary.info||0)+'</div>');
+  if(typeof testsExec === 'number' || typeof testsSkip === 'number'){
+    rows.push('<div><strong>Test:</strong> executed='+escHtml((typeof testsExec==='number')?testsExec:'n/a')+' skipped='+escHtml((typeof testsSkip==='number')?testsSkip:'n/a')+'</div>');
+  }
+  if(risk.overall_risk) rows.push('<div><strong>Risk overall:</strong> '+escHtml(risk.overall_risk)+'</div>');
+  if(risk.highest_cvss!=null) rows.push('<div><strong>CVSS max:</strong> '+escHtml(risk.highest_cvss)+'</div>');
+  if(risk.highest_risk_finding) rows.push('<div><strong>Finding top risk:</strong> '+escHtml(risk.highest_risk_finding)+'</div>');
+  return rows.join('');
+}
+
+function buildFuzzSummary(obj){
+  if(!obj || typeof obj !== 'object') return '';
+  var risk = obj.risk_assessment || {};
+  var stats = obj.statistics || {};
+  var profMeta = obj.attack_profile_metadata || {};
+  var attackMeta = stats.attack_types_metadata || {};
+  var first = obj.first_success || {};
+  var hasCore = Object.keys(risk).length || Object.keys(profMeta).length || Object.keys(attackMeta).length || Object.keys(stats).length;
+  if(!hasCore) return '';
+  var rows = [];
+  var tests = (stats.tests_total!=null) ? stats.tests_total : (stats.total_cases!=null ? stats.total_cases : null);
+  if(tests!=null) rows.push('<div><strong>Tests executed:</strong> '+escHtml(tests)+'</div>');
+  if(risk.overall_risk) rows.push('<div><strong>Risk overall:</strong> '+escHtml(risk.overall_risk)+'</div>');
+  if(risk.highest_risk_attack_type) rows.push('<div><strong>Highest risk attack:</strong> '+escHtml(risk.highest_risk_attack_type)+'</div>');
+  if(profMeta.category || profMeta.risk_domain){
+    rows.push('<div><strong>Profile:</strong> '+escHtml((profMeta.category||'n/a')+' / '+(profMeta.risk_domain||'n/a'))+'</div>');
+  }
+  if(first && (first.case_id!=null || first.attack_type || first.attack_metadata)){
+    var ftype = first.attack_type || ((first.attack_metadata||{}).attack_type) || 'n/a';
+    rows.push('<div><strong>First success:</strong> case=' + escHtml((first.case_id!=null)?first.case_id:'n/a') + ' type=' + escHtml(ftype) + '</div>');
+  }
+  var keys = Object.keys(attackMeta || {});
+  if(keys.length){
+    var top = keys.slice(0, 4).map(function(k){
+      var m = attackMeta[k] || {};
+      var sev = m.expected_severity || 'n/a';
+      var dom = m.risk_domain || 'n/a';
+      return escHtml(k+' ('+sev+', '+dom+')');
+    }).join('; ');
+    rows.push('<div><strong>Attack metadata:</strong> '+top+'</div>');
+  }
+  return rows.join('');
+}
+
+function getSectionJsonValue(preId){
+  var pre = document.getElementById(preId);
+  var txt = pre ? String(pre.textContent || '').trim() : '';
+  if(!txt) return null;
+  var parsed = parseJsonSafe(txt);
+  return (parsed !== null) ? parsed : { raw_text: txt };
+}
+
+function downloadJsonClient(filename, data){
+  var jsonText;
+  try{
+    jsonText = JSON.stringify(data, null, 2);
+  }catch(_){
+    jsonText = JSON.stringify({ raw_text: String(data || '') }, null, 2);
+  }
+  var blob = new Blob([jsonText], { type: 'application/json;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 0);
+}
+
+function buildJsonFilename(prefix){
+  var d = new Date();
+  var ts = d.getFullYear().toString()
+    + String(d.getMonth()+1).padStart(2,'0')
+    + String(d.getDate()).padStart(2,'0')
+    + '_'
+    + String(d.getHours()).padStart(2,'0')
+    + String(d.getMinutes()).padStart(2,'0')
+    + String(d.getSeconds()).padStart(2,'0');
+  return prefix + '_' + ts + '.json';
+}
+
+function downloadDiscoveryResultsJson(){
+  var report = getSectionJsonValue('disc_result');
+  if(!report){
+    status('No discovery result to download', true);
+    return;
+  }
+  downloadJsonClient(buildJsonFilename('discovery_results'), report);
+  status('Discovery download started');
+}
+
+function downloadScanResultJson(){
+  var report = getSectionJsonValue('scan_result_box');
+  if(!report){
+    status('No scanner result to download', true);
+    return;
+  }
+  var summary = '';
+  var s = document.getElementById('scan_summary');
+  if(s && s.style.display !== 'none') summary = String(s.textContent || '').trim();
+  var payload = summary ? { summary_text: summary, result: report } : report;
+  downloadJsonClient(buildJsonFilename('vulnerability_scan_result'), payload);
+  status('Scanner download started');
+}
+
+function downloadFuzzResultJson(){
+  var report = getSectionJsonValue('fuzz_result');
+  if(!report){
+    status('No fuzzing result to download', true);
+    return;
+  }
+  var summary = '';
+  var s = document.getElementById('fuzz_summary');
+  if(s && s.style.display !== 'none') summary = String(s.textContent || '').trim();
+  var payload = summary ? { summary_text: summary, result: report } : report;
+  downloadJsonClient(buildJsonFilename('fuzz_operation_results'), payload);
+  status('Fuzzing download started');
+}
+
+// Global variables for discovery polling
+let activeDiscoveries = new Map();
+let discoveryPollInterval = null;
+let discoveryPollBusy = false;
+let generalDiscoveryDefaults = { ports: [] };
+
+// Protocol discovery UX helpers
+let discProto = 'modbus';
+const DISC_HINTS = {
+  modbus: {
+    label: 'Target (IP:PORT or subnet)',
+    placeholder: '192.168.1.100:502 or 192.168.1.0/24',
+    help: 'Modbus/TCP is typically on port 502. You can pass a host (IP:PORT) or a subnet (CIDR) if supported by the firmware.',
+    def: '192.168.1.100:502'
+  },
+  s7: {
+    label: 'Target (IP:PORT or subnet)',
+    placeholder: '192.168.1.100:102 or 192.168.1.0/24',
+    help: 'S7comm is typically on port 102. On many builds it requires Ethernet ready (ETH).',
+    def: '192.168.1.100:102'
+  },
+  profinet: {
+    label: 'Target (L2 / interface)',
+    placeholder: 'eth (recommended) or l2',
+    help: 'PROFINET DCP is layer-2 discovery (broadcast). Do not enter an IP subnet: use "eth" (or leave empty).',
+    def: 'eth'
+  },
+  ethernetip: {
+    label: 'Target (IP:PORT or subnet)',
+    placeholder: '192.168.1.100:44818 or 192.168.1.0/24',
+    help: 'EtherNet/IP is typically on port 44818. You can use a host (IP:PORT) or subnet (CIDR) if supported.',
+    def: '192.168.1.100:44818'
+  },
+  opcua: {
+    label: 'Target (IP:PORT or subnet)',
+    placeholder: '192.168.1.100:4840 or 192.168.1.0/24',
+    help: 'OPC UA Hello typically uses port 4840. You can use a host (IP:PORT) or subnet (CIDR) if supported.',
+    def: '192.168.1.100:4840'
+  }
+};
+
+function isLikelyIpOrCidrTarget(s){
+  if(!s) return false;
+  // Matches: A.B.C.D, A.B.C.D:PORT, A.B.C.D/M, A.B.C.D/M:PORT
+  return /^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?(?::\d{1,5})?$/.test(s);
+}
+
+function showDiscoveryPanel(mode, activeButton){
+  const protocolPanel = document.getElementById('protocol_discovery_controls');
+  const generalPanel = document.getElementById('general_discovery_controls');
+  if(!protocolPanel || !generalPanel) return;
+
+  const isGeneral = mode === 'general';
+  protocolPanel.hidden = isGeneral;
+  generalPanel.hidden = !isGeneral;
+
+  document.querySelectorAll('.disc-proto-btn').forEach(btn => btn.classList.remove('active'));
+  const selected = activeButton || document.getElementById('disc_btn_' + mode);
+  if(selected) selected.classList.add('active');
+}
+
+function setDiscProto(p){
+  if(!p) return;
+  discProto = p;
+  const btn = document.getElementById('disc_btn_' + p);
+  showDiscoveryPanel(p, btn);
+  updateDiscHints();
+}
+
+function updateDiscHints(){
+  const h = DISC_HINTS[discProto] || DISC_HINTS.modbus;
+  const lbl = document.getElementById('disc_target_label');
+  const tgt = document.getElementById('disc_target');
+  const help = document.getElementById('disc_target_help');
+  if(lbl) lbl.textContent = h.label || 'Target';
+  if(tgt) {
+    tgt.placeholder = h.placeholder || '';
+    // For PROFINET, prefill a safe default to discourage IP subnet usage.
+    if(discProto === 'profinet' && (!tgt.value || !tgt.value.trim())) {
+      tgt.value = h.def || 'eth';
+    }
+  }
+  if(help) help.textContent = h.help || '';
+}
+
+function startDiscovery(){
+  return discovery(discProto);
+}
+
+// (removed) runS7ProtocolDiscovery(): S7 protocol discovery is returned as part of /api/discovery/start -> /api/discovery/list results.
+
+async function discovery(type){
+  status('Starting discovery ' + type + '...', false);
+ try{
+ var rawTarget=(document.getElementById('disc_target').value||'').trim();
+ var hint = DISC_HINTS[type] || DISC_HINTS.modbus;
+ var target = rawTarget || (hint.def || '192.168.1.100:502');
+ if(type === 'profinet'){
+   // PROFINET DCP is L2: ignore IP/CIDR targets to avoid user confusion.
+   if(isLikelyIpOrCidrTarget(target)){
+     status("PROFINET DCP is L2: IP target ignored, using 'eth'", false);
+     target = 'eth';
+   }
+ }
+ var timeout=document.getElementById('disc_timeout').value||'2000';
+
+// Start async discovery
+var response = await fetch('/api/discovery/start', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({
+    protocol: type,
+    target: target,
+    timeout: parseInt(timeout)
+  })
+});
+
+var result = await response.json();
+if (result.success) {
+  status('Discovery '+type+' started - ID: '+result.discovery_id);
+  activeDiscoveries.set(result.discovery_id, {
+    protocol: type,
+    target: target,
+    startTime: Date.now()
+  });
+
+  // Start polling if not already running
+  if (!discoveryPollInterval) {
+    startDiscoveryPolling();
+  }
+} else {
+  status('Failed to start discovery: '+result.message, true);
+}
+}catch(e){status('Error: '+e.message,true);}
+}
+
+function updateGeneralMode(){
+  var mode=document.getElementById('general_mode');
+  var portsField=document.getElementById('general_ports');
+  if(!mode||!portsField) return;
+  var value=mode.value;
+  if(value==='ports'){
+    portsField.disabled=false;
+    if(generalDiscoveryDefaults && Array.isArray(generalDiscoveryDefaults.ports) && generalDiscoveryDefaults.ports.length && (!portsField.value || !portsField.value.trim())){
+      portsField.placeholder=generalDiscoveryDefaults.ports.join(', ');
+    }
+  }else{
+    portsField.disabled=true;
+  }
+}
+
+function parsePortList(text){
+  var result=[];
+  if(!text) return result;
+  var acc='';
+  for(var i=0;i<text.length;i++){
+    var ch=text[i];
+    if(ch>='0'&&ch<='9'){
+      acc+=ch;
+      if(acc.length>5) acc='65535';
+    }else{
+      if(acc.length){
+        var val=parseInt(acc,10);
+        if(!isNaN(val)&&val>0&&val<=65535&&result.indexOf(val)===-1){
+          result.push(val);
+        }
+        acc='';
+      }
+    }
+  }
+  if(acc.length){
+    var val=parseInt(acc,10);
+    if(!isNaN(val)&&val>0&&val<=65535&&result.indexOf(val)===-1){
+      result.push(val);
+    }
+  }
+  return result;
+}
+
+async function loadGeneralDiscoveryDefaults(override){
+  try{
+    var data = override || null;
+    if (!data) {
+      var resp=await fetch('/api/discovery/general/defaults', { cache: 'no-store' });
+      if(!resp.ok) return;
+      data=await resp.json();
+    }
+    generalDiscoveryDefaults=data;
+    var timeoutField=document.getElementById('general_timeout');
+    var connectField=document.getElementById('general_connect_timeout');
+    var maxHostsField=document.getElementById('general_max_hosts');
+    if(timeoutField&&data.default_per_host_timeout_ms) timeoutField.value=data.default_per_host_timeout_ms;
+    if(connectField&&data.default_connect_timeout_ms) connectField.value=data.default_connect_timeout_ms;
+    if(maxHostsField&&data.default_max_hosts) maxHostsField.value=data.default_max_hosts;
+    updateGeneralMode();
+  }catch(e){
+    console.warn('General discovery defaults load failed',e);
+  }
+}
+
+async function startGeneralDiscovery(){
+  status('Starting general discovery...', false);
+  try{
+    var mode=document.getElementById('general_mode').value;
+    var target=(document.getElementById('general_target').value||'').trim();
+    var iface=(document.getElementById('general_iface')?document.getElementById('general_iface').value:'');
+    var timeout=parseInt(document.getElementById('general_timeout').value,10);
+    var connectTimeout=parseInt(document.getElementById('general_connect_timeout').value,10);
+    var maxHosts=parseInt(document.getElementById('general_max_hosts').value,10);
+    var portsText=document.getElementById('general_ports').value;
+    if(!target){
+      status('Specify a target for general discovery',true);
+      return;
+    }
+    var payload={ mode:mode, target:target };
+    if(iface && iface.length) payload.interface=iface;
+    if(!isNaN(timeout)) payload.per_host_timeout_ms=timeout;
+    if(!isNaN(connectTimeout)) payload.connect_timeout_ms=connectTimeout;
+    if(!isNaN(maxHosts)) payload.max_hosts=maxHosts;
+    if(mode==='ports'){
+      var portsSource=(portsText&&portsText.trim().length)?portsText:'';
+      var ports=[];
+      if(!portsSource && generalDiscoveryDefaults && Array.isArray(generalDiscoveryDefaults.ports)){
+        ports=generalDiscoveryDefaults.ports.slice();
+      }else{
+        ports=parsePortList(portsSource);
+      }
+      if(!ports||!ports.length){
+        status('Enter at least one valid port',true);
+        return;
+      }
+      payload.ports=ports;
+    }
+    var resp=await fetch('/api/discovery/general/start',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    var result=await resp.json();
+    if(result.success){
+      status('General discovery started - ID: '+result.discovery_id);
+      activeDiscoveries.set(result.discovery_id,{
+        protocol:'General Discovery',
+        target:target,
+        mode:mode,
+        startTime:Date.now()
+      });
+      if(!discoveryPollInterval){
+        startDiscoveryPolling();
+      }
+    }else{
+      status('General discovery failed: '+(result.message||'error'),true);
+    }
+  }catch(e){
+    status('General discovery error: '+e.message,true);
+  }
+}
+
+function startDiscoveryPolling() {
+  discoveryPollInterval = setInterval(pollDiscoveryStatus, 5000);
+}
+
+function stopDiscoveryPolling() {
+  if (discoveryPollInterval) {
+    clearInterval(discoveryPollInterval);
+    discoveryPollInterval = null;
+  }
+}
+
+async function pollDiscoveryStatus() {
+  if (discoveryPollBusy) return;
+  discoveryPollBusy = true;
+  try {
+    // Get all discoveries
+    var response = await fetch('/api/discovery/list', { cache: 'no-store' });
+    var data = await response.json();
+
+    updateActiveDiscoveriesDisplay(data.discoveries);
+
+    // Check for completed discoveries
+    for (let discovery of data.discoveries) {
+      if (discovery.status === 'completed' && activeDiscoveries.has(discovery.id)) {
+        // Show results
+        if (discovery.results) {
+          var resultsText = typeof discovery.results === 'object'
+            ? JSON.stringify(discovery.results, null, 2)
+            : discovery.results;
+          document.getElementById('disc_result').textContent = resultsText;
+          status('Discovery '+discovery.protocol+' completed successfully');
+        }
+        activeDiscoveries.delete(discovery.id);
+      } else if ((discovery.status === 'failed' || discovery.status === 'cancelled') && activeDiscoveries.has(discovery.id)) {
+        status('Discovery '+discovery.protocol+' '+discovery.status+': '+(discovery.error || 'Unknown error'), true);
+        activeDiscoveries.delete(discovery.id);
+      }
+    }
+
+    // Stop polling if no active discoveries
+    if (activeDiscoveries.size === 0) {
+      stopDiscoveryPolling();
+    }
+  } catch (e) {
+    console.error('Polling error:', e);
+  } finally {
+    discoveryPollBusy = false;
+  }
+}
+
+function updateActiveDiscoveriesDisplay(discoveries) {
+  const container = document.getElementById('active_discoveries');
+
+  const active = discoveries.filter(d => d.status === 'running');
+  const recent = discoveries.filter(d => d.status !== 'running');
+
+  if (active.length === 0 && recent.length === 0) {
+    container.innerHTML = 'No discoveries';
+    return;
+  }
+
+  let html = '';
+
+  if (active.length > 0) {
+    html += '<h4>🚀 Running:</h4>';
+    for (let disc of active) {
+      const duration = Math.round((Date.now() - disc.start_time_ms) / 1000);
+      const live = disc.live || {};
+      let kpi = '';
+      if (live && (live.hosts_enumerated || live.hosts_scanned)) {
+        kpi = ` | scanned ${live.hosts_scanned||0}/${live.hosts_enumerated||0}, conn ${live.hosts_connected||0}, mei ${live.responses_mei||0}, probe ${live.responses_probe||0}`;
+        if (live.ip_in_scansione) kpi += ` | ip: ${live.ip_in_scansione}`;
+      }
+      const modeLabel = disc.mode ? ` (${disc.mode})` : '';
+      html += `<div class="job-status status-running">
+        ${disc.protocol}${modeLabel} on ${disc.target} - ${duration}s - ${disc.progress_percent.toFixed(1)}%${kpi}
+        <div style="background:#eee;border-radius:6px;height:8px;margin:.3rem 0;">
+          <div style="background:#06a;height:8px;border-radius:6px;width:${disc.progress_percent.toFixed(1)}%"></div>
+        </div>
+        <button class="btn btn-sm" onclick="cancelDiscovery('${disc.id}')">Cancel</button>
+      </div>`;
+    }
+  }
+
+  if (recent.length > 0) {
+    html += '<h4>📋 Recent (last 10 min):</h4>';
+    for (let disc of recent.slice(0, 5)) { // Show only last 5
+      const statusClass = disc.status === 'completed' ? 'status-completed' : 'status-error';
+      const duration = Math.round((disc.end_time_ms - disc.start_time_ms) / 1000);
+      const modeInfo = disc.mode ? ` (${disc.mode})` : '';
+      html += `<div class="job-status ${statusClass}">
+        ${disc.protocol}${modeInfo} on ${disc.target} - ${disc.status} in ${duration}s
+      </div>`;
+    }
+  }
+
+  container.innerHTML = html;
+}
+
+async function cancelDiscovery(discoveryId) {
+  try {
+    var response = await fetch('/api/discovery/cancel', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({discovery_id: discoveryId})
+    });
+
+    var result = await response.json();
+    if (result.success) {
+      status('Discovery cancelled');
+      activeDiscoveries.delete(discoveryId);
+    } else {
+      status('Failed to cancel: '+result.message, true);
+    }
+  } catch (e) {
+    status('Cancel error: '+e.message, true);
+  }
+}
+
+// Load existing discoveries on page load
+async function loadExistingDiscoveries(override) {
+  try {
+    var data = override || null;
+    if (!data) {
+      var response = await fetch('/api/discovery/list', { cache: 'no-store' });
+      data = await response.json();
+    }
+
+    // Check for any running discoveries and start polling
+    const runningDiscoveries = data.discoveries.filter(d => d.status === 'running');
+    if (runningDiscoveries.length > 0) {
+      for (let disc of runningDiscoveries) {
+        activeDiscoveries.set(disc.id, {
+          protocol: disc.protocol,
+          target: disc.target,
+          mode: disc.mode || '',
+          startTime: disc.start_time_ms
+        });
+      }
+      if (!discoveryPollInterval) {
+        startDiscoveryPolling();
+      }
+    }
+
+    updateActiveDiscoveriesDisplay(data.discoveries);
+  } catch (e) {
+    console.error('Failed to load existing discoveries:', e);
+  }
+}
+
+
+document.addEventListener('DOMContentLoaded', function(){
+  try { setDiscProto('modbus'); } catch(_) {}
+  const mode = document.getElementById('general_mode');
+  if (mode) mode.addEventListener('change', updateGeneralMode);
+  loadGeneralDiscoveryDefaults();
+  loadExistingDiscoveries();
+});
+
+</script>
+</html>

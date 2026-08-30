@@ -2,16 +2,16 @@
 
 ![Protocol Discovery page](assets/protocol-discovery.png)
 
-Protocol Discovery is the first tab of the shared Scanner & Fuzzing page. It finds candidate OT
-services and devices. The shortcuts `/scanner`, `/vulnerability-scanner` and `/fuzzing` open the
-same page with a different tab selected.
+Protocol Discovery is an independent, non-offensive workspace for finding and characterizing OT
+services and devices. Open it from the dashboard or directly at `/discovery`. Vulnerability
+scanning, fuzzing and scheduled scans are managed separately on `/scanner` (with the legacy
+aliases `/vulnerability-scanner`, `/fuzzing` and `/scheduled-scans`).
 
 ## Module controls
 
-**Enable Scanner & Fuzzing Module** gates vulnerability scanning and fuzzing. **Enable Scheduled
-Scans (Cron)** gates the scheduler and is available only while the parent module is enabled.
-**Save** applies these feature flags. Discovery remains presented separately, but its actual
-availability still depends on the compiled protocol support and network interface.
+Discovery has no Offensive Testing toggle and does not change the Scanner/Fuzzing feature flags.
+Its availability depends on the compiled protocol support and the selected network interface.
+The assessment controls are intentionally kept on the separate Scanner & Fuzzing page.
 
 ## Protocol-specific discovery
 
@@ -34,7 +34,7 @@ completed findings and **Download JSON** exports the current result set.
 - **Ping sweep** looks for responsive hosts.
 - **Port scan** checks the comma-separated port list.
 - **Target subnet or IP** accepts an individual address or CIDR range.
-- **Interface** chooses Ethernet, automatic fallback, Wi-Fi STA or Wi-Fi AP.
+- **Interface** selects the OT Ethernet interface used by the discovery engine.
 - Per-host and connection timeouts prevent a slow host from holding the scan indefinitely.
 - **Max hosts** bounds the amount of work; keep it small on large or sensitive networks.
 
