@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install host test dependencies
+        run: python -m pip install pyserial==3.5
       - name: Generate web UI headers
         run: python scripts/convert_html_in_code.py
       - run: python -m unittest discover -s tests -p "test_*.py" -v

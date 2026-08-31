@@ -465,6 +465,7 @@ class BuildIntegrationTests(unittest.TestCase):
 
         self.assertIn("submodules: recursive", workflow)
         self.assertIn("python scripts/convert_html_in_code.py", workflow)
+        self.assertIn("python -m pip install pyserial==3.5", workflow)
         self.assertIn('python -m unittest discover -s tests -p "test_*.py" -v', workflow)
 
     def test_target_specific_idf_lockfile_is_local_build_state(self):
