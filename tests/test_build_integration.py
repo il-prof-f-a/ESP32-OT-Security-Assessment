@@ -8,6 +8,23 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class BuildIntegrationTests(unittest.TestCase):
+    def test_main_uses_tested_watchdog_lifecycle_and_boot_snapshot(self):
+        source = (PROJECT_ROOT / "src/main.cpp").read_text(encoding="utf-8")
+        self.assertIn('#include "core/main_task_watchdog.h"', source)
+        self.assertIn("main_watchdog.configure(esp_wdt_config)", source)
+        self.assertIn("main_watchdog.start(wdt_cfg.enabled,", source)
+        self.assertIn("main_watchdog.feedIfDue(now,", source)
+        self.assertEqual(source.count("cfg.getWatchdogConfig()"), 1)
+        self.assertNotIn("esp_task_wdt_add(", source)
+        self.assertNotIn("esp_task_wdt_reset(", source)
+
+    def test_watchdog_save_message_requires_restart(self):
+        source = (PROJECT_ROOT / "src/web/web_server.cpp").read_text(encoding="utf-8")
+        handler = source.split("esp_err_t WebServer::h_watchdog_config_post(", 1)[1].split(
+            "// IP Whitelist configuration endpoints", 1)[0]
+        self.assertIn("restart_required", handler)
+        self.assertIn("restart the device to apply", handler)
+
     def test_platformio_has_no_malformed_standalone_flag(self):
         source = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
         self.assertNotIn("- =1", source)

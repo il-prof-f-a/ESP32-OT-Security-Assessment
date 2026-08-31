@@ -11151,7 +11151,7 @@ esp_err_t WebServer::h_watchdog_config_post(httpd_req_t* req) {
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Connection", "close");
     if (success) {
-        return httpd_resp_send(req, "{\"success\":true,\"message\":\"Watchdog configuration updated successfully\"}", HTTPD_RESP_USE_STRLEN);
+        return httpd_resp_send(req, "{\"success\":true,\"restart_required\":true,\"message\":\"Watchdog configuration saved; restart the device to apply\"}", HTTPD_RESP_USE_STRLEN);
     } else {
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save configuration");
     }

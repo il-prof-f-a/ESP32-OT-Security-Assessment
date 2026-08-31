@@ -36,6 +36,36 @@ the **Wi-Fi** card, while the corresponding `network.ethernet.*` fields appear i
 **Ethernet** card. Fields without a second path component are shown under **General**. The small
 technical path displayed in each card makes the mapping to the JSON configuration explicit.
 
+### Watchdog settings
+
+Main-task monitoring reads the `watchdog` section at boot. Saving it does **not** change
+that task's active subscription: restart the device to apply the saved settings to it.
+
+- `enabled`: enables Task Watchdog monitoring of the main application task. When false,
+  that task is not subscribed and does not send watchdog heartbeats. Other subscribed
+  tasks, the SDK interrupt watchdog, HTTP monitoring and PSRAM monitoring remain independent.
+- `timeout_seconds`: defaults to 120 seconds. The main task normally sends a heartbeat
+  every 10 seconds; startup enforces a minimum of 60 seconds. Extremely large values are
+  capped at 1,073,741 seconds to prevent overflow in the SDK timer conversion. Any adjustment
+  is logged at boot and does not rewrite the saved value.
+- `panic_on_timeout`: requests a panic on Task Watchdog timeout when enabled.
+- `monitor_idle_cores`: includes the idle tasks of both CPU cores when configuring the
+  Task Watchdog. These settings belong to the shared SDK Task Watchdog, not just its main
+  task subscriber. Disabling main task monitoring does not globally deinitialize it.
+
+Existing discovery helpers may temporarily adjust the shared Task Watchdog timeout during
+long operations. Their behavior is separate from the main-task subscription fixed here.
+
+Registration and heartbeat failures are logged explicitly. If removing an unexpected existing
+main-task subscription fails, the firmware reports the failure and keeps feeding that subscription
+rather than silently abandoning it. This is an error fallback, not successful disconnection.
+
+To check the fix on hardware, save `watchdog.enabled=false`, restart, and observe the serial
+monitor longer than the effective timeout (at least 180 seconds with the default 120-second
+timeout). Expect `Main task watchdog disabled - task not registered` and no main-task watchdog
+reset. Repeat with `enabled=true`; expect `Main task registered with watchdog` and stable operation.
+Do not deliberately stall the firmware on a live OT network to test a timeout.
+
 The page is not a replacement for first-boot provisioning. Keep exported drafts private because
 non-secret network and security settings can still reveal topology and policy.
 

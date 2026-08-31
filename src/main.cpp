@@ -24,6 +24,7 @@ extern "C" {
 
 #include "core/async_storage_engine.h"
 #include "core/configuration_manager.h"
+#include "core/main_task_watchdog.h"
 #include "core/filesystem_task_delegate.h"
 #include "core/time_manager.h"
 #include "security/security_manager.h"
@@ -447,13 +448,16 @@ extern "C" void app_main(void) {
     }
 
     // WATCHDOG CONFIGURATION - Now that config is loaded, configure watchdog
+    MainTaskWatchdog main_watchdog;
     WatchdogConfig wdt_cfg = cfg.getWatchdogConfig();
-    // Enforce a minimum timeout: the main loop feeds the watchdog every 10 s, so a
-    // timeout below 60 s leaves almost no margin and caused spurious TWDT triggers.
-    if (wdt_cfg.timeout_seconds < 60) {
-        wdt_cfg.timeout_seconds = 60;
-    }
+    // Keep the boot snapshot: saving config must not stop feeding a subscribed task.
+    const uint32_t configured_timeout = wdt_cfg.timeout_seconds;
+    wdt_cfg.timeout_seconds = MainTaskWatchdog::normalizeTimeoutSeconds(configured_timeout);
     if (wdt_cfg.enabled) {
+        if (configured_timeout != wdt_cfg.timeout_seconds) {
+            LOG_WARNINGF(TAG, "Task Watchdog timeout adjusted from %lus to %lus",
+                         (unsigned long)configured_timeout, (unsigned long)wdt_cfg.timeout_seconds);
+        }
         LOG_INFOF(TAG, "Configuring Task Watchdog from config: timeout=%lus, panic=%s, idle_cores=%s",
                  (unsigned long)wdt_cfg.timeout_seconds,
                  wdt_cfg.panic_on_timeout ? "true" : "false",
@@ -465,16 +469,14 @@ extern "C" void app_main(void) {
             .trigger_panic = wdt_cfg.panic_on_timeout
         };
 
-        // Use reconfigure instead of init
-        esp_err_t wdt_result = esp_task_wdt_reconfigure(&esp_wdt_config);
-        //esp_err_t wdt_result = esp_task_wdt_init(&esp_wdt_config);
+        esp_err_t wdt_result = main_watchdog.configure(esp_wdt_config);
         if (wdt_result == ESP_OK) {
             LOG_INFO(TAG, " Task Watchdog configured from config.json");
         } else {
-            LOG_WARNINGF(TAG, " Task Watchdog init failed: %s", esp_err_to_name(wdt_result));
+            LOG_WARNINGF(TAG, "Task Watchdog configuration failed: %s", esp_err_to_name(wdt_result));
         }
     } else {
-        LOG_INFO(TAG, "Watchdog disabled in configuration");
+        LOG_INFO(TAG, "Main task watchdog disabled in configuration; other SDK watchdogs unchanged");
     }
 
     // Security - dependency injection with automatic configuration loading
@@ -981,17 +983,16 @@ extern "C" void app_main(void) {
         PSRAMUtils::createPSRAMString("system_lifecycle"),
         PSRAMUtils::createPSRAMString("{\"status\":\"fully_operational\",\"services\":[\"network_engine\",\"plugin_manager\",\"ids\",\"vulnerability_scanner\",\"web_server\",\"reporting_engine\"]}"));
 
-    // WATCHDOG REGISTRATION - Register main task if watchdog is enabled
-    // WatchdogConfig already retrieved earlier
-    if (true || wdt_cfg.enabled) {
-        esp_err_t wdt_add_result = esp_task_wdt_add(NULL);
-        if (wdt_add_result == ESP_OK) {
-            LOG_INFO(TAG, " Main task registered with watchdog");
-        } else {
-            LOG_WARNINGF(TAG, "Main task watchdog registration failed: %s", esp_err_to_name(wdt_add_result));
-        }
+    // WATCHDOG REGISTRATION - Subscribe only when enabled; track the SDK result.
+    const esp_err_t wdt_start_result = main_watchdog.start(wdt_cfg.enabled,
+        static_cast<uint32_t>(esp_timer_get_time() / 1000000));
+    if (wdt_start_result != ESP_OK) {
+        LOG_WARNINGF(TAG, "Main task watchdog setup failed: %s (subscribed=%s)",
+                     esp_err_to_name(wdt_start_result), main_watchdog.subscribed() ? "true" : "false");
+    } else if (main_watchdog.subscribed()) {
+        LOG_INFO(TAG, "Main task registered with watchdog");
     } else {
-        LOG_INFO(TAG, "Watchdog disabled - skipping main task registration");
+        LOG_INFO(TAG, "Main task watchdog disabled - task not registered");
     }
     LOG_INFO(TAG, "System initialization complete");
 
@@ -1002,7 +1003,7 @@ extern "C" void app_main(void) {
     AuditManager::getInstance().logSystemStartup(esp_app_get_description()->version, __DATE__ " " __TIME__);
 
     // Keep main() running - ESP32 embedded systems typically don't exit main()
-    uint32_t last_watchdog_reset = 0;
+    esp_err_t last_watchdog_feed_error = ESP_OK;
     uint32_t last_memory_check = 0;
     while (true) {
         TimeManager::processPendingSync();
@@ -1023,10 +1024,17 @@ extern "C" void app_main(void) {
         }
 
 
-        // WATCHDOG HEARTBEAT - Reset watchdog every 10 seconds if enabled
-        if (wdt_cfg.enabled && now - last_watchdog_reset >= 10) {
-            esp_task_wdt_reset(); // Reset watchdog timer
-            last_watchdog_reset = now;
+        // Feed the actual subscription, not a possibly changed saved configuration.
+        esp_err_t wdt_feed_result = ESP_OK;
+        if (main_watchdog.feedIfDue(now, wdt_feed_result) &&
+            wdt_feed_result != last_watchdog_feed_error) {
+            if (wdt_feed_result != ESP_OK) {
+                LOG_WARNINGF(TAG, "Main task watchdog heartbeat failed: %s (subscribed=%s)",
+                             esp_err_to_name(wdt_feed_result), main_watchdog.subscribed() ? "true" : "false");
+            } else {
+                LOG_INFO(TAG, "Main task watchdog heartbeat recovered");
+            }
+            last_watchdog_feed_error = wdt_feed_result;
         }
 
         vTaskDelay(pdMS_TO_TICKS(1000));
