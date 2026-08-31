@@ -4,11 +4,83 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.1.4] - 2026-08-31
+
+### Added
+
+- Annotate offensive vulnerability scan policy
+
+- Add structured action logs and configuration editor
+
+- Reorganize reporting filters and channel tabs
+
+### CI
+
+- Generate all web UI headers
+
+- Install pyserial for host tests
+
+### Documentation
+
+- Reorganize README around capabilities and hardware
+
+- Normalize user guide formatting
+
+- Refresh scanner guide and complete security hardening
+
+- Document packet and frame analysis flow
+
+- Checkpoint passive detection implementation plan
+
+### Fixed
+
+- Render plugin status objects in dashboard
+
+- Route NVS calls through storage worker
+
+- Preserve LittleFS on P4 updates
+
+- Use base MAC for device identity
+
+- Serialize file rotation with appends
+
+- Emit structured vulnerability scan reports
+
+- Align SZL parsing and PLC stop proof
+
+- Restore P4 discovery with temporary receive workaround
+
+- Correct certificate parsing and assessment evidence
+
+- Load and refresh analytics data
+
+- Centralize serial reporting configuration
+
+- Harden upload port selection and align configuration UI
+
+### Miscellaneous
+
+- Checkpoint before file rotation fix
+
+### Other
+
+- Place general discovery first
+
+- Separate discovery from scanner and fuzzing UI
+
+- Document and enforce offensive testing interlock
+
+- Add reporting channel endpoint configuration UI
+
 ## [0.1.3] - 2026-08-27
 
 ### Fixed
 
 - Use esptool 4 merge options
+
+### Miscellaneous
+
+- Release v0.1.3
 
 ## [0.1.2] - 2026-08-27
 
