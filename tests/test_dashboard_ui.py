@@ -74,6 +74,17 @@ class DashboardUiTests(unittest.TestCase):
         self.assertIn("id=\"analytics_refresh\"", audit)
         self.assertIn("loadAnalytics()", audit)
 
+    def test_serial_page_delegates_configuration_to_reporting_serial_tab(self):
+        serial = (PROJECT_ROOT / "src/web/ui/serial_monitor.html").read_text(encoding="utf-8")
+        self.assertNotIn("Serial Reporting Configuration", serial)
+        self.assertIn('href="/reporting?channel=serial"', serial)
+        self.assertIn("Serial Output", serial)
+
+    def test_reporting_page_can_open_requested_channel_tab(self):
+        reporting = (PROJECT_ROOT / "src/web/ui/reporting.html").read_text(encoding="utf-8")
+        self.assertIn("params.get('channel')", reporting)
+        self.assertIn("selectReportChannel(requestedChannel)", reporting)
+
     def test_dashboard_hides_redundant_cards_and_links_configuration(self):
         dashboard = (PROJECT_ROOT / "src/web/ui/dashboard.html").read_text(encoding="utf-8")
         self.assertIn('href="/configuration"', dashboard)

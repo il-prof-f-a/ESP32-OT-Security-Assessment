@@ -982,8 +982,20 @@ try{
  
  renderChannelsUI(channels, endpoints);
  updateReportStreamChannelOptions(channels);
+ const requestedChannel = getRequestedReportChannel();
+ if (requestedChannel && document.getElementById(`report-tab-${requestedChannel}`)) {
+   selectReportChannel(requestedChannel);
+ }
  status('Channels loaded');
 }catch(e){status('Error: '+e.message,true);}
+}
+
+function getRequestedReportChannel(){
+    const params = new URLSearchParams(window.location.search);
+    const queryChannel = params.get('channel');
+    const hashChannel = window.location.hash ? window.location.hash.slice(1) : '';
+    const requested = (queryChannel || hashChannel || '').trim().toLowerCase();
+    return /^[a-z0-9_-]+$/.test(requested) ? requested : '';
 }
 
 function deepCloneReporting(value){
