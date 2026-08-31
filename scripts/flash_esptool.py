@@ -48,6 +48,43 @@ def target_config(target: str) -> TargetConfig:
         raise ValueError(f"Unknown target {target!r}; choose one of: {supported}") from exc
 
 
+def resolve_upload_port(port: str | None) -> str:
+    """Return an explicit port or autodetect the only connected serial port.
+
+    Guessing is intentionally limited to the single-port case.  In
+    particular, the GUITION board can be used with a second CH340 adapter for
+    the ESP32-C6 coprocessor; selecting one of multiple ports automatically
+    could flash the wrong chip.
+    """
+    configured = (port or "").strip()
+    if configured:
+        return configured
+    try:
+        from serial.tools import list_ports
+    except ImportError as exc:
+        raise ValueError(
+            "No serial port supplied and pyserial is unavailable for autodetection; "
+            "set upload_port or pass --port explicitly"
+        ) from exc
+    detected = sorted(
+        {
+            str(candidate.device).strip()
+            for candidate in list_ports.comports()
+            if getattr(candidate, "device", None)
+        }
+    )
+    if len(detected) == 1:
+        return detected[0]
+    if not detected:
+        raise ValueError(
+            "No serial ports detected; set upload_port or pass --port explicitly"
+        )
+    raise ValueError(
+        "Multiple serial ports detected ({ports}); set upload_port or pass --port "
+        "explicitly to select the target device".format(ports=", ".join(detected))
+    )
+
+
 def parse_application_offset(partitions_path: Path) -> int:
     """Read the factory/first application offset from a PlatformIO CSV."""
     application_rows: list[Sequence[str]] = []
@@ -266,7 +303,15 @@ def _run(command: Sequence[str], *, cwd: Path) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", required=True, choices=sorted(TARGETS))
-    parser.add_argument("--port", required=True, help="Serial port, e.g. COM10 or /dev/ttyUSB0")
+    parser.add_argument(
+        "--port",
+        required=False,
+        default=None,
+        help=(
+            "Serial port, e.g. COM10 or /dev/ttyUSB0. If omitted, autodetection "
+            "is used only when exactly one serial port is available."
+        ),
+    )
     parser.add_argument("--baud", type=int, default=921600)
     parser.add_argument("--project-dir", type=Path, default=PROJECT_ROOT)
     parser.add_argument("--build-dir", type=Path)
@@ -296,6 +341,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
+    try:
+        port = resolve_upload_port(args.port)
+    except ValueError as exc:
+        parser.error(str(exc))
+
     project_dir = args.project_dir.resolve()
     build_dir = (args.build_dir or default_build_dir(project_dir, args.target)).resolve()
     config = target_config(args.target)
@@ -312,7 +362,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
     if args.factory_reset:
         regions = parse_recovery_regions(project_dir / "partitions.csv")
-        print(f"Physical factory reset: chip={config.chip}, port={args.port}")
+        print(f"Physical factory reset: chip={config.chip}, port={port}")
         for name, offset, size in regions:
             print(f"  {name}: offset={hex(offset)}, size={hex(size)}")
         if not args.dry_run and not args.yes:
@@ -323,12 +373,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         commands.extend(
             build_factory_reset_commands(
                 target=args.target,
-                port=args.port,
+                port=port,
                 partitions_path=project_dir / "partitions.csv",
             )
         )
     elif args.erase_all:
-        print(f"Full-chip erase: chip={config.chip}, port={args.port}")
+        print(f"Full-chip erase: chip={config.chip}, port={port}")
         if not args.dry_run and not args.yes:
             confirmation = input("Type ERASE-ALL to erase the complete chip: ").strip()
             if confirmation != "ERASE-ALL":
@@ -337,7 +387,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         commands.append(
             [
                 _python_command(), "-m", "esptool", "--chip", config.chip,
-                "--port", args.port, "erase-flash",
+                "--port", port, "erase-flash",
             ]
         )
     else:
@@ -350,13 +400,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             commands.append(
                 [
                     _python_command(), "-m", "esptool", "--chip", config.chip,
-                    "--port", args.port, "erase-flash",
+                    "--port", port, "erase-flash",
                 ]
             )
         commands.append(
             build_flash_command(
                 target=args.target,
-                port=args.port,
+                port=port,
                 build_dir=build_dir,
                 baud=args.baud,
                 partitions_path=project_dir / "partitions.csv",

@@ -30,6 +30,12 @@ The sidebar follows the firmware schema: `debug`, `security`, `network`, `ids`, 
 in the save response as `restart_required_paths`; schedule a controlled restart when the page
 reports one.
 
+Within each section, fields are grouped into labelled subsections derived from their configuration
+path. For example, `network.wifi.ip`, `network.wifi.netmask` and `network.wifi.gateway` appear in
+the **Wi-Fi** card, while the corresponding `network.ethernet.*` fields appear in a separate
+**Ethernet** card. Fields without a second path component are shown under **General**. The small
+technical path displayed in each card makes the mapping to the JSON configuration explicit.
+
 The page is not a replacement for first-boot provisioning. Keep exported drafts private because
 non-secret network and security settings can still reveal topology and policy.
 

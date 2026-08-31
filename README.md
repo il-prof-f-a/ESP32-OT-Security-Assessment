@@ -97,6 +97,25 @@ pio run -e t-poe-pro -t upload --upload-port COM10
 pio device monitor --port COM10 --baud 115200
 ```
 
+For the GUITION P4 target, the custom PlatformIO uploader accepts
+`upload_port` in `platformio.ini` or the `--upload-port` value supplied by the
+command line. If no upload port is configured, the helper automatically uses
+the only serial port visible to the operating system. It deliberately stops
+with an explanatory error when no ports or multiple ports are visible: this
+prevents accidentally flashing the C6 CH340 adapter instead of the P4 USB
+port. When both chips are connected, always select the P4 port explicitly:
+
+```powershell
+pio run -e guition-jc-esp32p4-m3-dev -t upload --upload-port COM10
+pio device monitor --port COM10 --baud 115200
+```
+
+The upload and monitor ports are separate settings. `upload_port` identifies
+the chip to flash; `monitor_port` identifies the UART to observe. Configure
+both when using the VS Code **Upload & Monitor** task. The custom uploader no
+longer emits an empty `--port` argument, so an unset `upload_port` produces a
+clear autodetection/selection message instead of an argparse failure.
+
 The wrappers combine build, upload and monitor while accepting a target and serial port:
 
 ```powershell
