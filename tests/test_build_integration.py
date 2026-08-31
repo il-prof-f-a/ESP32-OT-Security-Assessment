@@ -8,6 +8,37 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class BuildIntegrationTests(unittest.TestCase):
+    def test_crash_diagnostics_read_storage_only_after_engine_init(self):
+        source = (PROJECT_ROOT / "src/main.cpp").read_text(encoding="utf-8")
+        storage_init = source.index("AsyncStorage::Global::initialize()")
+        crash_reads = [
+            source.index('nvsGet("crash_log", "crash_reason"'),
+            source.index('nvsGet("crash_log", "crash_addr"'),
+            source.index('nvsGet("crash_log", "last_crash_ms"'),
+        ]
+        self.assertTrue(all(position > storage_init for position in crash_reads))
+
+    def test_crash_diagnostics_uses_native_coredump_and_no_custom_panic_handler(self):
+        source = (PROJECT_ROOT / "src/main.cpp").read_text(encoding="utf-8")
+        self.assertIn('#include "core/crash_diagnostics.h"', source)
+        self.assertIn("CrashDiagnostics::inspectCoredump", source)
+        self.assertNotIn("custom_panic_handler", source)
+        self.assertNotIn("Custom panic handler will be enabled", source)
+        self.assertIn("native ESP-IDF panic handler", source)
+
+    def test_all_firmware_profiles_enable_flash_coredump(self):
+        profiles = (
+            "sdkconfig.defaults",
+            "sdkconfig.esp32s3eth.defaults",
+            "sdkconfig.esp32p4.defaults",
+            "sdkconfig.guition-jc-esp32p4-m3-dev.defaults",
+        )
+        for profile in profiles:
+            config = (PROJECT_ROOT / profile).read_text(encoding="utf-8")
+            self.assertIn("CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y", config, profile)
+            self.assertIn("CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y", config, profile)
+            self.assertIn("CONFIG_ESP_COREDUMP_CHECKSUM_CRC32=y", config, profile)
+            self.assertIn("CONFIG_ESP_COREDUMP_CHECK_BOOT=y", config, profile)
     def test_main_uses_tested_watchdog_lifecycle_and_boot_snapshot(self):
         source = (PROJECT_ROOT / "src/main.cpp").read_text(encoding="utf-8")
         self.assertIn('#include "core/main_task_watchdog.h"', source)

@@ -38,4 +38,31 @@ results disagree or the interface repeatedly resets.
 Diagnostics observe and probe the interface but do not repair cabling, power, PHY configuration or
 network policy. Use serial boot logs and the board schematic alongside these results.
 
+## Crash diagnostics at the next boot
+
+The firmware captures the reset reason immediately at startup, then waits until NVS and the
+asynchronous storage engine are initialized before reading any persistent crash metadata. This
+ordering is important: storage reads are not valid during the earliest boot phase.
+
+All supported firmware profiles enable the native ESP-IDF panic handler with an ELF coredump stored
+in the dedicated `coredump` flash partition. The application does not replace that emergency path
+with a custom handler: panic code must not allocate memory, wait for an asynchronous task, or write
+through the normal storage queue. On the next boot, an abnormal reset causes the serial log to
+report whether the coredump image passed its CRC check and, when available, its native panic reason.
+
+Expected messages include:
+
+- `ABNORMAL RESTART DETECTED: ...` — reset reason reported by the ROM/ESP-IDF reset API.
+- `Previous ESP-IDF coredump image is valid` — a recoverable coredump was found in flash.
+- `No previous coredump image found` — the partition is empty (for example after first boot or
+  after the image was erased).
+- `Previous coredump image failed integrity check: ...` — the image is present but must not be
+  decoded as trustworthy data.
+
+To decode a downloaded flash image offline, use the matching ESP-IDF toolchain and application ELF
+file, for example `idf.py coredump-info -coredump-file <raw-coredump.bin>`. Keep coredumps private:
+registers, stack contents and application data may contain
+network topology or credentials. The 64 KiB partition is a bounded diagnostic area; it is not a
+general log store and is not erased automatically during normal boot.
+
 [Back to the guide index](README.md)

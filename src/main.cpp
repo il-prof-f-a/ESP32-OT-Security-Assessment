@@ -25,6 +25,7 @@ extern "C" {
 #include "core/async_storage_engine.h"
 #include "core/configuration_manager.h"
 #include "core/main_task_watchdog.h"
+#include "core/crash_diagnostics.h"
 #include "core/filesystem_task_delegate.h"
 #include "core/time_manager.h"
 #include "security/security_manager.h"
@@ -110,6 +111,9 @@ static bool is_abnormal_reset(esp_reset_reason_t reason) {
             reason == ESP_RST_BROWNOUT);
 }
 
+static void log_previous_crash_diagnostics(esp_reset_reason_t reset_reason,
+                                           const char* reason_str);
+
 [[maybe_unused]] static const char* WL[] = {
     // Preserve everything except the logs - delete only log files for cleanup
     "/data/config",                 // <- preserve the ENTIRE config dir
@@ -123,40 +127,6 @@ static bool is_abnormal_reset(esp_reset_reason_t reason) {
 
 // Global reporting engine pointer for web interface access
 ReportingEngine* g_reporting = nullptr;
-
-// Safer panic handler for crash detection and automatic restart (disabled)
-[[maybe_unused]] static void custom_panic_handler(panic_info_t* info) {
-    // Avoid recursive crashes - keep this handler simple
-    static bool panic_in_progress = false;
-    if (panic_in_progress) {
-        // Prevent recursive panic handler calls
-        return;
-    }
-    panic_in_progress = true;
-
-    // Try to log crash information to AsyncStorage (best effort)
-    // Use simpler timer function
-    uint32_t crash_time = (uint32_t)(esp_timer_get_time() / 1000ULL);
-    AsyncStorage::Global::nvsSet("crash_log", "last_crash_ms", crash_time);
-
-    // Store simplified crash reason
-    if (info) {
-        const char* reason_str = info->reason ? info->reason : "UNKNOWN";
-        char crash_reason[32];
-        snprintf(crash_reason, sizeof(crash_reason), "PANIC_%.20s", reason_str);
-        AsyncStorage::Global::nvsSet("crash_log", "crash_reason", std::string(crash_reason));
-
-        // Store crash address if available
-        if (info->addr) {
-            AsyncStorage::Global::nvsSet("crash_log", "crash_addr", (uint32_t)info->addr);
-        }
-    } else {
-        AsyncStorage::Global::nvsSet("crash_log", "crash_reason", std::string("PANIC_NULL_INFO"));
-    }
-
-    // Don't try to call ESP_LOG functions in panic handler as they might cause issues
-    // The core dump will be saved automatically by the default handler
-}
 
 // Memory monitoring and early warning system
 
@@ -184,29 +154,9 @@ extern "C" void app_main(void) {
     // RESET REASON MONITORING - Detect crashes and abnormal restarts
     esp_reset_reason_t reset_reason = esp_reset_reason();
     const char* reason_str = get_reset_reason_string(reset_reason);
-    bool is_crash_restart = is_abnormal_reset(reset_reason);
-
-    if (is_crash_restart) {
-        LOG_ERRORF(TAG, "ABNORMAL RESTART DETECTED: %s", reason_str);
-
-        // Check if we have crash info from AsyncStorage
-        std::string crash_reason;
-        if (AsyncStorage::Global::nvsGet("crash_log", "crash_reason", crash_reason) == ESP_OK) {
-            LOG_ERRORF(TAG, "Previous crash reason: %s", crash_reason.c_str());
-        }
-
-        uint32_t crash_addr;
-        if (AsyncStorage::Global::nvsGet("crash_log", "crash_addr", crash_addr) == ESP_OK) {
-            LOG_ERRORF(TAG, "Crash address: 0x%08lx", (unsigned long)crash_addr);
-        }
-
-        uint32_t crash_time;
-        if (AsyncStorage::Global::nvsGet("crash_log", "last_crash_ms", crash_time) == ESP_OK) {
-            LOG_ERRORF(TAG, "Last crash time: %lu ms", (unsigned long)crash_time);
-        }
-    } else {
-        LOG_INFOF(TAG, " Normal system boot: %s", reason_str);
-    }
+    // Capture reset reason immediately, but defer persistent/coredump reads until
+    // NVS and AsyncStorage are initialized below.
+    LOG_INFOF(TAG, "Reset reason captured before service init: %s", reason_str);
 
     // Check PSRAM availability (following official LILYGO instructions)
     #ifdef CONFIG_SPIRAM
@@ -291,6 +241,7 @@ extern "C" void app_main(void) {
     }
     LOG_INFO(TAG, "AsyncStorage engine initialized successfully");
     MemoryMonitor::logDelta("AsyncStorage::initialize", mem_before_async);
+    log_previous_crash_diagnostics(reset_reason, reason_str);
 
     // Initialize FilesystemTaskDelegate for PSRAM stack safety
     MemorySnapshot mem_before_fs_delegate = MemoryMonitor::capture();
@@ -319,8 +270,9 @@ extern "C" void app_main(void) {
     // Disable ESP-IDF direct logging to prevent duplication with ReportingEngine
     esp_log_level_set("*", ESP_LOG_NONE);
 
-    // PANIC HANDLER - Will be enabled after full initialization
-    LOG_INFO(TAG, " Custom panic handler will be enabled after system startup");
+    // Panic handling remains in the native ESP-IDF path. The enabled flash
+    // coredump profile is inspected on the next boot after storage is ready.
+    LOG_INFO(TAG, "Native ESP-IDF panic handler active; flash coredump inspection enabled by build");
 
     // Logger system - initialize BEFORE storage for proper logging
     MemorySnapshot mem_before_logger = MemoryMonitor::capture();
@@ -1042,6 +994,52 @@ extern "C" void app_main(void) {
         //task_audit_run();
     }
 
+}
+
+// Read crash metadata only after NVS and AsyncStorage have completed startup.
+// The native ESP-IDF panic handler writes the coredump atomically; this boot-time
+// reader never performs flash writes or allocates from the panic path.
+static void log_previous_crash_diagnostics(esp_reset_reason_t reset_reason,
+                                           const char* reason_str) {
+    if (!is_abnormal_reset(reset_reason)) {
+        LOG_INFOF(TAG, "Normal system boot: %s", reason_str);
+        return;
+    }
+
+    LOG_ERRORF(TAG, "ABNORMAL RESTART DETECTED: %s", reason_str);
+
+    // Keep compatibility with metadata produced by older development builds.
+    // These reads are intentionally located after AsyncStorage initialization.
+    std::string crash_reason;
+    if (AsyncStorage::Global::nvsGet("crash_log", "crash_reason", crash_reason) == ESP_OK) {
+        LOG_ERRORF(TAG, "Previous crash reason: %s", crash_reason.c_str());
+    }
+
+    uint32_t crash_addr = 0;
+    if (AsyncStorage::Global::nvsGet("crash_log", "crash_addr", crash_addr) == ESP_OK) {
+        LOG_ERRORF(TAG, "Crash address: 0x%08lx", (unsigned long)crash_addr);
+    }
+
+    uint32_t crash_time = 0;
+    if (AsyncStorage::Global::nvsGet("crash_log", "last_crash_ms", crash_time) == ESP_OK) {
+        LOG_ERRORF(TAG, "Last crash time: %lu ms", (unsigned long)crash_time);
+    }
+
+    const CrashDumpInspection coredump = CrashDiagnostics::inspectCoredump();
+    if (coredump.image_status == ESP_OK) {
+        LOG_ERROR(TAG, "Previous ESP-IDF coredump image is valid");
+        if (coredump.hasPanicReason()) {
+            LOG_ERRORF(TAG, "Coredump panic reason: %s", coredump.panic_reason);
+        } else {
+            LOG_WARNINGF(TAG, "Coredump image valid but panic reason unavailable: %s",
+                         esp_err_to_name(coredump.reason_status));
+        }
+    } else if (coredump.image_status == ESP_ERR_NOT_FOUND) {
+        LOG_WARNING(TAG, "No previous coredump image found");
+    } else {
+        LOG_WARNINGF(TAG, "Previous coredump image failed integrity check: %s",
+                     esp_err_to_name(coredump.image_status));
+    }
 }
 
 /*
