@@ -56,6 +56,10 @@ extern "C" {
 #include "assessment/vulnerability_scanner.h"
 #include "provisioning/provisioning_coordinator.h"
 
+#ifndef ESP32_OT_LITTLEFS_AUTO_FORMAT
+#define ESP32_OT_LITTLEFS_AUTO_FORMAT 0
+#endif
+
 // Network additions
 #include "core/network_engine.h"
 #include "network/ethernet_manager.h"
@@ -113,17 +117,6 @@ static bool is_abnormal_reset(esp_reset_reason_t reason) {
 
 static void log_previous_crash_diagnostics(esp_reset_reason_t reset_reason,
                                            const char* reason_str);
-
-[[maybe_unused]] static const char* WL[] = {
-    // Preserve everything except the logs - delete only log files for cleanup
-    "/data/config",                 // <- preserve the ENTIRE config dir
-    "/data/certs",                  // <- preserve certificates
-    "/data/uploads",                // <- preserve uploads
-    "/data/backups",                // <- preserve backups
-    "/data/persistent",              // <- preserve persistent data
-    "/data/reportq"                  // <- preserve reportq data
-};
-
 
 // Global reporting engine pointer for web interface access
 ReportingEngine* g_reporting = nullptr;
@@ -337,13 +330,17 @@ extern "C" void app_main(void) {
         .base_path = "/data",
         .partition_label = "storage",
         .partition = NULL,
-        .format_if_mount_failed = true,
+        // Formatting is destructive and must be an explicit build-time opt-in.
+        // Release profiles leave ESP32_OT_LITTLEFS_AUTO_FORMAT at its fail-closed
+        // default (0), preserving a recoverable partition on mount errors.
+        .format_if_mount_failed = (ESP32_OT_LITTLEFS_AUTO_FORMAT != 0),
         .read_only = false,
         .dont_mount = false,
         .grow_on_mount = true,
     };
 
     esp_err_t littlefs_ret = esp_vfs_littlefs_register(&littlefs_conf);
+    const bool littlefs_mounted = (littlefs_ret == ESP_OK);
     if (littlefs_ret != ESP_OK) {
         LOG_ERRORF(TAG, "Failed to initialize LittleFS: %s", esp_err_to_name(littlefs_ret));
         if (littlefs_ret == ESP_FAIL) {
@@ -351,37 +348,40 @@ extern "C" void app_main(void) {
         } else if (littlefs_ret == ESP_ERR_NOT_FOUND) {
             LOG_ERROR(TAG, "LittleFS partition 'storage' not found");
         }
+        if (ESP32_OT_LITTLEFS_AUTO_FORMAT == 0) {
+            LOG_ERROR(TAG, "Automatic LittleFS formatting is disabled; existing data was preserved");
+        }
     } else {
         LOG_INFO(TAG, " LittleFS mounted successfully at /data");
     }
 
-    fs_print_littlefs_report("/data", "storage");
+    if (littlefs_mounted) {
+        fs_print_littlefs_report("/data", "storage");
 
-    // Log cleanup: removes all files except those in the whitelist (config, certs, uploads, etc.)
-    // This mainly deletes logs to free up filesystem space
-    fs_purge_littlefs("/data/logs/", WL, sizeof(WL)/sizeof(WL[0]));
-    //fs_purge_littlefs("/data/", WL, sizeof(WL)/sizeof(WL[0]));
+        // Never recursively purge /data/logs at boot. FileReporter enforces the
+        // configured rotate_bytes/max_files bounds on append, preserving existing
+        // evidence across reboots while still limiting future growth.
+        LOG_INFO(TAG, "Preserving existing LittleFS logs; bounded rotation is applied on write");
 
-    LOG_INFO(TAG, "Creating storage directories...");
-    AsyncStorage::Global::ensureDataDirectories();
+        LOG_INFO(TAG, "Creating storage directories...");
+        AsyncStorage::Global::ensureDataDirectories();
 
+        // Test file creation and accessibility
+        LOG_INFO("FILE_TEST", "Testing app.log file creation and access...");
+        bool app_log_exists = false;
+        esp_err_t check_result = AsyncStorage::Global::fileExists("/data/logs/app.log", app_log_exists);
+        LOG_INFOF("FILE_TEST", "app.log existence check: result=%s, exists=%s",
+                  esp_err_to_name(check_result), app_log_exists ? "true" : "false");
 
-    // Test file creation and accessibility
-    LOG_INFO("FILE_TEST", "Testing app.log file creation and access...");
-    bool app_log_exists = false;
-    esp_err_t check_result = AsyncStorage::Global::fileExists("/data/logs/app.log", app_log_exists);
-    LOG_INFOF("FILE_TEST", "app.log existence check: result=%s, exists=%s",
-              esp_err_to_name(check_result), app_log_exists ? "true" : "false");
-
-    if (app_log_exists) {
-        size_t app_log_size = 0;
-        esp_err_t size_result = AsyncStorage::Global::fileSize("/data/logs/app.log", app_log_size);
-        LOG_INFOF("FILE_TEST", "app.log size check: result=%s, size=%zu bytes",
-                  esp_err_to_name(size_result), app_log_size);
+        if (app_log_exists) {
+            size_t app_log_size = 0;
+            esp_err_t size_result = AsyncStorage::Global::fileSize("/data/logs/app.log", app_log_size);
+            LOG_INFOF("FILE_TEST", "app.log size check: result=%s, size=%zu bytes",
+                      esp_err_to_name(size_result), app_log_size);
+        }
+    } else {
+        LOG_WARNING(TAG, "Skipping LittleFS report and directory creation because storage is not mounted");
     }
-
-    // (optional) reprint the status after cleanup
-    //fs_print_littlefs_report("/data", "storage");
 
     // Config
     LOG_INFO(TAG, "Initializing configuration manager...");

@@ -24,6 +24,15 @@ vulnerability events are not routed there. Every record carries `timestamp_ms` o
 date/time. Before NTP/HTTP time synchronization, the line format explicitly says `(boot time)`;
 that value is monotonic uptime and must not be interpreted as UTC.
 
+## Persistence and retention safety
+
+The boot sequence does not recursively delete `/data/logs` and does not format the LittleFS
+partition after a mount error. Existing configuration, certificates, reports and log evidence
+therefore remain available for recovery. Each managed file applies its configured **Max Size**
+and **Max Backup Files** limits when new records are appended; this is the bounded retention
+mechanism used by the firmware. A filesystem format is an explicit laboratory-only build option
+(`ESP32_OT_LITTLEFS_AUTO_FORMAT=1`) and is disabled in release profiles.
+
 ## Log File Status
 
 The table reports file name, enabled/disabled state, current size, maximum size, routed channels

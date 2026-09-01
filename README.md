@@ -246,6 +246,14 @@ To erase the complete chip without installing firmware, use the separate `--eras
 
 An app-only release image updates the application and preserves NVS, LittleFS configuration and the TLS identity. A factory image is for clean installation, requires a full erase, and contains all flash entries from the build manifest.
 
+The firmware never formats the LittleFS `storage` partition automatically during boot. This
+fail-closed policy protects configuration, certificates, reports and log evidence when a mount
+fails. Log files are retained by the configured per-file rotation limits (`max_size_kb` and
+`max_files`) as new records are written. To deliberately opt into destructive formatting for a
+disposable laboratory image, add `-DESP32_OT_LITTLEFS_AUTO_FORMAT=1` to that local build's
+`build_flags`; do not enable it for releases or devices containing evidence. The boot log states
+when formatting is disabled and skips filesystem operations while the partition is unmounted.
+
 ## Downloading verified releases
 
 Each prerelease contains four primary assets per target:
