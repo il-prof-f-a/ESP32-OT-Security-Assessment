@@ -115,7 +115,7 @@ void ManagementInterfaceController::tick() {
         }
 
         web_.setAllowedManagementAddress(htonl(decision.allowed_address));
-        if (web_.startWithTask(443, allowed_netif)) {
+        if (web_.startWithTask(WebServer::defaultManagementPort(), allowed_netif)) {
             active_address_ = decision.allowed_address;
             interface_was_active_ = true;
             next_start_attempt_us_ = 0;

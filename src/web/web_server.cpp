@@ -2637,11 +2637,15 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
               (unsigned)cfg.backlog_conn,
               (unsigned)cfg.max_uri_handlers);
 
+    // Always propagate the requested port to the HTTPD configuration.  The
+    // network interface is optional (startOnInterface() also supports the
+    // all-interfaces path), so this must not depend on netif being non-null.
+    cfg.server_port = port;
+
     // Bind to specific interface if provided
     if (netif) {
         esp_netif_ip_info_t ip_info;
         if (esp_netif_get_ip_info(netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0) {
-            cfg.server_port = port;
             // Note: ESP-IDF doesn't support binding to specific interface directly in httpd_config_t
             // We'll need to check if interface has IP before starting
             //LOG_INFOF("WebServer", "Starting HTTP server on interface IP: %s:%d",
@@ -2727,12 +2731,12 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     size_t memory_consumed = 0;
 
 #if ESP32_OT_WEB_HTTP_ONLY
-    cfg.server_port = 80;
     LOG_WARNING(TAG_WEB, "Starting plain HTTP because this hardware profile does not support stable HTTPS");
     err = httpd_start(&http_, &cfg);
     retry_count = 1;
     if (err == ESP_OK) {
-        LOG_WARNING(TAG_WEB, "HTTP server started on port 80; transport is not encrypted");
+        LOG_WARNINGF(TAG_WEB, "HTTP server started on port %u; transport is not encrypted",
+                     (unsigned)port);
     }
 #else
     while (retry_count < MAX_RETRIES && err != ESP_OK) {
@@ -2800,7 +2804,7 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
             tls_credentials_.privateKeyPem());
         https_conf.prvtkey_len = tls_credentials_.privateKeyLength() + 1;
 
-        https_conf.httpd.server_port = 443;  // HTTPS port
+        https_conf.httpd.server_port = port;
         https_conf.httpd.keep_alive_enable = prof.keep_alive;
         https_conf.httpd.stack_size = prof.stack_size;
         https_conf.httpd.max_open_sockets = prof.max_open_sockets;
@@ -2822,10 +2826,11 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
             if (g_reporting) {
                 char event_data[512];
                 snprintf(event_data, sizeof(event_data),
-                         "{\"action\":\"https_server_started\",\"port\":443,\"attempts\":%d,\"iram_consumed\":%u,\"psram_consumed\":%u}",
-                         retry_count + 1, (unsigned)memory_consumed, (unsigned)psram_consumed);
+                         "{\"action\":\"https_server_started\",\"port\":%u,\"attempts\":%d,\"iram_consumed\":%u,\"psram_consumed\":%u}",
+                         (unsigned)port, retry_count + 1, (unsigned)memory_consumed, (unsigned)psram_consumed);
                 report_event_ps(g_reporting, "network", event_data);
             }
+            LOG_INFOF(TAG_WEB, "HTTPS server started on port %u", (unsigned)port);
             break;
         } else if (err == ESP_ERR_HTTPD_ALLOC_MEM) {
             LOG_WARNINGF(TAG_WEB, "⚠️  httpd_start() failed with ESP_ERR_HTTPD_ALLOC_MEM on attempt %d: %s",

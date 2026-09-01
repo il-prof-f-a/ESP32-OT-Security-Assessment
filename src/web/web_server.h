@@ -20,6 +20,10 @@ extern "C" {
 #include "../core/psram_allocator.h"
 #include "../provisioning/runtime_tls_credentials.h"
 
+#ifndef ESP32_OT_WEB_HTTP_ONLY
+#define ESP32_OT_WEB_HTTP_ONLY 0
+#endif
+
 class ConfigurationManager;
 class ReportingEngine;
 class Logger;
@@ -52,7 +56,10 @@ public:
                            NetworkEngine* net,
                            LogFileManager* log_mgr = nullptr);
 
-    bool start(uint16_t port = 80);
+    bool start(uint16_t port = (ESP32_OT_WEB_HTTP_ONLY ? 80 : 443));
+    static constexpr uint16_t defaultManagementPort() {
+        return ESP32_OT_WEB_HTTP_ONLY ? 80 : 443;
+    }
     bool startOnInterface(uint16_t port, esp_netif_t* netif);
     void shutdown();
     bool isRunning() const { return http_ != nullptr || https_server_ != nullptr; }
