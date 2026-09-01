@@ -3,6 +3,7 @@
 #include <atomic>
 #include "esp_netif.h"
 
+#include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
 #ifdef __cplusplus
