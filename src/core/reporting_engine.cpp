@@ -205,6 +205,10 @@ void ReportingEngine::shutdown() {
         vTaskDelete(worker_);
         worker_ = nullptr;
     }
+    // The queue owns the filesystem delegate reference and can flush during
+    // destruction.  Release it while the delegate is still alive during boot
+    // rollback; reset() is idempotent and also makes repeated shutdown safe.
+    queue_.reset();
 }
 
 void ReportingEngine::setChannel(const psram_string& name, const ChannelConfig& cfg, SenderFn&& sender) {

@@ -387,7 +387,9 @@ bool Engine::initialize() {
 }
 
 void Engine::shutdown() {
-    if (!initialized_) return;
+    // A failed initialization can leave a queue or task allocated before the
+    // initialized_ flag is set.  Rollback must still reclaim those resources.
+    if (!initialized_ && !worker_task_handle_ && !operation_queue_) return;
 
     LOG_INFO(TAG, "Shutting down Async Storage Engine...");
 
@@ -403,6 +405,7 @@ void Engine::shutdown() {
         operation_queue_ = nullptr;
     }
 
+    nvs_override_set_worker_task(nullptr);
     initialized_ = false;
     //LOG_INFO(TAG, "Async Storage Engine shut down");
 }

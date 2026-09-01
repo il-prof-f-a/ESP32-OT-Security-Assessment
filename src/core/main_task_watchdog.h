@@ -57,6 +57,17 @@ public:
 
     bool subscribed() const { return subscribed_; }
 
+    // Remove this task from the shared watchdog during startup rollback.  The
+    // watchdog itself remains owned by ESP-IDF and is not deinitialized here.
+    esp_err_t stop() {
+        if (!subscribed_) return ESP_OK;
+        const esp_err_t result = esp_task_wdt_delete(nullptr);
+        if (result == ESP_OK || result == ESP_ERR_NOT_FOUND || result == ESP_ERR_INVALID_STATE) {
+            subscribed_ = false;
+        }
+        return result;
+    }
+
     // Returns false without modifying result when no feed was attempted.
     bool feedIfDue(uint32_t now_seconds, esp_err_t& result) {
         // If configuration/removal failed with an existing subscription, its

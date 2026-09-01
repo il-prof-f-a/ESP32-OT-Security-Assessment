@@ -87,6 +87,19 @@ void TimeManager::configureWiFiAutoSync(ConfigurationManager* cfg, WiFiManager* 
     }
 }
 
+void TimeManager::clearWiFiAutoSync() {
+    if (wifi_handler_) {
+        (void)esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, wifi_handler_);
+        wifi_handler_ = nullptr;
+    }
+    config_ctx_ = nullptr;
+    wifi_ctx_ = nullptr;
+    last_synced_netif_ = nullptr;
+    portENTER_CRITICAL(&sync_spinlock_);
+    pending_triggers_ = 0;
+    portEXIT_CRITICAL(&sync_spinlock_);
+}
+
 void TimeManager::notifyWiFiHasIP() {
     markSyncPending(SYNC_TRIGGER_WIFI_IMMEDIATE);
 }

@@ -28,6 +28,10 @@ public:
 
     static bool initialize(const NetworkConfig& config);
     static void configureWiFiAutoSync(ConfigurationManager* cfg, WiFiManager* wifi);
+    // Drop startup-time references before app_main returns on a failed boot.
+    // This unregisters the event callback and prevents a later event from
+    // dereferencing automatic ConfigurationManager/WiFiManager objects.
+    static void clearWiFiAutoSync();
     static void notifyWiFiHasIP();
     static void processPendingSync();
     static void requestSyncForNetif(esp_netif_t* netif, const char* origin);

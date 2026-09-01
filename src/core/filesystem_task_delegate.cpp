@@ -210,7 +210,15 @@ bool FilesystemTaskDelegate::initialize() {
 void FilesystemTaskDelegate::shutdown() {
     std::lock_guard<std::mutex> lock(state_mutex_);
 
-    if (!initialized_) return;
+    // Rollback may run after a partial initialization failed before the
+    // initialized_ flag was set.  Release every resource independently so a
+    // failed boot cannot leak queues/buffers or leave a stale task alive.
+    const bool had_resources = initialized_ || task_handle_ || request_queue_ ||
+                               response_queue_ || fileio_request_queue_ ||
+                               fileio_response_queue_ || psram_ring_buffer_ ||
+                               dram_staging_buffer_ || circular_descriptors_ ||
+                               ring_mutex_ || streaming_semaphore_;
+    if (!had_resources) return;
 
     LOG_INFO(TAG, "Shutting down FilesystemTaskDelegate...");
 

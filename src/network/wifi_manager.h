@@ -49,6 +49,9 @@ public:
 
     void stop();
     void stopAP();  // Stop only AP, keep STA active
+    // Used by startup rollback to drop a pointer to an automatic configuration
+    // object after the Wi-Fi service has been stopped.
+    void clearConfiguration() { cfg_ = nullptr; }
     void disconnectAllAPClients();  // Disconnect all clients from AP
 
     // Load runtime options (e.g., timeouts, scan_on_fail) from configuration
