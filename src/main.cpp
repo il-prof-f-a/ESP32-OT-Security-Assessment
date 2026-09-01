@@ -13,7 +13,6 @@ extern "C" {
   #include "esp_heap_caps.h"
   #include "esp_psram.h"
   #include "esp_littlefs.h"
-  #include "freertos/queue.h"
   #include <time.h>
   #include <sys/time.h>
   #include <arpa/inet.h>
@@ -573,14 +572,6 @@ extern "C" void app_main(void) {
         LOG_WARNING(TAG, "Signature detector failed to initialize - threat detection disabled");
         AuditManager::getInstance().logServiceEvent("SignatureDetector", "init_failed", "Operating without threat detection");
     }
-
-    // Create L2 packet queue and logger task (CRITICAL: before ethernet init)
-    static QueueHandle_t l2_queue = xQueueCreate(32, sizeof(l2_snap_t));
-    configASSERT(l2_queue != nullptr);
-
-    // Set global queue for callback access
-    extern QueueHandle_t g_l2_queue_global;
-    g_l2_queue_global = l2_queue;
 
     // Initialize Ethernet with automatic configuration from config
     LOG_INFO(TAG, "Initializing Ethernet interface...");

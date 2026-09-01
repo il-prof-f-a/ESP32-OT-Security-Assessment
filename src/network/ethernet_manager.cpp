@@ -22,7 +22,6 @@ extern "C" {
 }
 #include "eth_l2_adapter.h"
 #include "../core/psram_json_parser.h"
-#include "core/network_engine.h"  // to have the complete type
 
 static const char* TAG = "EthernetManager";
 
@@ -87,9 +86,6 @@ namespace {
 #endif
     }
 }
-
-// Global queue for L2 packet capture (accessed by callback)
-QueueHandle_t g_l2_queue_global = nullptr;
 
 EthernetManager::EthernetManager(ConfigurationManager* cfg) : config_(cfg) {
     LOG_INFO(TAG, "EthernetManager initialized with ConfigurationManager");
@@ -294,11 +290,6 @@ bool EthernetManager::hasValidIP() const {
     esp_netif_ip_info_t ip_info;
     return (esp_netif_get_ip_info(netif_, &ip_info) == ESP_OK && ip_info.ip.addr != 0);
 }
-
-struct L2BridgeCtx {
-    QueueHandle_t q;
-    NetworkEngine* net;
-};
 
 // ===============================
 // MAIN INTEGRATION METHOD

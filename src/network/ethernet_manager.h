@@ -16,12 +16,10 @@ extern "C" {
   #include "driver/spi_master.h"
   #include "lwip/ip4_addr.h"
   #include "freertos/FreeRTOS.h"
-  #include "freertos/queue.h"
 }
 
 // Forward declarations
 class ConfigurationManager;
-class NetworkEngine;
 
 // Board selection and hardware configuration
 // Select via PlatformIO build_flags, e.g.:
@@ -171,21 +169,6 @@ class NetworkEngine;
 #ifndef ETH_CMD_G_PROMISCUOUS
   #define ETH_CMD_G_PROMISCUOUS   (esp_eth_io_cmd_t)0x11
 #endif
-
-// L2 packet structure for queue
-#define SNIFF_COPY_BYTES 128      // bytes to copy for logging
-#define SNIFF_QUEUE_LEN   32      // frames in queue
-
-typedef struct {
-  uint32_t len;
-  uint16_t ethertype;
-  uint8_t  dst[6];
-  uint8_t  src[6];
-  uint8_t  data[SNIFF_COPY_BYTES];
-} l2_snap_t;
-
-// Global queue for L2 packet capture (accessed by callback)
- extern QueueHandle_t g_l2_queue_global;
 
 class EthernetManager : public EthernetTxIf {
 public:
