@@ -65,4 +65,22 @@ registers, stack contents and application data may contain
 network topology or credentials. The 64 KiB partition is a bounded diagnostic area; it is not a
 general log store and is not erased automatically during normal boot.
 
+### Panic-path safety verification
+
+Issue #3 is covered by the native panic path described above. The application does not register
+an alternative panic callback, enqueue work, allocate through cJSON/heap helpers, or wait for
+AsyncStorage while the system is already compromised. Validate a firmware build in a controlled
+laboratory setup as follows:
+
+1. Confirm the generated profile selects `CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y` and
+   `CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y` (and does not select `TO_NONE`).
+2. Capture the serial boot log and verify that the reset reason is captured before services, while
+   the coredump result is reported only after `AsyncStorage engine initialized successfully`.
+3. Use an already-authorized debugger or laboratory fault procedure to produce one controlled
+   panic. Do not add or expose a production crash endpoint and do not use an OT device as a fault
+   target.
+4. On the next boot, verify `ABNORMAL RESTART DETECTED`, a valid/absent/integrity-failed coredump
+   status, and a normal continuation to the WebUI without a boot loop. Preserve the raw dump
+   privately if it is collected for offline decoding.
+
 [Back to the guide index](README.md)
