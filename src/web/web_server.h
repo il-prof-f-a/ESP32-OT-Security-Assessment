@@ -84,6 +84,8 @@ public:
 
     // New method to start the WebServer with a separate task
     bool startWithTask(uint16_t port, esp_netif_t* netif);
+    // Called by the wrapper task once startOnInterface has produced a result.
+    void startTaskFinished() { startup_task_active_.store(false, std::memory_order_release); }
 
     // Declaration of the timer callback method as static
     static void wifi_connect_timer_callback(void* arg);
@@ -435,6 +437,10 @@ private:
     LogFileManager* log_file_manager_ = nullptr;
 
     httpd_handle_t http_ = nullptr;
+    // Prevent two asynchronous startup workers from entering the server start
+    // path concurrently. It is cleared by the worker after the result is
+    // published, including failure and timeout/late-completion paths.
+    std::atomic<bool> startup_task_active_{false};
     std::atomic<uint32_t> allowed_management_ipv4_{0};
     static constexpr size_t kMaxGuardedUriContexts = 256;
     GuardedUriContext guarded_uri_contexts_[kMaxGuardedUriContexts]{};

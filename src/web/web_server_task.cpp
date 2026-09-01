@@ -10,8 +10,19 @@
 #include "web_server.h"
 #include "../core/audit_manager.h"
 
+void web_server_task_release_args(WebTaskArgs* args) {
+    if (!args) return;
+    if (args->references.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        if (args->started) {
+            vSemaphoreDelete(args->started);
+            args->started = nullptr;
+        }
+        args->~WebTaskArgs();
+        vPortFree(args);
+    }
+}
+
 extern "C" void web_server_task(void *pv) {
-    // Take and free the arguments immediately
     WebTaskArgs* a = static_cast<WebTaskArgs*>(pv);
 
     if (!a) {
@@ -26,13 +37,9 @@ extern "C" void web_server_task(void *pv) {
     WebServer*   srv   = a->srv;
     const int    port  = a->port;
     esp_netif_t* netif = a->netif;
-    volatile bool* success_flag = a->success;
-    SemaphoreHandle_t started = nullptr;
-    if (a->started) started = (SemaphoreHandle_t)a->started;
+    SemaphoreHandle_t started = a->started;
 
     LOG_INFOF("WebServerTask", "Received args: srv=%p port=%d netif=%p started=%p", (void*)srv, port, (void*)netif, (void*)started);
-
-    vPortFree(a);
 
     LOG_INFOF("WebServerTask", "Starting web server on core %d, port %d ...", xPortGetCoreID(), port);
 
@@ -41,8 +48,10 @@ extern "C" void web_server_task(void *pv) {
     if (!ok) {
         LOG_ERRORF("WebServerTask", "startOnInterface(%d) failed", port);
         LOG_ERROR("WebServerTask", "Signaling FAILURE to waiting task");
-        if (success_flag) *success_flag = false;
+        a->success.store(false, std::memory_order_release);
         if (started) xSemaphoreGive(started);
+        srv->startTaskFinished();
+        web_server_task_release_args(a);
         vTaskDelete(nullptr);
         return;
     }
@@ -51,12 +60,14 @@ extern "C" void web_server_task(void *pv) {
     // AUDIT: Log WebServer service startup
     AuditManager::getInstance().logServiceEvent("WebServer", "started", "Web interface ready and accepting connections");
     LOG_INFO("WebServerTask", "Signaling SUCCESS to waiting task");
-    if (success_flag) *success_flag = true;
+    a->success.store(true, std::memory_order_release);
     if (started) xSemaphoreGive(started);
+    srv->startTaskFinished();
 
     while (srv->isRunning()) {
         vTaskDelay(pdMS_TO_TICKS(250));
     }
     LOG_INFO("WebServerTask", "Web server stopped; terminating wrapper task");
+    web_server_task_release_args(a);
     vTaskDelete(nullptr);
 }

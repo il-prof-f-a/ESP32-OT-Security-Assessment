@@ -68,6 +68,7 @@
 #include <utility>
 #include <cctype>
 #include <cmath>
+#include <new>
 
 #ifndef ESP32_OT_WEB_HTTP_ONLY
 #define ESP32_OT_WEB_HTTP_ONLY 0
@@ -2506,7 +2507,17 @@ bool WebServer::start(uint16_t port) {
 
 bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
     if (!WebServer::self_) WebServer::self_ = this;
-    if (http_ || https_server_) { LOG_WARNING(TAG_WEB, "start(): server already running"); return false; }
+    // Check the handle belonging to the selected transport explicitly. The
+    // fallback check also covers a stale handle left by a failed transition.
+#if ESP32_OT_WEB_HTTP_ONLY
+    const httpd_handle_t active_transport_handle = http_;
+#else
+    const httpd_handle_t active_transport_handle = https_server_;
+#endif
+    if (active_transport_handle || http_ || https_server_) {
+        LOG_WARNING(TAG_WEB, "start(): server already running");
+        return false;
+    }
     guarded_uri_count_ = 0;
 #if !ESP32_OT_WEB_HTTP_ONLY
     if (!tls_credentials_.ensurePresent()) {
@@ -7622,26 +7633,29 @@ bool WebServer::startWithTask(uint16_t port, esp_netif_t* netif) {
         return false;
     }
 
+    bool expected_inactive = false;
+    if (!startup_task_active_.compare_exchange_strong(
+            expected_inactive, true, std::memory_order_acq_rel)) {
+        LOG_WARNING(TAG_WEB, "startWithTask: startup already in progress");
+        return false;
+    }
+
     SemaphoreHandle_t started = xSemaphoreCreateBinary();
     if (!started) {
+        startup_task_active_.store(false, std::memory_order_release);
         LOG_ERROR(TAG_WEB, "startWithTask: failed to create semaphore");
         return false;
     }
 
-    WebTaskArgs* args = (WebTaskArgs*) pvPortMalloc(sizeof(WebTaskArgs));
-    if (!args) {
+    void* raw_args = pvPortMalloc(sizeof(WebTaskArgs));
+    if (!raw_args) {
         vSemaphoreDelete(started);
+        startup_task_active_.store(false, std::memory_order_release);
         LOG_ERROR(TAG_WEB, "startWithTask: failed to allocate WebTaskArgs");
         return false;
     }
 
-    args->srv   = this;
-    args->port  = port;
-    args->netif = netif;
-
-    volatile bool success_flag = false;
-    args->started = (void*)started;
-    args->success = (volatile bool*)&success_flag;
+    WebTaskArgs* args = new (raw_args) WebTaskArgs(this, port, netif, started);
 
     LOG_INFOF(TAG_WEB, "startWithTask: passing semaphore %p to task args=%p", (void*)started, (void*)args);
     LOG_INFOF(TAG_WEB, "?? WebServer task allocation: %s",
@@ -7656,21 +7670,25 @@ bool WebServer::startWithTask(uint16_t port, esp_netif_t* netif) {
     );
 
     if (!hWeb) {
-        vPortFree(args);
-        vSemaphoreDelete(started);
+        // No worker owns the reserved reference when task creation fails.
+        web_server_task_release_args(args);
+        web_server_task_release_args(args);
+        startup_task_active_.store(false, std::memory_order_release);
         LOG_ERROR(TAG_WEB, "startWithTask: failed to create WebServer task");
         return false;
     }
 
     bool success = false;
     if (xSemaphoreTake(started, pdMS_TO_TICKS(60000)) == pdTRUE) {
-        success = (success_flag == true);
+        success = args->success.load(std::memory_order_acquire);
         LOG_INFOF(TAG_WEB, "Web server task signaled %s.", success ? "SUCCESS" : "FAILURE");
     } else {
         LOG_WARNING(TAG_WEB, "Web server task did not signal ready (timeout).");
     }
 
-    vSemaphoreDelete(started);
+    // The worker retains the context and semaphore after timeout; it may still
+    // be starting the server and will release its reference on task exit.
+    web_server_task_release_args(args);
     LOG_INFOF(TAG_WEB, "WebServer startWithTask on %s:%d - %s",
              inet_ntoa(ip_info.ip), port, success ? "SUCCESS" : "FAIL/ TIMEOUT");
 
