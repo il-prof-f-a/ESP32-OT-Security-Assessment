@@ -2,6 +2,9 @@ Import("env")
 
 import os
 import shutil
+from pathlib import Path
+
+from p4_sdkconfig import normalize_p4_sdkconfig
 
 
 def _first_existing(paths):
@@ -9,6 +12,18 @@ def _first_existing(paths):
         if p and os.path.isdir(p):
             return p
     return None
+
+
+def _normalize_persistent_p4_sdkconfig():
+    """Repair a stale, ignored ESP-IDF config before CMake reads it."""
+    project_dir = Path(env.subst("$PROJECT_DIR"))
+    environment = env.subst("$PIOENV")
+    sdkconfig_path = project_dir / f"sdkconfig.{environment}"
+    if normalize_p4_sdkconfig(environment, sdkconfig_path):
+        print(
+            "[p4-toolchain-fix] normalized flash capacity in %s"
+            % sdkconfig_path
+        )
 
 
 def _has_riscv_gcc(bin_dir):
@@ -300,4 +315,5 @@ def _patch_missing_idf_package_dirs():
 
 
 _patch_missing_idf_package_dirs()
+_normalize_persistent_p4_sdkconfig()
 _fix_riscv_toolchain_layout()

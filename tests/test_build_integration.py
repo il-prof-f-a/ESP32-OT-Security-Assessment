@@ -559,11 +559,22 @@ class BuildIntegrationTests(unittest.TestCase):
         self.assertIn("idf_build_set_property(COMPILE_OPTIONS", workaround)
         self.assertIn('string(FIND "${_source_prefix}" " "', workaround)
 
-    def test_native_p4_profile_uses_the_board_flash_capacity(self):
+    def test_waveshare_p4_profile_uses_the_documented_32mb_flash_capacity(self):
         defaults = (PROJECT_ROOT / "sdkconfig.esp32p4.defaults").read_text(encoding="utf-8")
+        platformio = (PROJECT_ROOT / "platformio.ini").read_text(encoding="utf-8")
+        metadata = json.loads(
+            (PROJECT_ROOT / "boards/waveshare-esp32p4-eth.json").read_text(
+                encoding="utf-8"
+            )
+        )
         gitignore = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
 
-        self.assertIn("CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y", defaults)
+        waveshare = platformio.split("[env:waveshare-esp32p4-eth]", 1)[1].split(
+            "[env:", 1
+        )[0]
+        self.assertIn("CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y", defaults)
+        self.assertIn("board_build.flash_size = 32MB", waveshare)
+        self.assertEqual(metadata["upload"]["flash_size"], "32MB")
         self.assertRegex(gitignore, r"(?m)^/sdkconfig$")
 
     def test_native_p4_profile_uses_current_esp_idf_kconfig_names(self):

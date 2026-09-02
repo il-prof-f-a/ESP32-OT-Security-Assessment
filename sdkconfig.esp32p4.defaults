@@ -6,8 +6,10 @@ CONFIG_COMPILER_HIDE_PATHS_MACROS=y
 # PlatformIO builder still generates the pre-v3 sections linker template.
 CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
 
-# Partition table
-CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+# Flash capacity. This must agree with the Waveshare ESP32-P4-ETH board
+# definition and PlatformIO environment; the standard board carries 32 MB NOR
+# flash. The partition table intentionally uses only its first 16 MB.
+CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
