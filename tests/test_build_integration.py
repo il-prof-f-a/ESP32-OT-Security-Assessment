@@ -810,7 +810,9 @@ class BuildIntegrationTests(unittest.TestCase):
         main = (PROJECT_ROOT / "src/main.cpp").read_text(encoding="utf-8")
 
         self.assertIn("size_t initial_internal_free =", main)
-        self.assertEqual(main.count("size_t internal_free ="), 2)
+        self.assertEqual(main.count("size_t internal_free ="), 1)
+        self.assertIn("#ifdef CONFIG_SPIRAM", main)
+        self.assertIn("PSRAM support disabled; AsyncStorage will use internal RAM fallback", main)
 
     def test_littlefs_seed_directory_exists_for_native_builds(self):
         cmake = (PROJECT_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")

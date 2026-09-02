@@ -2,6 +2,7 @@
 #include "logging_system.h"
 #include "task_config.h"
 #include "async_storage_engine.h"
+#include "psram_allocator.h"
 #include <sys/stat.h>
 #include <cstdio>
 #include <cstring>
@@ -93,7 +94,7 @@ bool FilesystemTaskDelegate::initialize() {
     }
 
     // Create hybrid PSRAM-backed streaming infrastructure
-    psram_ring_buffer_ = (uint8_t*)heap_caps_malloc(PSRAM_RING_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    psram_ring_buffer_ = (uint8_t*)PSRAMUtils::allocatePreferred(PSRAM_RING_SIZE);
     if (!psram_ring_buffer_) {
         LOG_ERROR(TAG, "Failed to allocate PSRAM ring buffer");
         vQueueDelete(request_queue_);

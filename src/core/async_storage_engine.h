@@ -167,7 +167,8 @@ struct Operation {
     nvs_open_mode_t nvs_mode = NVS_READONLY;
     uint32_t nvs_handle = 0;  // For operations that need existing handle
 
-    // Constructor - CRITICAL FIX: Allocate raw char* buffers in PSRAM
+    // Constructor - keep raw buffers external-RAM-first, with an internal-RAM
+    // fallback for builds that intentionally omit CONFIG_SPIRAM.
     Operation(OpType op_type, const std::string& ns_path, const std::string& key_subpath = "")
         : type(op_type), namespace_or_path_raw(nullptr), key_or_subpath_raw(nullptr) {
         // Point directly to aligned inline storage - no atomic operations
@@ -183,10 +184,9 @@ struct Operation {
         debug_id = detail::nextDebugId();
         debug_source = "unset";
 
-        // CRITICAL: Allocate PSRAM char* buffers instead of psram_string to prevent corruption
         if (!ns_path.empty()) {
             size_t ns_len = ns_path.length() + 1;
-            namespace_or_path_raw = (char*)heap_caps_malloc(ns_len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            namespace_or_path_raw = static_cast<char*>(PSRAMUtils::allocatePreferred(ns_len));
             if (namespace_or_path_raw) {
                 memcpy(namespace_or_path_raw, ns_path.c_str(), ns_len);
             }
@@ -194,7 +194,7 @@ struct Operation {
 
         if (!key_subpath.empty()) {
             size_t key_len = key_subpath.length() + 1;
-            key_or_subpath_raw = (char*)heap_caps_malloc(key_len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            key_or_subpath_raw = static_cast<char*>(PSRAMUtils::allocatePreferred(key_len));
             if (key_or_subpath_raw) {
                 memcpy(key_or_subpath_raw, key_subpath.c_str(), key_len);
             }

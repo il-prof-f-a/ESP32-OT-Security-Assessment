@@ -34,6 +34,20 @@ namespace PSRAMUtils {
 
     void logMemoryStatus(const char* context);
     void emergencyCleanup(const char* caller = "Unknown");
+
+    // Prefer external RAM on boards that provide it, but keep core services
+    // usable on profiles without CONFIG_SPIRAM.  heap_caps_malloc() requires
+    // all requested capabilities and therefore cannot express this fallback.
+    inline void* allocatePreferred(size_t bytes,
+                                   uint32_t preferred_caps = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT,
+                                   uint32_t fallback_caps = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) {
+        if (bytes == 0) return nullptr;
+        void* ptr = heap_caps_malloc(bytes, preferred_caps);
+        if (!ptr && (preferred_caps & MALLOC_CAP_SPIRAM)) {
+            ptr = heap_caps_malloc(bytes, fallback_caps);
+        }
+        return ptr;
+    }
 }
 
 // PSRAM allocator for STL containers to reduce Internal RAM usage
@@ -67,14 +81,14 @@ public:
 
         const size_type bytes = n * sizeof(T);
 
-        void* ptr = heap_caps_malloc_prefer(bytes, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        void* ptr = PSRAMUtils::allocatePreferred(bytes);
         if (!ptr) {
-            LOG_ERRORF("PSRAMAllocator", "PSRAM allocation failed for %u bytes", (unsigned)bytes);
+            LOG_ERRORF("PSRAMAllocator", "External/internal allocation failed for %u bytes", (unsigned)bytes);
             PSRAMUtils::logMemoryStatus("PSRAMAllocator::allocate");
             PSRAMUtils::emergencyCleanup("PSRAMAllocator::allocate");
-            ptr = heap_caps_malloc_prefer(bytes, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            ptr = PSRAMUtils::allocatePreferred(bytes);
             if (!ptr) {
-                LOG_ERRORF("PSRAMAllocator", "Unable to allocate %u bytes in PSRAM after cleanup", (unsigned)bytes);
+                LOG_ERRORF("PSRAMAllocator", "Unable to allocate %u bytes after cleanup", (unsigned)bytes);
                 abort();
             }
         }
@@ -365,6 +379,10 @@ namespace PSRAMUtils {
                 return;
             }
             ptr_ = static_cast<char*>(heap_caps_malloc(size_, caps_));
+            if (!ptr_ && (caps_ & MALLOC_CAP_SPIRAM)) {
+                ptr_ = static_cast<char*>(heap_caps_malloc(
+                    size_, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+            }
             if (ptr_) {
                 ptr_[0] = '\0';
             }
@@ -482,7 +500,7 @@ namespace PSRAMUtils {
 
     namespace detail {
         inline void* cjson_psram_malloc(size_t size) {
-            void* ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            void* ptr = allocatePreferred(size);
             if (!ptr) {
                 LOG_DEBUGF("PSRAMUtils", "cJSON PSRAM malloc failed for %u bytes", (unsigned)size);
             }

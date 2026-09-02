@@ -10,6 +10,7 @@
 #include "logging_system.h"
 #include "task_alloc_helpers.h"
 #include "task_config.h"
+#include "psram_allocator.h"
 #include "../network/assessment_interface.h"
 
 extern "C" {
@@ -66,8 +67,8 @@ bool NetworkEngine::initialize(esp_netif* /*netif*/, const NetRingConfig& rcfg){
     //LOG_INFOF("NetEngine", "Ring buffers allocated in PSRAM (%u slots x %u bytes = %u KB)",  (unsigned)ring_.size(), rcfg.buf_size, (unsigned)(ring_.size() * rcfg.buf_size / 1024));
 
     // Allocate PSRAM packet buffers for callbacks to avoid stack allocation
-    packet_buffer_udp_ = (uint8_t*)heap_caps_malloc(1600, MALLOC_CAP_SPIRAM);
-    packet_buffer_tcp_ = (uint8_t*)heap_caps_malloc(1600, MALLOC_CAP_SPIRAM);
+    packet_buffer_udp_ = (uint8_t*)PSRAMUtils::allocatePreferred(1600);
+    packet_buffer_tcp_ = (uint8_t*)PSRAMUtils::allocatePreferred(1600);
     buffer_mutex_ = xSemaphoreCreateMutex();
 
     if (!packet_buffer_udp_ || !packet_buffer_tcp_ || !buffer_mutex_) {

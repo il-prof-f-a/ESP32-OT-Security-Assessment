@@ -10,7 +10,7 @@ static const char* TAG_STORAGE = "AsyncStorage";
 static char* allocate_psram_string(const char* str) {
     if (!str) return nullptr;
     size_t len = strlen(str) + 1;
-    char* psram_str = (char*)heap_caps_malloc(len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    char* psram_str = (char*)PSRAMUtils::allocatePreferred(len);
     if (psram_str) {
         memcpy(psram_str, str, len);
     }
@@ -1161,9 +1161,9 @@ void Engine::executeAsyncOperation(Operation* op) {
 
 // Helper function to create Operation in PSRAM with proper memory management
 Operation* Engine::createOperationInPSRAM(OpType type, const std::string& ns_or_path, const std::string& key_or_subpath) {
-    void* op_mem = heap_caps_malloc(sizeof(Operation), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    void* op_mem = PSRAMUtils::allocatePreferred(sizeof(Operation));
     if (!op_mem) {
-        LOG_ERRORF("AsyncStorage", "Failed to allocate PSRAM for Operation");
+        LOG_ERRORF("AsyncStorage", "Failed to allocate external/internal RAM for Operation");
         return nullptr;
     }
     auto* op = new (op_mem) Operation(type, ns_or_path, key_or_subpath);
@@ -1172,9 +1172,9 @@ Operation* Engine::createOperationInPSRAM(OpType type, const std::string& ns_or_
 }
 
 Operation* Engine::createOperationInPSRAM(OpType type, const std::string& ns_or_path) {
-    void* op_mem = heap_caps_malloc(sizeof(Operation), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    void* op_mem = PSRAMUtils::allocatePreferred(sizeof(Operation));
     if (!op_mem) {
-        LOG_ERRORF("AsyncStorage", "Failed to allocate PSRAM for Operation");
+        LOG_ERRORF("AsyncStorage", "Failed to allocate external/internal RAM for Operation");
         return nullptr;
     }
     auto* op = new (op_mem) Operation(type, ns_or_path);
@@ -1622,14 +1622,14 @@ esp_err_t Engine::fileWriteRaw(const std::string& path, const void* data, size_t
     auto* op = createOperationInPSRAM(OpType::FS_WRITE_RAW, std::string(), std::string());
     if (op) { op->setDebugSource(__func__); }
     if (!op) { return ESP_ERR_NO_MEM; }
-    void* ps = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    void* ps = PSRAMUtils::allocatePreferred(size);
     if (!ps) { finalize_sync_operation(op); return ESP_ERR_NO_MEM; }
     std::memcpy(ps, data, size);
     op->raw_buf = ps;
     op->raw_size = size;
-    // PSRAM copy of path to avoid std::string allocation inside Operation
+    // External-RAM-first copy of path to avoid std::string allocation inside Operation
     size_t plen = path.size();
-    op->raw_path = (char*)heap_caps_malloc(plen+1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    op->raw_path = static_cast<char*>(PSRAMUtils::allocatePreferred(plen + 1));
     if (!op->raw_path) {
         heap_caps_free(ps);
         op->raw_buf = nullptr;
@@ -1647,13 +1647,13 @@ esp_err_t Engine::fileAppendRaw(const std::string& path, const void* data, size_
     auto* op = createOperationInPSRAM(OpType::FS_APPEND_RAW, std::string(), std::string());
     if (op) { op->setDebugSource(__func__); }
     if (!op) { return ESP_ERR_NO_MEM; }
-    void* ps = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    void* ps = PSRAMUtils::allocatePreferred(size);
     if (!ps) { finalize_sync_operation(op); return ESP_ERR_NO_MEM; }
     std::memcpy(ps, data, size);
     op->raw_buf = ps;
     op->raw_size = size;
     size_t plen = path.size();
-    op->raw_path = (char*)heap_caps_malloc(plen+1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    op->raw_path = static_cast<char*>(PSRAMUtils::allocatePreferred(plen + 1));
     if (!op->raw_path) {
         heap_caps_free(ps);
         op->raw_buf = nullptr;

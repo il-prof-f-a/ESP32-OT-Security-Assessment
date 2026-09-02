@@ -291,23 +291,24 @@ extern "C" void app_main(void) {
     startup_rollback.track(&rollback_littlefs, &littlefs_rollback_mounted);
 
     // SECOND: Pre-initialization memory safety checks for AsyncStorage
-    size_t internal_free = TaskConfig::getRealInternalRAMFree();
+    size_t pre_async_internal_free = TaskConfig::getRealInternalRAMFree();
     size_t psram_free = TaskConfig::getRealPSRAMFree();
 
-    LOG_INFOF(TAG, "Pre-AsyncStorage memory: Internal=%d, PSRAM=%d", (int)internal_free, (int)psram_free);
+    LOG_INFOF(TAG, "Pre-AsyncStorage memory: Internal=%d, PSRAM=%d", (int)pre_async_internal_free, (int)psram_free);
 
     // Ensure minimum memory thresholds before AsyncStorage initialization
-    if (internal_free < 32768) { // 32KB minimum for AsyncStorage internal structures
-        LOG_ERRORF(TAG, "Insufficient internal RAM (%d bytes) for AsyncStorage", (int)internal_free);
+    if (pre_async_internal_free < 32768) { // 32KB minimum for AsyncStorage internal structures
+        LOG_ERRORF(TAG, "Insufficient internal RAM (%d bytes) for AsyncStorage", (int)pre_async_internal_free);
         TaskConfig::emergencyMemoryCleanup();
-        internal_free = TaskConfig::getRealInternalRAMFree();
-        if (internal_free < 32768) {
+        pre_async_internal_free = TaskConfig::getRealInternalRAMFree();
+        if (pre_async_internal_free < 32768) {
             LOG_ERROR(TAG, "CRITICAL: Cannot initialize AsyncStorage - memory crisis");
             rollback_startup("internal RAM crisis before AsyncStorage");
             return;
         }
     }
 
+#ifdef CONFIG_SPIRAM
     if (psram_free < 65536) { // 64KB minimum for AsyncStorage PSRAM operations
         LOG_ERRORF(TAG, "Insufficient PSRAM (%d bytes) for AsyncStorage", (int)psram_free);
         TaskConfig::emergencyPSRAMCleanup();
@@ -318,10 +319,18 @@ extern "C" void app_main(void) {
             return;
         }
     }
+#else
+    // The allocator and storage paths fall back to internal 8-bit RAM when
+    // CONFIG_SPIRAM is absent.  Do not reject the boot solely because the
+    // optional external heap is unavailable.
+    LOG_WARNING(TAG, "PSRAM support disabled; AsyncStorage will use internal RAM fallback");
+#endif
 
     // Force memory alignment and defragmentation before AsyncStorage initialization
     TaskConfig::forceHeapDefragmentation();
+#ifdef CONFIG_SPIRAM
     TaskConfig::forcePSRAMDefragmentation();
+#endif
 
     MemorySnapshot mem_before_async = MemoryMonitor::capture();
 

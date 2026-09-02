@@ -260,13 +260,7 @@ public:
         if (json_size == 0) return nullptr;
 
         // Allocate in PSRAM with DRAM fallback
-        char* psram_buffer = (char*)heap_caps_malloc(json_size + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!psram_buffer) {
-            // Fallback to DRAM only for small configs
-            if (json_size < 4096) {
-                psram_buffer = (char*)heap_caps_malloc(json_size + 1, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-            }
-        }
+        char* psram_buffer = static_cast<char*>(PSRAMUtils::allocatePreferred(json_size + 1));
 
         if (psram_buffer) {
             memcpy(psram_buffer, raw_.c_str(), json_size);

@@ -400,6 +400,9 @@ bool isMemoryInCriticalState() {
 }
 
 bool isPSRAMInCriticalState() {
+    if (heap_caps_get_total_size(MALLOC_CAP_SPIRAM) == 0) {
+        return false;
+    }
     size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
     size_t largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
 
@@ -486,6 +489,9 @@ MemoryFragmentationReport getMemoryFragmentationReport() {
 }
 
 void forcePSRAMDefragmentation() {
+    if (heap_caps_get_total_size(MALLOC_CAP_SPIRAM) == 0) {
+        return;
+    }
     // Step 1: Check PSRAM heap integrity
     heap_caps_check_integrity(MALLOC_CAP_SPIRAM, true);
 

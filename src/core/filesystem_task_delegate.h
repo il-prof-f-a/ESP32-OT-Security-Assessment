@@ -36,8 +36,14 @@ public:
     // Max chunk size for streaming (fits comfortably in internal RAM queue items)
     static constexpr size_t STREAM_CHUNK_MAX = 1024;
 
-    // Hybrid PSRAM-backed Ring Buffer Configuration
-    static constexpr size_t PSRAM_RING_SIZE = 128 * 1024;  // 128KB ring buffer in PSRAM
+    // Hybrid external-RAM-backed ring buffer.  A reduced internal-RAM profile
+    // keeps the delegate usable when CONFIG_SPIRAM is absent without changing
+    // the 128 KiB capacity on the supported PSRAM boards.
+#ifdef CONFIG_SPIRAM
+    static constexpr size_t PSRAM_RING_SIZE = 128 * 1024;
+#else
+    static constexpr size_t PSRAM_RING_SIZE = 16 * 1024;
+#endif
     static constexpr size_t DRAM_STAGING_SIZE = 2048;      // 2KB staging buffer in DRAM
     static constexpr size_t CIRCULAR_QUEUE_SIZE = 16;      // Circular descriptor queue size
     static constexpr const char* EOF_SENTINEL = "EOF_SENTINEL";

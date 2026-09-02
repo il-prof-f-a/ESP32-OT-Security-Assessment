@@ -3,6 +3,7 @@
 #include "task_alloc_helpers.h"
 #include "task_config.h"
 #include "time_manager.h"
+#include "psram_allocator.h"
 
 #include <cstdio>
 #include <ctime>
@@ -123,7 +124,7 @@ bool Logger::init_async(size_t ring_bytes) {
     const size_t ring_size = ring_bytes ? ring_bytes : DEFAULT_RING_BYTES;
 
     // Allocate buffer storage in PSRAM
-    uint8_t* ring_storage = (uint8_t*)heap_caps_malloc(ring_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    uint8_t* ring_storage = (uint8_t*)PSRAMUtils::allocatePreferred(ring_size);
 
     // Allocate control structure in DRAM (required by xRingbufferCreateStatic)
     StaticRingbuffer_t* ring_struct = (StaticRingbuffer_t*)malloc(sizeof(StaticRingbuffer_t));

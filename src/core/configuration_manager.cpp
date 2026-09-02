@@ -1420,12 +1420,7 @@ char* ConfigurationManager::getEmbeddedConfigInPSRAM(size_t* size_out) const {
     *size_out = config_len;
     if (config_len == 0) return nullptr;
 
-    char* buffer = static_cast<char*>(heap_caps_malloc(
-        config_len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (!buffer && config_len < 4096) {
-        buffer = static_cast<char*>(heap_caps_malloc(
-            config_len + 1, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
-    }
+    char* buffer = static_cast<char*>(PSRAMUtils::allocatePreferred(config_len + 1));
     if (!buffer) {
         *size_out = 0;
         return nullptr;
