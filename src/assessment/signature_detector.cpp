@@ -459,16 +459,13 @@ uint32_t SignatureDetector::parseProtocolSignatures(cJSON* protocol_obj, Protoco
             protocol_signatures.push_back(sig);
             count++;
 
-            LOG_INFOF(TAG, "Loaded signature %s: %s (%s, %d bytes)",
-                     sig.cve_id,
-                     sig.name[0] ? sig.name : "No name",
-                     (sig.type == PatternType::EXACT_MATCH) ? "exact" : "prefix",
-                     sig.pattern_length);
         }
     }
 
     if (count > 0) {
         signatures_[protocol] = std::move(protocol_signatures);
+        LOG_INFOF(TAG, "Loaded %lu signatures for protocol %d",
+                  (unsigned long)count, static_cast<int>(protocol));
     }
 
     return count;

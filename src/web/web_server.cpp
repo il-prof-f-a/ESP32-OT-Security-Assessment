@@ -25,6 +25,7 @@
 #include "../core/time_manager.h"
 #include "../core/filesystem_task_delegate.h"
 #include "../core/log_retention.h"
+#include "../core/main_task_watchdog.h"
 #include "../network/ethernet_manager.h"
 #include "../network/assessment_interface.h"
 #include "../network/icmp_ping.h"
@@ -316,6 +317,10 @@ void webserver_httpd_monitor_note_response(httpd_req_t* req, int status_code, co
     WebServer::httpdMonitorNoteResponse(req, status_code, auth_status);
 }
 
+void webserver_httpd_monitor_note_progress(httpd_req_t* req) {
+    WebServer::httpdMonitorNoteProgress(req);
+}
+
 void WebServer::httpdMonitorReset() {
     HttpdMonitorData& mon = httpd_monitor_;
 
@@ -341,6 +346,7 @@ void WebServer::httpdMonitorReset() {
     const uint64_t now_ms = esp_timer_get_time() / 1000ULL;
     mon.last_request_ms.store(now_ms, std::memory_order_relaxed);
     mon.last_response_ms.store(now_ms, std::memory_order_relaxed);
+    mon.last_progress_ms.store(now_ms, std::memory_order_relaxed);
 
     {
         std::lock_guard<std::mutex> lock(mon.uri_mutex);
@@ -427,6 +433,12 @@ void WebServer::httpdMonitorNoteResponse(httpd_req_t* req,
     mon.watchdog_triggered.store(0, std::memory_order_relaxed);
 }
 
+void WebServer::httpdMonitorNoteProgress(httpd_req_t* /*req*/) {
+    httpd_monitor_.last_progress_ms.store(esp_timer_get_time() / 1000ULL,
+                                          std::memory_order_relaxed);
+    httpd_monitor_.watchdog_triggered.store(0, std::memory_order_relaxed);
+}
+
 void WebServer::httpdMonitorStart() {
     httpdMonitorReset();
 
@@ -465,11 +477,15 @@ void WebServer::httpdMonitorTimerCallback(void* /*arg*/) {
     const uint64_t now_ms = esp_timer_get_time() / 1000ULL;
     const uint64_t last_request = mon.last_request_ms.load(std::memory_order_relaxed);
     const uint64_t last_resp = mon.last_response_ms.load(std::memory_order_relaxed);
+    const uint64_t last_progress = mon.last_progress_ms.load(std::memory_order_relaxed);
     const int32_t inflight = mon.inflight_requests.load(std::memory_order_relaxed);
 
     uint64_t reference_ms = last_resp;
     if (inflight > 0 && last_request > reference_ms) {
         reference_ms = last_request;
+    }
+    if (inflight > 0 && last_progress > reference_ms) {
+        reference_ms = last_progress;
     }
 
     const bool stalled =
@@ -483,7 +499,7 @@ void WebServer::httpdMonitorTimerCallback(void* /*arg*/) {
             mon.stall_count.fetch_add(1, std::memory_order_relaxed);
             mon.last_stall_ms.store(now_ms, std::memory_order_relaxed);
             LOG_WARNINGF("HTTPD_MON",
-                         "HTTP server watchdog triggered: inflight=%d, response gap=%llu ms",
+                         "HTTP server watchdog triggered: inflight=%d, progress gap=%llu ms",
                          (int)inflight,
                          (unsigned long long)(now_ms - reference_ms));
         }
@@ -2251,6 +2267,36 @@ static esp_err_t send_chunked_from_psram(httpd_req_t* req, const char* psram_dat
 
 
     return result;
+}
+
+// Transfer one descriptor from the filesystem PSRAM ring.  Unlike the generic
+// response helper, this deliberately does not emit a chunked-response
+// terminator: a log stream contains many descriptors and must terminate once
+// only after EOF.
+static esp_err_t send_psram_descriptor_chunk(httpd_req_t* req,
+                                              const char* psram_data,
+                                              size_t data_len) {
+    if (!req || !psram_data || data_len == 0 || !g_chunk_buffer_mutex || !g_chunk_buffer) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    size_t offset = 0;
+    while (offset < data_len) {
+        const size_t chunk_len = std::min(static_cast<size_t>(CHUNK_BUFFER_SIZE), data_len - offset);
+        if (xSemaphoreTake(g_chunk_buffer_mutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
+            LOG_ERROR(TAG_WEB, "Failed to acquire chunk buffer for log streaming");
+            return ESP_FAIL;
+        }
+        memcpy(g_chunk_buffer, psram_data + offset, chunk_len);
+        const esp_err_t result = httpd_resp_send_chunk(req, g_chunk_buffer, chunk_len);
+        xSemaphoreGive(g_chunk_buffer_mutex);
+        if (result != ESP_OK) {
+            return result;
+        }
+        webserver_httpd_monitor_note_progress(req);
+        offset += chunk_len;
+    }
+    return ESP_OK;
 }
 
 // Forward declaration of the optimized version
@@ -8070,20 +8116,20 @@ esp_err_t WebServer::h_logs_get(httpd_req_t* req) {
 
         if (desc->length > 0 && stream_rc == ESP_OK) {
             if (desc->offset + desc->length <= FilesystemTaskDelegate::PSRAM_RING_SIZE) {
-                stream_rc = send_chunked_from_psram(req,
-                                                    reinterpret_cast<const char*>(&psram_ring[desc->offset]),
-                                                    desc->length);
+                stream_rc = send_psram_descriptor_chunk(req,
+                                                        reinterpret_cast<const char*>(&psram_ring[desc->offset]),
+                                                        desc->length);
             } else {
                 uint32_t first_part = FilesystemTaskDelegate::PSRAM_RING_SIZE - desc->offset;
                 uint32_t second_part = desc->length - first_part;
 
-                stream_rc = send_chunked_from_psram(req,
-                                                    reinterpret_cast<const char*>(&psram_ring[desc->offset]),
-                                                    first_part);
+                stream_rc = send_psram_descriptor_chunk(req,
+                                                        reinterpret_cast<const char*>(&psram_ring[desc->offset]),
+                                                        first_part);
                 if (stream_rc == ESP_OK && second_part > 0) {
-                    stream_rc = send_chunked_from_psram(req,
-                                                        reinterpret_cast<const char*>(&psram_ring[0]),
-                                                        second_part);
+                    stream_rc = send_psram_descriptor_chunk(req,
+                                                            reinterpret_cast<const char*>(&psram_ring[0]),
+                                                            second_part);
                 }
             }
 
@@ -8251,7 +8297,8 @@ esp_err_t WebServer::h_logs_download(httpd_req_t* req) {
     snprintf(disposition, sizeof(disposition), "attachment; filename=\"%s\"", filename);
     httpd_resp_set_hdr(req, "Content-Disposition", disposition);
 
-    // PSRAM streaming loop (enhanced with consumer-side logging)
+    // PSRAM streaming loop.  Each descriptor is copied through the internal
+    // chunk buffer; direct PSRAM pointers are unsafe for the HTTP socket path.
     uint8_t* psram_ring = fs_delegate.getPSRAMRingBuffer();
     size_t total_sent = 0;
     uint32_t chunk_count = 0;
@@ -8260,45 +8307,34 @@ esp_err_t WebServer::h_logs_download(httpd_req_t* req) {
     LOG_INFOF("LOGS_DOWNLOAD", "Starting PSRAM streaming loop for %s", log_path);
 
     while (true) {
-        LOG_INFOF("LOGS_DOWNLOAD", "Consumer waiting for descriptor (attempt %u)", chunk_count + 1);
         FilesystemTaskDelegate::RingDescriptor* desc = fs_delegate.getNextDescriptor(30000); // 30s timeout
         if (!desc) {
             LOG_WARNINGF("LOGS_DOWNLOAD", "Consumer timeout after %u chunks, %zu bytes", chunk_count, total_sent);
+            send_rc = ESP_ERR_TIMEOUT;
             break;
         }
-        LOG_INFOF("LOGS_DOWNLOAD", "Consumer received descriptor: offset=%u, length=%u, eof=%s",
-                  desc->offset, desc->length, desc->eof ? "true" : "false");
 
         chunk_count++;
-        //LOG_DEBUGF("LOGS_DOWNLOAD", "Consumer got chunk %u: offset=%u, length=%u, eof=%s, seq=%u", chunk_count, desc->offset, desc->length, desc->eof ? "true" : "false", desc->sequence);
 
         if (desc->length > 0) {
-            // CRITICAL FIX: Handle wrap-around - chunk might wrap around ring buffer
             if (desc->offset + desc->length <= FilesystemTaskDelegate::PSRAM_RING_SIZE) {
-                // No wrap-around: send data in one piece
-                send_rc = httpd_resp_send_chunk(req, (const char*)&psram_ring[desc->offset], desc->length);
-                if (send_rc != ESP_OK) {
-                    LOG_ERRORF("LOGS_DOWNLOAD", "HTTP send failed on chunk %u (err=%d)", chunk_count, (int)send_rc);
-                    fs_delegate.markDescriptorConsumed(desc);
-                    break;
-                }
+                send_rc = send_psram_descriptor_chunk(req,
+                                                      reinterpret_cast<const char*>(&psram_ring[desc->offset]),
+                                                      desc->length);
             } else {
-                // Wrap-around: send in two parts
                 uint32_t first_part = FilesystemTaskDelegate::PSRAM_RING_SIZE - desc->offset;
                 uint32_t second_part = desc->length - first_part;
-
-                // Send first part (from offset to end of ring)
-                send_rc = httpd_resp_send_chunk(req, (const char*)&psram_ring[desc->offset], first_part);
+                send_rc = send_psram_descriptor_chunk(req,
+                                                      reinterpret_cast<const char*>(&psram_ring[desc->offset]),
+                                                      first_part);
                 if (send_rc == ESP_OK) {
-                    // Send second part (from start of ring)
-                    send_rc = httpd_resp_send_chunk(req, (const char*)&psram_ring[0], second_part);
+                    send_rc = send_psram_descriptor_chunk(req,
+                                                          reinterpret_cast<const char*>(&psram_ring[0]),
+                                                          second_part);
                 }
-
-                if (send_rc != ESP_OK) {
-                    LOG_ERRORF("LOGS_DOWNLOAD", "HTTP send failed on wrapped chunk %u (err=%d)", chunk_count, (int)send_rc);
-                    fs_delegate.markDescriptorConsumed(desc);
-                    break;
-                }
+            }
+            if (send_rc != ESP_OK) {
+                LOG_ERRORF("LOGS_DOWNLOAD", "HTTP send failed on chunk %u (err=%d)", chunk_count, (int)send_rc);
             }
             total_sent += desc->length;
         }
@@ -8306,8 +8342,7 @@ esp_err_t WebServer::h_logs_download(httpd_req_t* req) {
         bool is_eof = desc->eof;
         fs_delegate.markDescriptorConsumed(desc);
 
-        if (is_eof) {
-            LOG_INFOF("LOGS_DOWNLOAD", "EOF reached after %u chunks, %zu bytes", chunk_count, total_sent);
+        if (is_eof || send_rc != ESP_OK) {
             break;
         }
 
@@ -10316,8 +10351,10 @@ esp_err_t WebServer::h_api_httpd_stats(httpd_req_t* req) {
     const uint64_t now_ms = esp_timer_get_time() / 1000ULL;
     const uint64_t last_request_ms = mon.last_request_ms.load(std::memory_order_relaxed);
     const uint64_t last_response_ms = mon.last_response_ms.load(std::memory_order_relaxed);
+    const uint64_t last_progress_ms = mon.last_progress_ms.load(std::memory_order_relaxed);
     const uint64_t delta_request = (now_ms > last_request_ms) ? (now_ms - last_request_ms) : 0ULL;
     const uint64_t delta_response = (now_ms > last_response_ms) ? (now_ms - last_response_ms) : 0ULL;
+    const uint64_t delta_progress = (now_ms > last_progress_ms) ? (now_ms - last_progress_ms) : 0ULL;
 
     cJSON_AddNumberToObject(root, "total_requests", static_cast<double>(mon.total_requests.load(std::memory_order_relaxed)));
     cJSON_AddNumberToObject(root, "total_responses", static_cast<double>(mon.total_responses.load(std::memory_order_relaxed)));
@@ -10328,8 +10365,10 @@ esp_err_t WebServer::h_api_httpd_stats(httpd_req_t* req) {
     cJSON_AddBoolToObject(root, "watchdog_triggered", mon.watchdog_triggered.load(std::memory_order_relaxed) != 0);
     cJSON_AddNumberToObject(root, "last_request_timestamp_ms", static_cast<double>(last_request_ms));
     cJSON_AddNumberToObject(root, "last_response_timestamp_ms", static_cast<double>(last_response_ms));
+    cJSON_AddNumberToObject(root, "last_progress_timestamp_ms", static_cast<double>(last_progress_ms));
     cJSON_AddNumberToObject(root, "time_since_last_request_ms", static_cast<double>(delta_request));
     cJSON_AddNumberToObject(root, "time_since_last_response_ms", static_cast<double>(delta_response));
+    cJSON_AddNumberToObject(root, "time_since_last_progress_ms", static_cast<double>(delta_progress));
 
     cJSON* methods = cJSON_CreateObject();
     if (methods) {
@@ -11090,12 +11129,33 @@ esp_err_t WebServer::h_watchdog_config_get(httpd_req_t* req) {
     if (!check_api_auth(req)) return httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "auth");
 
     auto watchdog_config = self_->cfg_->getWatchdogConfig();
+    const bool boot_snapshot_available = MainTaskWatchdog::hasBootConfiguration();
+    const uint32_t effective_timeout = boot_snapshot_available
+        ? MainTaskWatchdog::bootEffectiveTimeoutSeconds()
+        : MainTaskWatchdog::normalizeTimeoutSeconds(watchdog_config.timeout_seconds);
+    const bool configuration_pending_restart = boot_snapshot_available &&
+        (watchdog_config.enabled != MainTaskWatchdog::bootEnabled() ||
+         MainTaskWatchdog::normalizeTimeoutSeconds(watchdog_config.timeout_seconds) != effective_timeout ||
+         watchdog_config.panic_on_timeout != MainTaskWatchdog::bootPanicOnTimeout() ||
+         watchdog_config.monitor_idle_cores != MainTaskWatchdog::bootMonitorIdleCores());
 
     cJSON* response = cJSON_CreateObject();
     cJSON_AddBoolToObject(response, "enabled", watchdog_config.enabled);
     cJSON_AddNumberToObject(response, "timeout_seconds", watchdog_config.timeout_seconds);
+    cJSON_AddNumberToObject(response, "effective_timeout_seconds", effective_timeout);
+    cJSON_AddBoolToObject(response, "active_at_boot", boot_snapshot_available);
+    cJSON_AddBoolToObject(response, "effective_enabled", boot_snapshot_available
+        ? MainTaskWatchdog::bootEnabled() : watchdog_config.enabled);
+    cJSON_AddNumberToObject(response, "requested_timeout_seconds_at_boot", boot_snapshot_available
+        ? MainTaskWatchdog::bootRequestedTimeoutSeconds() : watchdog_config.timeout_seconds);
     cJSON_AddBoolToObject(response, "panic_on_timeout", watchdog_config.panic_on_timeout);
     cJSON_AddBoolToObject(response, "monitor_idle_cores", watchdog_config.monitor_idle_cores);
+    cJSON_AddStringToObject(response, "configuration_source",
+                            self_->cfg_->getConfigSourceName().c_str());
+    cJSON_AddStringToObject(response, "configuration_storage", "filesystem");
+    cJSON_AddBoolToObject(response, "configuration_pending_restart", configuration_pending_restart);
+    cJSON_AddBoolToObject(response, "restart_required", configuration_pending_restart);
+    cJSON_AddBoolToObject(response, "restart_required_for_changes", true);
 
     char* json_str = cJSON_Print(response);
     cJSON_Delete(response);

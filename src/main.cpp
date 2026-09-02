@@ -207,7 +207,7 @@ extern "C" void app_main(void) {
     // g_logger with this local static, orphaning the first writer task.
     static Logger logger;
     g_logger = &logger;
-    if (!Logger::init_async(8*1024)) {
+    if (!Logger::init_async(Logger::startupRingBytes())) {
         std::printf("[MAIN] Logger initialization failed; aborting startup\n");
         return;
     }
@@ -519,6 +519,15 @@ extern "C" void app_main(void) {
     // Keep the boot snapshot: saving config must not stop feeding a subscribed task.
     const uint32_t configured_timeout = wdt_cfg.timeout_seconds;
     wdt_cfg.timeout_seconds = MainTaskWatchdog::normalizeTimeoutSeconds(configured_timeout);
+    MainTaskWatchdog::recordBootConfiguration(wdt_cfg.enabled,
+                                               configured_timeout,
+                                               wdt_cfg.timeout_seconds,
+                                               wdt_cfg.panic_on_timeout,
+                                               wdt_cfg.monitor_idle_cores);
+    LOG_INFOF(TAG, "Task Watchdog effective configuration: source=%s, requested_timeout=%lus, effective_timeout=%lus",
+              cfg.getConfigSourceName().c_str(),
+              (unsigned long)configured_timeout,
+              (unsigned long)wdt_cfg.timeout_seconds);
     if (wdt_cfg.enabled) {
         if (configured_timeout != wdt_cfg.timeout_seconds) {
             LOG_WARNINGF(TAG, "Task Watchdog timeout adjusted from %lus to %lus",

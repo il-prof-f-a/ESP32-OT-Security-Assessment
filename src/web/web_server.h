@@ -122,6 +122,7 @@ public:
 private:
     friend void webserver_httpd_monitor_note_request(httpd_req_t* req);
     friend void webserver_httpd_monitor_note_response(httpd_req_t* req, int status_code, const char* auth_status);
+    friend void webserver_httpd_monitor_note_progress(httpd_req_t* req);
 
     struct GuardedUriContext {
         esp_err_t (*handler)(httpd_req_t*) = nullptr;
@@ -490,6 +491,7 @@ private:
         std::atomic<uint32_t> auth_failures{0};
         std::atomic<uint64_t> last_request_ms{0};
         std::atomic<uint64_t> last_response_ms{0};
+        std::atomic<uint64_t> last_progress_ms{0};
         std::atomic<uint64_t> last_stall_ms{0};
         std::atomic<uint32_t> stall_count{0};
         std::atomic<uint8_t> watchdog_triggered{0};
@@ -507,6 +509,7 @@ private:
     static void httpdMonitorReset();
     static void httpdMonitorNoteRequest(httpd_req_t* req);
     static void httpdMonitorNoteResponse(httpd_req_t* req, int status_code, const char* auth_status);
+    static void httpdMonitorNoteProgress(httpd_req_t* req);
     static void httpdMonitorStart();
     static void httpdMonitorStop();
     static void httpdMonitorTimerCallback(void* arg);

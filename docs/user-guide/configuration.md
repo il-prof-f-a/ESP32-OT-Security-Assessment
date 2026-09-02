@@ -41,6 +41,15 @@ technical path displayed in each card makes the mapping to the JSON configuratio
 Main-task monitoring reads the `watchdog` section at boot. Saving it does **not** change
 that task's active subscription: restart the device to apply the saved settings to it.
 
+The public build default is only used when the device has no valid persisted configuration.
+Normally the effective values come from `/data/config/config.json`, so an existing device can
+legitimately use a timeout different from the repository default. `GET /api/config/watchdog`
+reports the saved value (`timeout_seconds`) separately from the boot-time value actually in use
+(`effective_timeout_seconds`, `effective_enabled`, and `requested_timeout_seconds_at_boot`),
+plus the recorded configuration source and storage backend. A value saved during the current
+session is pending until restart (`configuration_pending_restart: true`); it does not silently
+reconfigure the SDK watchdog.
+
 - `enabled`: enables Task Watchdog monitoring of the main application task. When false,
   that task is not subscribed and does not send watchdog heartbeats. Other subscribed
   tasks, the SDK interrupt watchdog, HTTP monitoring and PSRAM monitoring remain independent.

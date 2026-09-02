@@ -170,6 +170,16 @@ bool Logger::init_async(size_t ring_bytes) {
     return true;
 }
 
+size_t Logger::startupRingBytes() {
+#ifdef CONFIG_SPIRAM
+    // Startup loads many signatures before the serial writer can drain them.
+    // PSRAM-backed boards can absorb that burst without consuming DRAM.
+    return 64 * 1024;
+#else
+    return DEFAULT_RING_BYTES;
+#endif
+}
+
 void Logger::shutdown() {
     if (!g_logger) return;
     g_logger->stop();
@@ -196,8 +206,9 @@ void Logger::enqueue(const char* buf, size_t len) {
     if (!ring_ || !buf || !len) return;
     BaseType_t ok = xRingbufferSend(ring_, buf, len, 0 /* no wait */);
     if (!ok) {
-        static const char drop[] = "[log] ring full, dropped\n";
-        (void)xRingbufferSend(ring_, drop, sizeof(drop) - 1, 0);
+        // Never enqueue a diagnostic into an already-full ring: that was both
+        // misleading and recursive under sustained reporting traffic.
+        dropped_messages_.fetch_add(1, std::memory_order_relaxed);
     }
 }
 
@@ -215,6 +226,13 @@ void Logger::writerTaskLoop() {
         fflush(stdout);
 
         vRingbufferReturnItem(ring_, item);
+
+        const uint32_t dropped = dropped_messages_.exchange(0, std::memory_order_relaxed);
+        if (dropped > 0) {
+            std::fprintf(stdout, "[log] %lu message(s) dropped while the serial ring was full\n",
+                         static_cast<unsigned long>(dropped));
+            std::fflush(stdout);
+        }
     }
 }
 

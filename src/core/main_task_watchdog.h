@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <atomic>
 #include "esp_task_wdt.h"
 
 // Owned and called only by app_main. Configuration is applied at boot, while
@@ -13,6 +14,48 @@ public:
         // second stage at twice the timeout). Bound that conversion as well.
         constexpr uint32_t maximum = UINT32_MAX / 4000U;
         return seconds < 60U ? 60U : (seconds > maximum ? maximum : seconds);
+    }
+
+    // The configuration editor can save a new value while the device is
+    // running.  The SDK watchdog deliberately keeps using its boot-time
+    // configuration until restart, so expose an immutable runtime snapshot.
+    static void recordBootConfiguration(bool enabled,
+                                        uint32_t requested_timeout_seconds,
+                                        uint32_t effective_timeout_seconds,
+                                        bool panic_on_timeout,
+                                        bool monitor_idle_cores) {
+        boot_enabled_.store(enabled, std::memory_order_relaxed);
+        boot_requested_timeout_seconds_.store(requested_timeout_seconds,
+                                              std::memory_order_relaxed);
+        boot_effective_timeout_seconds_.store(effective_timeout_seconds,
+                                              std::memory_order_relaxed);
+        boot_panic_on_timeout_.store(panic_on_timeout, std::memory_order_relaxed);
+        boot_monitor_idle_cores_.store(monitor_idle_cores, std::memory_order_relaxed);
+        boot_configuration_recorded_.store(true, std::memory_order_release);
+    }
+
+    static bool hasBootConfiguration() {
+        return boot_configuration_recorded_.load(std::memory_order_acquire);
+    }
+
+    static bool bootEnabled() {
+        return boot_enabled_.load(std::memory_order_relaxed);
+    }
+
+    static uint32_t bootRequestedTimeoutSeconds() {
+        return boot_requested_timeout_seconds_.load(std::memory_order_relaxed);
+    }
+
+    static uint32_t bootEffectiveTimeoutSeconds() {
+        return boot_effective_timeout_seconds_.load(std::memory_order_relaxed);
+    }
+
+    static bool bootPanicOnTimeout() {
+        return boot_panic_on_timeout_.load(std::memory_order_relaxed);
+    }
+
+    static bool bootMonitorIdleCores() {
+        return boot_monitor_idle_cores_.load(std::memory_order_relaxed);
     }
 
     esp_err_t configure(const esp_task_wdt_config_t& config) {
@@ -93,4 +136,11 @@ private:
     bool configured_ = false;
     bool subscribed_ = false;
     uint32_t last_feed_attempt_ = 0;
+
+    inline static std::atomic<bool> boot_configuration_recorded_{false};
+    inline static std::atomic<bool> boot_enabled_{false};
+    inline static std::atomic<uint32_t> boot_requested_timeout_seconds_{0};
+    inline static std::atomic<uint32_t> boot_effective_timeout_seconds_{0};
+    inline static std::atomic<bool> boot_panic_on_timeout_{false};
+    inline static std::atomic<bool> boot_monitor_idle_cores_{false};
 };

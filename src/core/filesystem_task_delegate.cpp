@@ -890,6 +890,10 @@ bool FilesystemTaskDelegate::startPSRAMStreaming(const char* file_path,
     LOG_INFOF(TAG, "Sending PSRAM stream request for file: %s", safe_path);
     if (!sendRequest(req, 1000)) {  // Short timeout just to send the message
         LOG_ERROR(TAG, "Failed to send PSRAM streaming request");
+        // The producer will never see this request, so it cannot release the
+        // serialization token on our behalf.  Leaving it held made every
+        // later log download wait until its timeout.
+        xSemaphoreGive(streaming_semaphore_);
         return false;
     }
     LOG_INFO(TAG, "PSRAM stream request sent successfully");
@@ -1559,50 +1563,23 @@ uint32_t FilesystemTaskDelegate::getPendingOperations() const {
 // File I/O operations implementation
 
 bool FilesystemTaskDelegate::readFileSync(const std::string& file_path, psram_string& content, uint32_t timeout_ms) {
-    if (!initialized_ || !fileio_request_queue_ || !fileio_response_queue_) {
+    (void)timeout_ms;
+    if (!initialized_) {
         LOG_ERROR(TAG, "FilesystemTaskDelegate not properly initialized");
         return false;
     }
 
-    FileIORequest request = {};
-    request.request_id = generateRequestId();
-    request.operation = OperationType::FILE_READ;
-    strncpy(request.file_path, file_path.c_str(), sizeof(request.file_path) - 1);
-    request.psram_data = nullptr;
-    request.callback = nullptr;
-    request.timeout_ticks = pdMS_TO_TICKS(timeout_ms);
-
-    //log_deBUGF(TAG, "Sending file read request id=%u path=%s", request.request_id, file_path.c_str());
-
-    if (xQueueSend(fileio_request_queue_, &request, pdMS_TO_TICKS(1000)) != pdTRUE) {
-        LOG_ERRORF(TAG, "Failed to queue file read request for %s", file_path.c_str());
+    // FILE_READ used to ask the delegate worker (which has an internal-RAM
+    // stack) to construct a psram_string.  That operation was intentionally
+    // disabled and consequently made every non-empty persistent file fail.
+    // AsyncStorage owns the safe flash-I/O worker and returns the completed
+    // value to this caller after cache-sensitive I/O has finished.
+    const esp_err_t result = AsyncStorage::Global::readFile(file_path, content);
+    if (result != ESP_OK) {
+        LOG_WARNINGF(TAG, "File read failed for %s: %s", file_path.c_str(), esp_err_to_name(result));
         return false;
     }
-
-    // Wait for response
-    TickType_t start_ticks = xTaskGetTickCount();
-    TickType_t timeout_ticks = pdMS_TO_TICKS(timeout_ms);
-
-    while ((xTaskGetTickCount() - start_ticks) < timeout_ticks) {
-        FileIOResponse* response = nullptr;
-        if (xQueueReceive(fileio_response_queue_, &response, pdMS_TO_TICKS(100)) == pdTRUE && response) {
-            if (response->request_id == request.request_id) {
-                if (response->result == OperationResult::SUCCESS) {
-                    content = std::move(response->psram_content);
-                    delete response;
-                    return true;
-                } else {
-                    LOG_ERRORF(TAG, "File read failed id=%u result=%d", response->request_id, static_cast<int>(response->result));
-                    delete response;
-                    return false;
-                }
-            }
-            delete response;
-        }
-    }
-
-    LOG_ERRORF(TAG, "File read timeout for %s", file_path.c_str());
-    return false;
+    return true;
 }
 
 bool FilesystemTaskDelegate::writeFileSync(const std::string& file_path, const psram_string& content, uint32_t timeout_ms) {
@@ -1780,46 +1757,12 @@ bool FilesystemTaskDelegate::writeFileInternal(const std::string& file_path, con
 }
 
 bool FilesystemTaskDelegate::readFileInternal(const std::string& file_path, psram_string& content) {
-    //log_deBUGF(TAG, "Reading file %s", file_path.c_str());
-
-    FILE* f = fopen(file_path.c_str(), "rb");
-    if (!f) {
-        //log_deBUGF(TAG, "File not found: %s", file_path.c_str());
-        return false;
-    }
-
-    // Get file size
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    if (size < 0) {
-        LOG_ERRORF(TAG, "Failed to get file size: %s", file_path.c_str());
-        fclose(f);
-        return false;
-    }
-
-    if (size == 0) {
-        // Empty file is valid - but we CANNOT manipulate psram_string from this task
-        fclose(f);
-        LOG_ERRORF(TAG, "CRITICAL: Cannot clear psram_string from INTERNAL_RAM task");
-        return false;
-    }
-
-    // ⚠️ CRITICAL: This task has INTERNAL_RAM stack - CANNOT manipulate psram_string
-    // We must return RAW data and let the calling task handle PSRAM allocation
-
-    // This approach is fundamentally flawed - we need to restructure
-    // For now, log error and return false to prevent crash
-    LOG_ERRORF(TAG, "CRITICAL: Cannot allocate PSRAM from INTERNAL_RAM task");
-    fclose(f);
+    // Kept only for compatibility with the FILE_READ dispatcher.  New callers
+    // use readFileSync(), which delegates to AsyncStorage instead.
+    (void)file_path;
+    (void)content;
+    LOG_WARNING(TAG, "Deprecated FILE_READ request rejected; use readFileSync");
     return false;
-
-    // This unreachable code was left from old implementation
-    // All operations above return false, so this never executes
-
-    //log_deBUGF(TAG, "Successfully read file %s (size=%ld)", file_path.c_str(), size);
-    return true;
 }
 
 // ======================= STREAMING FILE ACCESS =======================

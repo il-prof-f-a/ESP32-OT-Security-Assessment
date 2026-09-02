@@ -65,6 +65,7 @@ public:
     // ASYNCHRONOUS mode (recommended)
     static bool init_async(size_t ring_bytes = 16 * 1024); // creates ring + writer task
     static void shutdown();                                // stops the writer and frees the ring
+    static size_t startupRingBytes();
 
     // SYNCHRONOUS mode (fallback, uses mutex around the write)
     static bool init_sync();
@@ -93,6 +94,7 @@ private:
     RingbufHandle_t ring_        = nullptr;
     TaskHandle_t    writer_task_ = nullptr;
     std::atomic<bool> running_{false};
+    std::atomic<uint32_t> dropped_messages_{0};
     ReportingEngine* reporting_engine_ = nullptr;
 
     // Dimensions/parameters
