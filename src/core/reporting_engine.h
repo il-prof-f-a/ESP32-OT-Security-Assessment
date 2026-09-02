@@ -306,6 +306,7 @@ public:
     ~ReportingEngine();
     bool initialize(class ConfigurationManager* cfg, class SecurityManager* security);
     void shutdown();
+    bool isRunning() const { return worker_ != nullptr && queue_ != nullptr; }
     void setChannel(const psram_string& name, const ChannelConfig& cfg, SenderFn&& sender);
     template<typename Callable, typename = std::enable_if_t<!std::is_same_v<std::decay_t<Callable>, SenderFn>>>
     void setChannel(const psram_string& name, const ChannelConfig& cfg, Callable&& callable) {

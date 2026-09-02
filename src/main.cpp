@@ -80,6 +80,7 @@ extern "C" {
 #include "web/web_server_task.h"    // for WebTaskArgs and web_server_task
 #include "core/audit_manager.h"
 #include "core/boot_services.h"
+#include "core/startup_status.h"
 #include "assessment/signature_detector.h"
 static const char* TAG = "MAIN";
 
@@ -545,7 +546,8 @@ extern "C" void app_main(void) {
     MemorySnapshot mem_before_reporting = MemoryMonitor::capture();
     ReportingEngine rep;
     startup_rollback.track(&rollback_reporting, &rep);
-    if (!rep.initialize(&cfg, &sec)) {
+    const bool reporting_initialized = rep.initialize(&cfg, &sec);
+    if (!reporting_initialized) {
         LOG_ERROR(TAG, "ReportingEngine initialization failed");
         rollback_startup("ReportingEngine initialization failure");
         return;
@@ -622,7 +624,8 @@ extern "C" void app_main(void) {
     // NetworkEngine may allocate ring/semaphore/task resources before
     // returning false, so track it before attempting initialization.
     startup_rollback.track(&rollback_network, &net);
-    if (!net.initialize(/*netif*/ nullptr, ring_cfg)) {
+    const bool network_initialized = net.initialize(/*netif*/ nullptr, ring_cfg);
+    if (!network_initialized) {
         LOG_ERROR(TAG, "NetworkEngine initialization failed - insufficient memory");
         MemoryMonitor::checkStatus("NetworkEngine Failed", true); // Critical check
         rollback_startup("NetworkEngine initialization failure");
@@ -637,7 +640,7 @@ extern "C" void app_main(void) {
     // Plugin manager: initialize and register built-in plugins conditionally
     MemorySnapshot mem_before_plugin_manager = MemoryMonitor::capture();
     static PluginManager pm;
-    pm.initialize(&cfg, &rep, &net, &sec);
+    const bool plugin_manager_initialized = pm.initialize(&cfg, &rep, &net, &sec);
     MemoryMonitor::logDelta("PluginManager::initialize", mem_before_plugin_manager);
 
     // Register plugins only if enabled in configuration
@@ -728,11 +731,12 @@ extern "C" void app_main(void) {
 	}
 
     static IntrusionDetectionGeneral ids;
+    bool ids_initialized = false;
 
     // Always initialize shared passive services, even when IDS starts disabled.
     {
         MemorySnapshot mem_before_ids = MemoryMonitor::capture();
-        ids.initialize(&cfg, &rep, &pm);
+        ids_initialized = ids.initialize(&cfg, &rep, &pm);
         LOG_INFO(TAG, "IDS initialization completed");
 
         // === CRITICAL MEMORY CHECKPOINT BEFORE WHITELIST LOADING ===
@@ -781,9 +785,10 @@ extern "C" void app_main(void) {
 
     // Vulnerability Scanner
     VulnerabilityScanner* scannerPtr = nullptr;
+    bool scanner_initialized = false;
     if (cfg.isFeatureEnabled("vuln_scanner", false)) {
         static VulnerabilityScanner scanner;
-        scanner.initialize(&pm, &rep, &cfg, &sec);
+        scanner_initialized = scanner.initialize(&pm, &rep, &cfg, &sec);
         scannerPtr = &scanner;
     } else {
         LOG_INFO(TAG, "VulnerabilityScanner disabled by configuration");
@@ -1007,7 +1012,7 @@ extern "C" void app_main(void) {
     // Early minimal WebServer bring-up to secure management UI before heavy modules
     LogFileManager* web_log_manager = ReportingConfig::getLogFileManager();
     static WebServer web; // single instance for whole runtime
-    web.initialize(&cfg, &rep, &logger,
+    const bool web_initialized = web.initialize(&cfg, &rep, &logger,
                  /*plugins*/ nullptr,
                  /*ids*/ nullptr,
                  &eth, &wifi,
@@ -1038,10 +1043,69 @@ extern "C" void app_main(void) {
         LOG_INFO(TAG, "Network running!");
     }
 
-    // Report system startup completion
-    rep.reportEvent(
-        PSRAMUtils::createPSRAMString("system_lifecycle"),
-        PSRAMUtils::createPSRAMString("{\"status\":\"fully_operational\",\"services\":[\"network_engine\",\"plugin_manager\",\"ids\",\"vulnerability_scanner\",\"web_server\",\"reporting_engine\"]}"));
+    // Report startup using observed service state rather than a static claim.
+    // Optional services explicitly disabled by configuration are represented as
+    // disabled; services waiting for an interface are starting, and failed
+    // workers/interfaces are never advertised as active.
+    const PassiveDetection::Flags passive_flags = cfg.getPassiveDetectionFlags();
+    const bool scanner_requested = cfg.isFeatureEnabled("vuln_scanner", false);
+    const bool web_waiting_for_interface =
+        management_controller.state() == ManagementInterfaceState::WAITING_FOR_INTERFACE;
+    StartupServiceStatus startup_services[] = {
+        {"network_engine", network_initialized ? StartupServiceState::Running : StartupServiceState::Failed,
+         true, network_initialized ? "initialized" : "initialization failed"},
+        {"plugin_manager", plugin_manager_initialized ? StartupServiceState::Running : StartupServiceState::Failed,
+         true, plugin_manager_initialized ? "initialized" : "initialization failed"},
+        {"ids", !passive_flags.ids_enabled ? StartupServiceState::Disabled
+             : (ids_initialized && ids.isActive() ? StartupServiceState::Running : StartupServiceState::Failed),
+         passive_flags.ids_enabled, !passive_flags.ids_enabled ? "disabled by configuration"
+             : (ids_initialized && ids.isActive() ? "worker active" : "worker failed to start")},
+        {"vulnerability_scanner", !scanner_requested ? StartupServiceState::Disabled
+             : (scanner_initialized && scannerPtr && scannerPtr->isRunning()
+                ? StartupServiceState::Running : StartupServiceState::Failed),
+         scanner_requested, !scanner_requested ? "disabled by configuration"
+             : (scanner_initialized && scannerPtr && scannerPtr->isRunning()
+                ? "worker active" : "initialization failed")},
+        {"web_server", !web_initialized ? StartupServiceState::Failed
+             : (web_started ? StartupServiceState::Running
+                : (web_waiting_for_interface ? StartupServiceState::Starting
+                                              : StartupServiceState::Failed)),
+         true, !web_initialized ? "initialization failed"
+             : (web_started ? "accepting connections"
+                : (web_waiting_for_interface ? "waiting for management interface"
+                                              : "server failed to start"))},
+        {"reporting_engine", reporting_initialized && rep.isRunning() ? StartupServiceState::Running
+             : StartupServiceState::Failed, true,
+         reporting_initialized && rep.isRunning() ? "worker active" : "initialization failed"},
+    };
+    const StartupStatusSnapshot startup_snapshot{
+        startup_services, sizeof(startup_services) / sizeof(startup_services[0])};
+    cJSON* startup_root = cJSON_CreateObject();
+    if (startup_root) {
+        cJSON_AddStringToObject(startup_root, "status", startupSnapshotGlobalState(startup_snapshot));
+        cJSON* active_services = cJSON_AddArrayToObject(startup_root, "services");
+        cJSON* service_status = cJSON_AddObjectToObject(startup_root, "service_status");
+        for (std::size_t i = 0; i < startup_snapshot.count; ++i) {
+            const StartupServiceStatus& service = startup_snapshot.services[i];
+            if (service.state == StartupServiceState::Running && active_services) {
+                cJSON_AddItemToArray(active_services, cJSON_CreateString(service.name));
+            }
+            if (service_status) {
+                cJSON* details = cJSON_AddObjectToObject(service_status, service.name);
+                if (!details) continue;
+                cJSON_AddStringToObject(details, "state", startupServiceStateName(service.state));
+                cJSON_AddBoolToObject(details, "requested", service.requested);
+                cJSON_AddStringToObject(details, "reason", service.reason ? service.reason : "");
+            }
+        }
+        char* startup_json = cJSON_PrintUnformatted(startup_root);
+        if (startup_json) {
+            rep.reportEvent(PSRAMUtils::createPSRAMString("system_lifecycle"),
+                            PSRAMUtils::createPSRAMString(startup_json));
+            free(startup_json);
+        }
+        cJSON_Delete(startup_root);
+    }
 
     // WATCHDOG REGISTRATION - Subscribe only when enabled; track the SDK result.
     const esp_err_t wdt_start_result = main_watchdog.start(wdt_cfg.enabled,
