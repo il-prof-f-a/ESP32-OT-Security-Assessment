@@ -6,11 +6,13 @@
   <title>IDS • Allowlist & Policy</title>
   <style>
  /* Baseline “GIUSTO” (coerente con protocols / scanner / reporting) */
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial; margin:1rem; background:#f6f6f6; color:#222}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial; margin:0; padding:1rem; background:#f6f6f6; color:#222}
 
 /* Layout / card */
-.container{max-width:1100px;margin:0 auto}
+.container{width:100%;max-width:none;margin:0 auto}
 .card{background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.06); padding:1rem; margin-bottom:1rem}
+.page-card{width:100%}
 .full-width{grid-column:1 / -1}
 
 /* Tipografia */
@@ -68,13 +70,13 @@ summary{cursor:pointer; color:#333}
   </style>
 </head>
 <body>
-<div class="card">
+<div class="card page-card">
 <h1>IDS • Allowlist & Policy <span id="dirtyMark" class="muted" style="margin-left:8px"></span></h1>
 <a href="/" class="btn nav-btn">← Dashboard</a>
 </div>
 
   <!-- IDS Modules Control -->
-  <section class="card" style="margin: 20px auto; max-width: 1100px;">
+  <section class="card page-card" style="margin: 1rem 0;">
     <div class="section-title"><span class="tag">IDS Modules</span></div>
     <div class="row" style="gap: 20px;">
       <div class="switch"><input id="idsEnabled" type="checkbox"/> <label for="idsEnabled">General IDS (Packet Analysis)</label></div>

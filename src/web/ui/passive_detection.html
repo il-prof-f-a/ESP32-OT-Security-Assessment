@@ -250,8 +250,26 @@
 
 
 *{box-sizing:border-box}
-body{font-family:system-ui;margin:1rem;background:#f6f6f6;color:#222}
-#passive-detection{max-width:1200px;margin:0 auto}
+body{font-family:system-ui;margin:0;padding:1rem;background:#f6f6f6;color:#222}
+/* The three public routes (/ids, /signatures and /network-presence) all serve
+   this consolidated document. Keep the shared shell and every panel fluid so
+   no route inherits an artificial centered max-width. */
+#passive-detection{width:100%;max-width:none;margin:0}
+#passive-detection main,
+#passive-detection .passive-panel,
+#passive-detection .passive-panel > .panel-controls{width:100%;max-width:none}
+#passive-detection .card{width:100%}
+#panel-ids,
+#panel-network-presence,
+#panel-signatures{margin:0;width:100%;max-width:none}
+#panel-ids .container,
+#panel-network-presence .container,
+#panel-signatures .container{width:100%;max-width:none;margin:0}
+#panel-ids .card[style*="max-width"],
+#panel-network-presence .card[style*="max-width"],
+#panel-signatures .card[style*="max-width"]{max-width:none!important;margin-left:0!important;margin-right:0!important}
+#panel-ids .grid,
+#panel-network-presence .grid{grid-template-columns:minmax(0,1fr);width:100%}
 .card{background:#fff;border:1px solid #ddd;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);padding:1rem;margin-bottom:1rem}
 h1{font-size:1.6rem;margin:0 0 1rem}
 h2{font-size:1.15rem;margin:0 0 .75rem}
@@ -289,7 +307,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 #passive-detection .card{overflow-x:auto}
 #panel-signatures .modal-content{padding:1rem}
 @media(max-width:760px){
-  body{margin:.6rem}
+  body{margin:0;padding:.6rem}
   h1{font-size:1.3rem}
   .module-toggles{flex-direction:column;gap:.75rem}
   .passive-tabs button{flex:1 1 auto}

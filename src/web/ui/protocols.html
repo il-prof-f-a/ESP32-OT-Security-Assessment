@@ -274,20 +274,6 @@ input{width:100%;padding:.4rem;border:1px solid #ccc;border-radius:4px}
   </div>
 </div>
 
-<div class="card" style="margin-top:2rem;border:2px solid #007;background:#f0f8ff">
-  <h2>💾 Save Configuration</h2>
-  <p>Saves the entire current configuration to NVS (non-volatile memory) to make it persistent across reboots.</p>
-  <div class="row">
-    <button class="btn" onclick="saveToNVS()" style="background:#28a745;font-weight:bold">💾 Save to NVS</button>
-    <button class="btn" onclick="loadCurrentConfig()" style="margin-left:.5rem">🔄 Show Current Config</button>
-  </div>
-  <div id="nvs-status" style="margin-top:1rem"></div>
-  <details style="margin-top:1rem">
-    <summary style="cursor:pointer;font-weight:600;color:#007">📋 Show current JSON configuration</summary>
-    <pre id="current-config" style="background:#f8f9fa;padding:1rem;border:1px solid #ddd;border-radius:4px;margin-top:.5rem;font-size:.8rem;max-height:300px;overflow-y:auto"></pre>
-  </details>
-</div>
-
 <script>
 // ---- Token di sessione: aggiunge Authorization a tutte le /api/* e propaga sid nei link .nav-btn
 (function() {

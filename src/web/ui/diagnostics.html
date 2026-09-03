@@ -5,12 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Network Diagnostics - ESP32 OT Security</title>
     <style>
-       /* Baseline “GIUSTO” */
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial; margin:1rem; background:#f6f6f6; color:#222}
-.container{max-width:1100px;margin:0 auto}
+       /* Shared full-width page shell */
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial; margin:0; padding:1rem; background:#f6f6f6; color:#222}
+.container{width:100%;max-width:none;margin:0 auto}
 
 /* Navbar */
-.navbar{display:flex; align-items:center; justify-content:space-between; margin:0 0 1rem 0; padding:0}
+.navbar{display:flex; align-items:center; justify-content:space-between; margin:0 0 1rem 0; padding:1rem; background:#fff; border:1px solid #ddd; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.08)}
 .nav-brand{font-weight:700;color:#111}
 .nav-btn{background:#06a; color:#fff; border:none; padding:.6rem 1rem; border-radius:8px; text-decoration:none; display:inline-block}
 .nav-btn:hover{background:#07b}
