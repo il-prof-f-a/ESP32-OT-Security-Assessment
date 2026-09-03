@@ -47,6 +47,7 @@ pre{background:#f8f9fa;padding:.5rem;border-radius:4px;overflow:auto;max-height:
 .status-running{background:#e8f5e8;color:#388e3c;animation:pulse 2s infinite}
 .status-completed{background:#f3e5f5;color:#7b1fa2}
 .status-error{background:#ffebee;color:#d32f2f}
+.selected-discovery-result{font-weight:700;outline:2px solid #7b1fa2;outline-offset:2px}
 .btn-sm{padding:.2rem .4rem;font-size:.8rem;margin-left:.5rem}
 #active_discoveries{max-height:300px;overflow-y:auto}
 .discovery-section{margin-bottom:.5rem}
@@ -392,6 +393,41 @@ let activeDiscoveries = new Map();
 let discoveryPollInterval = null;
 let discoveryPollBusy = false;
 let generalDiscoveryDefaults = { ports: [] };
+const completedDiscoveryResults = new Map();
+let selectedDiscoveryId = null;
+let lastDiscoveryList = [];
+
+function rememberDiscoveryResult(discovery){
+  if(!discovery || discovery.status !== 'completed' || !discovery.results) return false;
+  var resultsText = typeof discovery.results === 'object'
+    ? JSON.stringify(discovery.results, null, 2)
+    : String(discovery.results);
+  completedDiscoveryResults.set(discovery.id, resultsText);
+  return true;
+}
+
+function showDiscoveryResults(discoveryId){
+  if(!completedDiscoveryResults.has(discoveryId)){
+    status('No stored result is available for this discovery', true);
+    return;
+  }
+  selectedDiscoveryId = discoveryId;
+  var resultBox = document.getElementById('disc_result');
+  if(resultBox) resultBox.textContent = completedDiscoveryResults.get(discoveryId);
+  updateActiveDiscoveriesDisplay(lastDiscoveryList);
+}
+
+function rememberCompletedDiscoveryResults(discoveries){
+  var firstAvailableId = null;
+  (discoveries || []).forEach(function(discovery){
+    if(rememberDiscoveryResult(discovery) && !firstAvailableId){
+      firstAvailableId = discovery.id;
+    }
+  });
+  if(!selectedDiscoveryId && firstAvailableId){
+    showDiscoveryResults(firstAvailableId);
+  }
+}
 
 // Protocol discovery UX helpers
 let discProto = 'modbus';
@@ -665,17 +701,14 @@ async function pollDiscoveryStatus() {
     var response = await fetch('/api/discovery/list', { cache: 'no-store' });
     var data = await response.json();
 
-    updateActiveDiscoveriesDisplay(data.discoveries);
+    var discoveries = Array.isArray(data.discoveries) ? data.discoveries : [];
+    lastDiscoveryList = discoveries;
+    rememberCompletedDiscoveryResults(discoveries);
 
     // Check for completed discoveries
-    for (let discovery of data.discoveries) {
+    for (let discovery of discoveries) {
       if (discovery.status === 'completed' && activeDiscoveries.has(discovery.id)) {
-        // Show results
         if (discovery.results) {
-          var resultsText = typeof discovery.results === 'object'
-            ? JSON.stringify(discovery.results, null, 2)
-            : discovery.results;
-          document.getElementById('disc_result').textContent = resultsText;
           status('Discovery '+discovery.protocol+' completed successfully');
         }
         activeDiscoveries.delete(discovery.id);
@@ -684,6 +717,8 @@ async function pollDiscoveryStatus() {
         activeDiscoveries.delete(discovery.id);
       }
     }
+
+    updateActiveDiscoveriesDisplay(discoveries);
 
     // Stop polling if no active discoveries
     if (activeDiscoveries.size === 0) {
@@ -736,8 +771,13 @@ function updateActiveDiscoveriesDisplay(discoveries) {
       const statusClass = disc.status === 'completed' ? 'status-completed' : 'status-error';
       const duration = Math.round((disc.end_time_ms - disc.start_time_ms) / 1000);
       const modeInfo = disc.mode ? ` (${disc.mode})` : '';
-      html += `<div class="job-status ${statusClass}">
-        ${disc.protocol}${modeInfo} on ${disc.target} - ${disc.status} in ${duration}s
+      const hasStoredResult = disc.status === 'completed' && completedDiscoveryResults.has(disc.id);
+      const isSelected = disc.id === selectedDiscoveryId;
+      const resultAction = hasStoredResult
+        ? ` <button class="btn btn-sm" onclick="showDiscoveryResults('${disc.id}')">Show results</button>`
+        : '';
+      html += `<div class="job-status ${statusClass}${isSelected ? ' selected-discovery-result' : ''}">
+        ${disc.protocol}${modeInfo} on ${disc.target} - ${disc.status} in ${duration}s${resultAction}
       </div>`;
     }
   }
@@ -774,8 +814,12 @@ async function loadExistingDiscoveries(override) {
       data = await response.json();
     }
 
+    var discoveries = Array.isArray(data.discoveries) ? data.discoveries : [];
+    lastDiscoveryList = discoveries;
+    rememberCompletedDiscoveryResults(discoveries);
+
     // Check for any running discoveries and start polling
-    const runningDiscoveries = data.discoveries.filter(d => d.status === 'running');
+    const runningDiscoveries = discoveries.filter(d => d.status === 'running');
     if (runningDiscoveries.length > 0) {
       for (let disc of runningDiscoveries) {
         activeDiscoveries.set(disc.id, {
@@ -790,7 +834,7 @@ async function loadExistingDiscoveries(override) {
       }
     }
 
-    updateActiveDiscoveriesDisplay(data.discoveries);
+    updateActiveDiscoveriesDisplay(discoveries);
   } catch (e) {
     console.error('Failed to load existing discoveries:', e);
   }

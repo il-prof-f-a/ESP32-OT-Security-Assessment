@@ -137,6 +137,26 @@ class DashboardUiTests(unittest.TestCase):
         self.assertIn('id="status" class="status" role="status" aria-live="polite" hidden', discovery)
         self.assertIn('Results will appear below shortly.', discovery)
 
+    def test_scanner_job_name_is_prefilled_from_the_selected_protocol_but_remains_editable(self):
+        scanner = (PROJECT_ROOT / "src/web/ui/scanner.html").read_text(encoding="utf-8")
+
+        self.assertIn("prefillScannerJobName", scanner)
+        self.assertIn("jobName.readOnly = false", scanner)
+        self.assertIn("jobName.dataset.autoName", scanner)
+        self.assertIn("prefillScannerJobName(true)", scanner)
+
+    def test_discovery_history_keeps_each_completed_result_selectable(self):
+        discovery = (PROJECT_ROOT / "src/web/ui/discovery.html").read_text(encoding="utf-8")
+
+        for token in (
+            "completedDiscoveryResults",
+            "selectedDiscoveryId",
+            "showDiscoveryResults",
+            "Show results",
+            "selected-discovery-result",
+        ):
+            self.assertIn(token, discovery)
+
 
 if __name__ == "__main__":
     unittest.main()

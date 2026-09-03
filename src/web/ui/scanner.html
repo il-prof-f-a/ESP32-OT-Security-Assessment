@@ -1242,9 +1242,29 @@ status('Jobs loaded');
 
 function showCreateJob(){
 document.getElementById('create_job').style.display='block';
+prefillScannerJobName(true);
 }
 function hideCreateJob(){
 document.getElementById('create_job').style.display='none';
+}
+
+function selectedScannerJobProtocolName(){
+  var protocol = document.getElementById('job_protocol');
+  if(!protocol || protocol.selectedIndex < 0) return '';
+  var option = protocol.options[protocol.selectedIndex];
+  return option ? String(option.textContent || '').trim() : '';
+}
+
+function prefillScannerJobName(force){
+  var jobName = document.getElementById('job_name');
+  if(!jobName) return;
+  jobName.readOnly = false;
+  if(!force && jobName.dataset.autoName !== 'true' && jobName.value.trim()) return;
+
+  var protocolName = selectedScannerJobProtocolName();
+  if(!protocolName) return;
+  jobName.value = protocolName;
+  jobName.dataset.autoName = 'true';
 }
 
 // Protocol-specific vulnerability scan types. `def` controls selection by
@@ -1387,7 +1407,14 @@ function updateJobScanTypesUI(){
 
 document.addEventListener('DOMContentLoaded', function(){
   var protoEl = document.getElementById('job_protocol');
-  if(protoEl) protoEl.addEventListener('change', updateJobScanTypesUI);
+  var jobName = document.getElementById('job_name');
+  if(protoEl) protoEl.addEventListener('change', function(){
+    updateJobScanTypesUI();
+    prefillScannerJobName(false);
+  });
+  if(jobName) jobName.addEventListener('input', function(){
+    jobName.dataset.autoName = 'false';
+  });
   updateJobScanTypesUI();
 });
 
