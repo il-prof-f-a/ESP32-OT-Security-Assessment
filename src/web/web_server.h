@@ -225,6 +225,17 @@ private:
     static bool check_api_auth(httpd_req_t* req);
     static bool check_session(httpd_req_t* req);
 
+    // One volatile administrator session per device. The session is rotated
+    // on every successful login and expires after ten minutes of inactivity.
+    static constexpr uint64_t kSessionIdleTimeoutMs = 600000ULL;
+    static std::mutex session_mutex_;
+    static char active_session_token_[64];
+    static uint64_t active_session_last_activity_ms_;
+    static bool active_session_valid_;
+    static bool isActiveSessionToken(const char* token);
+    static void replaceActiveSession(const char* token, uint64_t now_ms);
+    static void invalidateActiveSession(const char* reason);
+
     // DEPRECATED: extractClientIP returns std::string in Internal RAM - causes leak!
     // Use extractClientIPToBuffer() instead (48 bytes thread_local - acceptable)
     static std::string extractClientIP(httpd_req_t* req);

@@ -155,6 +155,76 @@ static inline void free_cjson_str(char* s) {
 static bool read_body_psram(httpd_req_t* req, char** out_buf, size_t* out_len, size_t max_len = 32768);
 
 WebServer* WebServer::self_ = nullptr;
+std::mutex WebServer::session_mutex_;
+char WebServer::active_session_token_[64] = {0};
+uint64_t WebServer::active_session_last_activity_ms_ = 0;
+bool WebServer::active_session_valid_ = false;
+
+bool WebServer::isActiveSessionToken(const char* token) {
+    if (!token || token[0] == '\0') {
+        return false;
+    }
+
+    const uint64_t now_ms = esp_timer_get_time() / 1000ULL;
+    std::lock_guard<std::mutex> lock(session_mutex_);
+
+    if (!active_session_valid_) {
+        return false;
+    }
+
+    if (now_ms >= active_session_last_activity_ms_ &&
+        now_ms - active_session_last_activity_ms_ >= kSessionIdleTimeoutMs) {
+        std::memset(active_session_token_, 0, sizeof(active_session_token_));
+        active_session_last_activity_ms_ = 0;
+        active_session_valid_ = false;
+        return false;
+    }
+
+    const size_t token_len = std::strlen(token);
+    const size_t active_len = std::strlen(active_session_token_);
+    if (token_len != active_len || active_len == 0 || active_len >= sizeof(active_session_token_)) {
+        return false;
+    }
+
+    unsigned char difference = 0;
+    for (size_t i = 0; i < active_len; ++i) {
+        difference |= static_cast<unsigned char>(token[i]) ^
+                      static_cast<unsigned char>(active_session_token_[i]);
+    }
+    if (difference != 0) {
+        return false;
+    }
+
+    active_session_last_activity_ms_ = now_ms;
+    return true;
+}
+
+void WebServer::replaceActiveSession(const char* token, uint64_t now_ms) {
+    std::lock_guard<std::mutex> lock(session_mutex_);
+    std::memset(active_session_token_, 0, sizeof(active_session_token_));
+    if (!token || token[0] == '\0') {
+        active_session_last_activity_ms_ = 0;
+        active_session_valid_ = false;
+        return;
+    }
+
+    std::strncpy(active_session_token_, token, sizeof(active_session_token_) - 1);
+    active_session_token_[sizeof(active_session_token_) - 1] = '\0';
+    active_session_last_activity_ms_ = now_ms;
+    active_session_valid_ = true;
+}
+
+void WebServer::invalidateActiveSession(const char* reason) {
+    {
+        std::lock_guard<std::mutex> lock(session_mutex_);
+        std::memset(active_session_token_, 0, sizeof(active_session_token_));
+        active_session_last_activity_ms_ = 0;
+        active_session_valid_ = false;
+    }
+    if (reason && reason[0] != '\0') {
+        LOG_INFOF("SESSION", "Active session invalidated (%s)", reason);
+    }
+}
 
 void WebServer::setAllowedManagementAddress(uint32_t ipv4_network_order) {
     allowed_management_ipv4_.store(ipv4_network_order, std::memory_order_release);
@@ -3520,6 +3590,7 @@ bool WebServer::startOnInterface(uint16_t port, esp_netif_t* netif) {
 }
 
 void WebServer::shutdown() {
+    invalidateActiveSession("server_shutdown");
     httpdMonitorStop();
     if (http_) {
         httpd_stop(http_);
@@ -5388,27 +5459,6 @@ esp_err_t WebServer::h_report_endpoints_post(httpd_req_t* req) {
 
 #include <cstring>
 
-static bool isDevelopmentSessionToken(const char* token) {
-    if (!token) {
-        return false;
-    }
-    size_t len = strlen(token);
-    if (len < 16) {
-        return false;
-    }
-    if (strncmp(token, "sess_", 5) == 0) {
-        return true;
-    }
-    if (strncmp(token, "dev_", 4) == 0) {
-        return true;
-    }
-    if (strncmp(token, "temp_", 5) == 0) {
-        return true;
-    }
-    return false;
-}
-
-
 bool WebServer::check_session(httpd_req_t* req){
     if (!self_ || !self_->sec_) {
         LOG_ERROR("SESSION", "WebServer or SecurityManager not initialized");
@@ -5433,14 +5483,10 @@ bool WebServer::check_session(httpd_req_t* req){
         return false;
     }
 
-    // Simple token validation - check if it's a valid API key or use basic validation
+    // API keys and the single volatile web session are separate credentials.
     // MEMORY FIX: Use buffer-based version to avoid std::string temporary allocation
     const char* client_ip = extractClientIPToBuffer(req);
-    const bool is_dev_token = isDevelopmentSessionToken(sid);
-
-    // For now, use API key validation as session token validation
-    // In production, you might want a separate session token system
-    if (!is_dev_token && self_->sec_->verifyApiKey(sid)) {
+    if (self_->sec_->verifyApiKey(sid)) {
         LOG_INFOF("SESSION", "Session valid for token: %.*s***", 8, sid);
 
         // Log successful session access to security.log
@@ -5456,43 +5502,40 @@ bool WebServer::check_session(httpd_req_t* req){
                 (uint64_t)(esp_timer_get_time()/1000ULL));
         }
         return true;
-    } else {
-        // If not a valid API key, check if it's a temporary session token
-        // For simplicity, accept any token longer than 16 characters for development
-        if (is_dev_token || strlen(sid) >= 16) {
-            LOG_INFOF("SESSION", "Session valid (development mode) for token: %.*s***", 8, sid);
+    }
 
-            // Log successful development session access to security.log
-            if (g_reporting) {
-                char event_data[1024];
-                snprintf(event_data, sizeof(event_data),
-                         "{\"action\":\"session_access\",\"auth_type\":\"development_session\",\"client_ip\":\"%s\",\"endpoint\":\"%s\",\"session_preview\":\"%.*s***\"}",
-                         client_ip, req->uri, 8, sid);
-                g_reporting->reportLogMessage(
-                    PSRAMUtils::createPSRAMString("SECURITY"),
-                    PSRAMUtils::createPSRAMString("INFO"),
-                    PSRAMUtils::createPSRAMString(event_data),
-                    (uint64_t)(esp_timer_get_time()/1000ULL));
-            }
-            return true;
-        }
-
-        // Log failed session validation to security.log
+    if (isActiveSessionToken(sid)) {
+        LOG_INFOF("SESSION", "Session valid for token: %.*s***", 8, sid);
         if (g_reporting) {
             char event_data[1024];
             snprintf(event_data, sizeof(event_data),
-                     "{\"action\":\"session_failed\",\"client_ip\":\"%s\",\"endpoint\":\"%s\",\"session_preview\":\"%.*s***\",\"reason\":\"invalid_token\"}",
+                     "{\"action\":\"session_access\",\"auth_type\":\"session\",\"client_ip\":\"%s\",\"endpoint\":\"%s\",\"session_preview\":\"%.*s***\"}",
                      client_ip, req->uri, 8, sid);
             g_reporting->reportLogMessage(
                 PSRAMUtils::createPSRAMString("SECURITY"),
-                PSRAMUtils::createPSRAMString("WARNING"),
+                PSRAMUtils::createPSRAMString("INFO"),
                 PSRAMUtils::createPSRAMString(event_data),
                 (uint64_t)(esp_timer_get_time()/1000ULL));
         }
-
-        LOG_INFOF("SESSION", "Session validation failed for token: %.*s***, IP: %s", 8, sid, client_ip);
-        return false;
+        return true;
     }
+
+    // Log failed session validation to security.log. The token is never stored
+    // or emitted in full; the preview is retained for existing diagnostics.
+    if (g_reporting) {
+        char event_data[1024];
+        snprintf(event_data, sizeof(event_data),
+                 "{\"action\":\"session_failed\",\"client_ip\":\"%s\",\"endpoint\":\"%s\",\"session_preview\":\"%.*s***\",\"reason\":\"invalid_or_expired_token\"}",
+                 client_ip, req->uri, 8, sid);
+        g_reporting->reportLogMessage(
+            PSRAMUtils::createPSRAMString("SECURITY"),
+            PSRAMUtils::createPSRAMString("WARNING"),
+            PSRAMUtils::createPSRAMString(event_data),
+            (uint64_t)(esp_timer_get_time()/1000ULL));
+    }
+
+    LOG_INFOF("SESSION", "Session validation failed for token: %.*s***, IP: %s", 8, sid, client_ip);
+    return false;
 }
 
 
@@ -5587,6 +5630,10 @@ esp_err_t WebServer::h_login_post(httpd_req_t* req){
         return httpd_resp_send_500(req);
     }
 
+    // Rotate the single volatile session before sending the redirect. Any
+    // token issued by a previous login becomes invalid immediately.
+    replaceActiveSession(tok_buf, static_cast<uint64_t>(esp_timer_get_time() / 1000ULL));
+
     LOG_INFOF("SESSION", "Created session token for admin from IP %s: %.*s***",
               client_ip, 12, tok_buf);
 
@@ -5618,42 +5665,65 @@ esp_err_t WebServer::h_login_post(httpd_req_t* req){
 }
 
 esp_err_t WebServer::h_logout(httpd_req_t* req){
-    if (self_) {
-        // Extract session token and invalidate it
-        std::string token;
-        size_t n = httpd_req_get_hdr_value_len(req, "Cookie");
-        if (n > 0 && n < 1024) {
-            char *buf = (char*)heap_caps_malloc(n + 1, MALLOC_CAP_SPIRAM);
-            if (buf) {
-                if (httpd_req_get_hdr_value_str(req, "Cookie", buf, n + 1) == ESP_OK) {
-                    std::string c(buf);
-                    size_t pos = c.find("SID=");
-                    if (pos != std::string::npos) {
-                        size_t start = pos + 4;
-                        size_t end = c.find(';', start);
-                        if (end == std::string::npos) end = c.length();
-                        token = c.substr(start, end - start);
+    char token[128] = {0};
+    bool supplied = false;
 
-                        // Token-based logout (token invalidated by redirecting to login)
-                        LOG_INFO("SESSION", "Logged out session");
+    // The public UI transports the session as ?sid=TOKEN. Prefer it so a
+    // stale token cannot accidentally target a newer cookie-based session.
+    char query[256] = {0};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK &&
+        httpd_query_key_value(query, "sid", token, sizeof(token)) == ESP_OK &&
+        token[0] != '\0') {
+        supplied = true;
+    }
 
-                        // Log logout to security.log
-                        const char* client_ip = extractClientIPToBuffer(req);
-                        if (g_reporting) {
-                            char event_data[512];
-                            snprintf(event_data, sizeof(event_data),
-                                     "{\"action\":\"logout\",\"user\":\"admin\",\"client_ip\":\"%s\",\"endpoint\":\"/logout\",\"session_id\":\"%.*s***\"}",
-                                     client_ip, 12, token.c_str());
-                            report_event_ps(g_reporting, "security", event_data);
-                        }
+    // Compatibility fallback for API clients that use Authorization: Bearer.
+    if (!supplied) {
+        char auth[256] = {0};
+        const size_t auth_len = httpd_req_get_hdr_value_len(req, "Authorization");
+        if (auth_len > 7 && auth_len < sizeof(auth) &&
+            httpd_req_get_hdr_value_str(req, "Authorization", auth, sizeof(auth)) == ESP_OK &&
+            std::strncmp(auth, "Bearer ", 7) == 0) {
+            std::strncpy(token, auth + 7, sizeof(token) - 1);
+            token[sizeof(token) - 1] = '\0';
+            supplied = token[0] != '\0';
+        }
+    }
 
-                        // AUDIT: Log logout event
-                        AuditManager::getInstance().logSecurityEvent("logout", "admin", client_ip, "User logged out from web interface");
-                    }
+    // Preserve support for the legacy SID cookie emitted by external clients.
+    if (!supplied) {
+        char cookie[256] = {0};
+        const size_t cookie_len = httpd_req_get_hdr_value_len(req, "Cookie");
+        if (cookie_len > 0 && cookie_len < sizeof(cookie) &&
+            httpd_req_get_hdr_value_str(req, "Cookie", cookie, sizeof(cookie)) == ESP_OK) {
+            const char* sid = std::strstr(cookie, "SID=");
+            if (sid) {
+                sid += 4;
+                size_t i = 0;
+                while (sid[i] != '\0' && sid[i] != ';' && i + 1 < sizeof(token)) {
+                    token[i] = sid[i];
+                    ++i;
                 }
-                heap_caps_free(buf);
+                token[i] = '\0';
+                supplied = token[0] != '\0';
             }
         }
+    }
+
+    const char* client_ip = extractClientIPToBuffer(req);
+    if (supplied && isActiveSessionToken(token)) {
+        invalidateActiveSession("logout");
+        LOG_INFO("SESSION", "Logged out active session");
+        if (g_reporting) {
+            char event_data[512];
+            snprintf(event_data, sizeof(event_data),
+                     "{\"action\":\"logout\",\"user\":\"admin\",\"client_ip\":\"%s\",\"endpoint\":\"/logout\",\"session_id\":\"%.*s***\"}",
+                     client_ip, 12, token);
+            report_event_ps(g_reporting, "security", event_data);
+        }
+        AuditManager::getInstance().logSecurityEvent("logout", "admin", client_ip, "User logged out from web interface");
+    } else if (supplied) {
+        LOG_INFO("SESSION", "Logout ignored for stale or invalid session");
     }
 
     // Clear cookie by setting Max-Age=0 (compatible with HTTP)
@@ -5705,10 +5775,8 @@ bool WebServer::check_api_auth(httpd_req_t* req){
     if (self_ && self_->sec_) {
         // OPTIMIZATION: Use buffer-based IP extraction (48 bytes stack vs ~64 bytes heap)
         const char* client_ip = extractClientIPToBuffer(req);
-        const bool is_dev_token = isDevelopmentSessionToken(token);
-
         // First try as API key
-        if (!is_dev_token && self_->sec_->verifyApiKey(token)) {
+        if (self_->sec_->verifyApiKey(token)) {
             // Log successful API key access to security.log
             if (g_reporting) {
                 char event_data[1024];
@@ -5726,9 +5794,8 @@ bool WebServer::check_api_auth(httpd_req_t* req){
             return true;
         }
 
-        //TODO: remove after development
-        // Then try as session token (simple validation for development)
-        if (is_dev_token || strlen(token) >= 16) {
+        // Then validate the single active volatile session token.
+        if (isActiveSessionToken(token)) {
             // Log successful session access to security.log
             if (g_reporting) {
                 char event_data[1024];
