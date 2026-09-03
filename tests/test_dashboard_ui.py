@@ -144,6 +144,14 @@ class DashboardUiTests(unittest.TestCase):
         self.assertIn("jobName.readOnly = false", scanner)
         self.assertIn("jobName.dataset.autoName", scanner)
         self.assertIn("prefillScannerJobName(true)", scanner)
+        self.assertIn("jobName.value = protocolName + ' scan'", scanner)
+
+    def test_scanner_jobs_render_protocol_names_instead_of_numeric_ids(self):
+        scanner = (PROJECT_ROOT / "src/web/ui/scanner.html").read_text(encoding="utf-8")
+
+        self.assertIn("getProtocolName(job.protocol)", scanner)
+        self.assertIn("1: 'Modbus TCP'", scanner)
+        self.assertIn("5: 'PROFINET'", scanner)
 
     def test_discovery_history_keeps_each_completed_result_selectable(self):
         discovery = (PROJECT_ROOT / "src/web/ui/discovery.html").read_text(encoding="utf-8")

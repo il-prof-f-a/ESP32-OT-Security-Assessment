@@ -1234,7 +1234,7 @@ var tbody=document.querySelector('#jobs_table tbody');
 tbody.innerHTML='';
 jobs.forEach(job=>{
 var row=tbody.insertRow();
-row.innerHTML='<td>'+job.id+'</td><td>'+job.name+'</td><td>'+job.protocol+'</td><td>'+job.target+'</td><td>'+(job.enabled?'✅':'❌')+'</td><td><button class="btn" onclick="runJob('+job.id+')">Run</button> <button class="btn" onclick="viewJobResult('+job.id+')">View Result</button> <button class="btn danger" onclick="deleteJob('+job.id+')">Delete</button></td>';
+row.innerHTML='<td>'+job.id+'</td><td>'+job.name+'</td><td>'+getProtocolName(job.protocol)+'</td><td>'+job.target+'</td><td>'+(job.enabled?'✅':'❌')+'</td><td><button class="btn" onclick="runJob('+job.id+')">Run</button> <button class="btn" onclick="viewJobResult('+job.id+')">View Result</button> <button class="btn danger" onclick="deleteJob('+job.id+')">Delete</button></td>';
 });
 status('Jobs loaded');
 }catch(e){status('Error loading jobs: '+e.message,true);}
@@ -1263,7 +1263,7 @@ function prefillScannerJobName(force){
 
   var protocolName = selectedScannerJobProtocolName();
   if(!protocolName) return;
-  jobName.value = protocolName;
+  jobName.value = protocolName + ' scan';
   jobName.dataset.autoName = 'true';
 }
 
@@ -1520,7 +1520,10 @@ function getProtocolName(protocolId) {
         4: 'EtherNet/IP',
         5: 'PROFINET'
     };
-    return protocols[protocolId] || 'Unknown';
+    const numericId = Number(protocolId);
+    if (Number.isInteger(numericId) && protocols[numericId]) return protocols[numericId];
+    const rawName = String(protocolId == null ? '' : protocolId).trim();
+    return rawName || 'Unknown';
 }
 
 function startAutoRefresh() {
