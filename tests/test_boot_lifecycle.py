@@ -47,9 +47,10 @@ class BootLifecycleTests(unittest.TestCase):
 
     def test_app_main_routes_failures_through_rollback(self):
         source = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
-        self.assertIn("BootRollback startup_rollback", source)
+        self.assertIn("BootSequence startup_sequence", source)
         self.assertIn("rollback_startup", source)
-        self.assertIn("startup_rollback.track", source)
+        self.assertIn("startup_sequence.trackCleanup", source)
+        self.assertIn("startup_sequence.abort()", source)
         self.assertNotIn("return; // Stop initialization", source)
         self.assertIn("rollback_network", source)
         self.assertIn("network->shutdown", source)

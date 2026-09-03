@@ -79,7 +79,7 @@ extern "C" {
 #include "core/task_alloc_helpers.h" // contains create_task_core1_psram(...) and STACK_WORDS_FROM_BYTES
 #include "web/web_server_task.h"    // for WebTaskArgs and web_server_task
 #include "core/audit_manager.h"
-#include "core/boot_services.h"
+#include "core/boot_sequence.h"
 #include "core/startup_status.h"
 #include "assessment/signature_detector.h"
 static const char* TAG = "MAIN";
@@ -195,11 +195,15 @@ static void rollback_time_manager(void*) {
     TimeManager::clearWiFiAutoSync();
 }
 
+static std::uint32_t boot_sequence_clock(void*) {
+    return static_cast<std::uint32_t>(esp_timer_get_time() / 1000ULL);
+}
+
 // Memory monitoring and early warning system
 
 
 extern "C" void app_main(void) {
-    BootRollback startup_rollback;
+    BootSequence startup_sequence(&boot_sequence_clock);
     bool littlefs_rollback_mounted = false;
 
     // Construct the single logger object before init_async.  The previous
@@ -211,11 +215,11 @@ extern "C" void app_main(void) {
         std::printf("[MAIN] Logger initialization failed; aborting startup\n");
         return;
     }
-    startup_rollback.track(&rollback_logger, &logger);
+    startup_sequence.trackCleanup(&rollback_logger, &logger);
 
     auto rollback_startup = [&](const char* reason) {
         LOG_ERRORF(TAG, "Startup aborted: %s; rolling back initialized services", reason);
-        startup_rollback.rollback();
+        startup_sequence.abort();
     };
 
     // Ensure JSON strings/trees are allocated in PSRAM to save DRAM
@@ -285,10 +289,10 @@ extern "C" void app_main(void) {
     }
     ESP_ERROR_CHECK(err);
     LOG_INFO(TAG, "NVS flash initialized successfully");
-    startup_rollback.track(&rollback_nvs, nullptr);
+    startup_sequence.trackCleanup(&rollback_nvs, nullptr);
     // Registered early so LittleFS is unmounted only after the filesystem and
     // reporting services have released all references to it.
-    startup_rollback.track(&rollback_littlefs, &littlefs_rollback_mounted);
+    startup_sequence.trackCleanup(&rollback_littlefs, &littlefs_rollback_mounted);
 
     // SECOND: Pre-initialization memory safety checks for AsyncStorage
     size_t pre_async_internal_free = TaskConfig::getRealInternalRAMFree();
@@ -336,8 +340,9 @@ extern "C" void app_main(void) {
 
     // Register before the call: the engine can allocate a queue before a later
     // task creation fails and the rollback must reclaim that partial state.
-    startup_rollback.track(&rollback_async_storage, nullptr);
-    if (!AsyncStorage::Global::initialize()) {
+    startup_sequence.trackCleanup(&rollback_async_storage, nullptr);
+    const bool async_storage_initialized = AsyncStorage::Global::initialize();
+    if (!startup_sequence.recordRequired("async_storage", async_storage_initialized)) {
         LOG_ERROR(TAG, "AsyncStorage engine initialization failed");
         rollback_startup("AsyncStorage initialization failure");
         return;
@@ -348,8 +353,9 @@ extern "C" void app_main(void) {
 
     // Initialize FilesystemTaskDelegate for PSRAM stack safety
     MemorySnapshot mem_before_fs_delegate = MemoryMonitor::capture();
-    startup_rollback.track(&rollback_filesystem_delegate, nullptr);
-    if (!FilesystemTaskDelegate::getInstance().initialize()) {
+    startup_sequence.trackCleanup(&rollback_filesystem_delegate, nullptr);
+    const bool filesystem_delegate_initialized = FilesystemTaskDelegate::getInstance().initialize();
+    if (!startup_sequence.recordRequired("filesystem_delegate", filesystem_delegate_initialized)) {
         LOG_ERROR(TAG, "FilesystemTaskDelegate initialization failed");
         rollback_startup("filesystem delegate initialization failure");
         return;
@@ -359,7 +365,7 @@ extern "C" void app_main(void) {
 
     // THIRD: Enable NVS override (now that NVS is real and ready)
     nvs_override_enable();
-    startup_rollback.track(&rollback_nvs_override, nullptr);
+    startup_sequence.trackCleanup(&rollback_nvs_override, nullptr);
     LOG_INFO(TAG, "NVS override enabled - all NVS operations route through AsyncStorage");
 
     {
@@ -514,7 +520,7 @@ extern "C" void app_main(void) {
 
     // WATCHDOG CONFIGURATION - Now that config is loaded, configure watchdog
     MainTaskWatchdog main_watchdog;
-    startup_rollback.track(&rollback_watchdog, &main_watchdog);
+    startup_sequence.trackCleanup(&rollback_watchdog, &main_watchdog);
     WatchdogConfig wdt_cfg = cfg.getWatchdogConfig();
     // Keep the boot snapshot: saving config must not stop feeding a subscribed task.
     const uint32_t configured_timeout = wdt_cfg.timeout_seconds;
@@ -563,9 +569,9 @@ extern "C" void app_main(void) {
     // Reporting
     MemorySnapshot mem_before_reporting = MemoryMonitor::capture();
     ReportingEngine rep;
-    startup_rollback.track(&rollback_reporting, &rep);
+    startup_sequence.trackCleanup(&rollback_reporting, &rep);
     const bool reporting_initialized = rep.initialize(&cfg, &sec);
-    if (!reporting_initialized) {
+    if (!startup_sequence.recordRequired("reporting_engine", reporting_initialized)) {
         LOG_ERROR(TAG, "ReportingEngine initialization failed");
         rollback_startup("ReportingEngine initialization failure");
         return;
@@ -591,7 +597,7 @@ extern "C" void app_main(void) {
     // Connect logging system to ReportingEngine for VERBOSE channels
     if (g_logger) {
         g_logger->setReportingEngine(&rep);
-        startup_rollback.track(&rollback_logger_reporting, g_logger);
+        startup_sequence.trackCleanup(&rollback_logger_reporting, g_logger);
         LOG_INFO(TAG, "Logging system connected to ReportingEngine for VERBOSE channels");
     }
     MemorySnapshot mem_before_reporting_endpoints = MemoryMonitor::capture();
@@ -603,7 +609,7 @@ extern "C" void app_main(void) {
     LOG_INFO(TAG, "AuditManager initialized with ReportingEngine");
 
     // Initialize PSRAM Telemetry with monitoring and watchdog
-    startup_rollback.track(&rollback_psram_telemetry, nullptr);
+    startup_sequence.trackCleanup(&rollback_psram_telemetry, nullptr);
     if (PSRAMTelemetry::getInstance().initialize(60000)) {  // Update every 60s
         PSRAMTelemetry::getInstance().enableWatchdog(15000);  // Alert if DRAM < 15KB
         PSRAMTelemetry::getInstance().logMetrics("Startup");
@@ -625,9 +631,9 @@ extern "C" void app_main(void) {
     static EthL2Adapter l2;
     static WiFiManager wifi(&cfg);  // Dependency injection
     TimeManager::configureWiFiAutoSync(&cfg, &wifi);
-    startup_rollback.track(&rollback_time_manager, nullptr);
-    startup_rollback.track(&rollback_wifi, &wifi);
-    startup_rollback.track(&rollback_ethernet, &eth);
+    startup_sequence.trackCleanup(&rollback_time_manager, nullptr);
+    startup_sequence.trackCleanup(&rollback_wifi, &wifi);
+    startup_sequence.trackCleanup(&rollback_ethernet, &eth);
 
 
     static NetworkEngine net;
@@ -641,9 +647,9 @@ extern "C" void app_main(void) {
     MemorySnapshot mem_before_net = MemoryMonitor::capture();
     // NetworkEngine may allocate ring/semaphore/task resources before
     // returning false, so track it before attempting initialization.
-    startup_rollback.track(&rollback_network, &net);
+    startup_sequence.trackCleanup(&rollback_network, &net);
     const bool network_initialized = net.initialize(/*netif*/ nullptr, ring_cfg);
-    if (!network_initialized) {
+    if (!startup_sequence.recordRequired("network_engine", network_initialized)) {
         LOG_ERROR(TAG, "NetworkEngine initialization failed - insufficient memory");
         MemoryMonitor::checkStatus("NetworkEngine Failed", true); // Critical check
         rollback_startup("NetworkEngine initialization failure");
