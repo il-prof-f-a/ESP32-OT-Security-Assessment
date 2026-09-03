@@ -1230,7 +1230,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
 
         size_t batch_end = std::min(batch_start + BATCH_SIZE, ips_to_scan.size());
 
-        LOG_INFOF(TAG_MB, "?? Processing batch %zu-%zu of %zu IPs",
+        LOG_INFOF(TAG_MB, "📇 Processing batch %zu-%zu of %zu IPs",
                   batch_start + 1, batch_end, ips_to_scan.size());
 
         size_t i = batch_start;
@@ -1267,7 +1267,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
                 if (bound_ip_str[0]) cJSON_AddStringToObject(ev, "bound_local_ip", bound_ip_str);
                 char* js = cJSON_PrintUnformatted(ev);
                 if (js) {
-                    LOG_INFOF(TAG_MB, "?? Sending progress event for host %d/%d", hosts_scanned, (int)ips_to_scan.size());
+                    LOG_INFOF(TAG_MB, "📇 Sending progress event for host %d/%d", hosts_scanned, (int)ips_to_scan.size());
                     psram_string type = PSRAMUtils::createPSRAMString("modbus_discovery_progress");
                     psram_string payload = PSRAMUtils::createPSRAMString(js);
                     rep_->reportEvent(type, payload);
@@ -1285,7 +1285,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
             }
 
             // ? TCP PRESCAN POSITIVE = DEVICE ALIVE!
-            LOG_INFOF(TAG_MB, "?? DEVICE DISCOVERED: %s - TCP prescan successful (port %d open)", ip.c_str(), port);
+            LOG_INFOF(TAG_MB, "📇 DEVICE DISCOVERED: %s - TCP prescan successful (port %d open)", ip.c_str(), port);
 
             // Create device entry immediately - will be enriched if Modbus tests succeed
             cJSON* device_entry = cJSON_CreateObject();
@@ -1421,7 +1421,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
                     bool mei_exception = (resp.size() >= 8) && ((resp[7] & 0x80) == 0x80);
                     if (mei_exception) {
                         uint8_t exception_code = (resp.size() >= 9) ? resp[8] : 0;
-                        LOG_INFOF(TAG_MB, "?? MODBUS DEVICE ALIVE: %s unit %u - MEI exception response (code=0x%02X), server is responding!",
+                        LOG_INFOF(TAG_MB, "📇 MODBUS DEVICE ALIVE: %s unit %u - MEI exception response (code=0x%02X), server is responding!",
                                  ip.c_str(), (unsigned)unit, exception_code);
                         if (std::find(discovered_units.begin(), discovered_units.end(), (int)unit) == discovered_units.end()) {
                             discovered_units.push_back((int)unit);
@@ -1434,7 +1434,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
                     host_mei_responded = true;
 
                     // ? VALID MEI RESPONSE = MODBUS DEVICE ALIVE!
-                    LOG_INFOF(TAG_MB, "?? MODBUS DEVICE ALIVE: %s unit %u - MEI Read Device ID successful (level=%u, objects=%zu)!",
+                    LOG_INFOF(TAG_MB, "📇 MODBUS DEVICE ALIVE: %s unit %u - MEI Read Device ID successful (level=%u, objects=%zu)!",
                              ip.c_str(), (unsigned)unit, (unsigned)level, kvs.size());
 
                     // Signals that there is at least ONE usable unit
@@ -1459,23 +1459,23 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
             if (tryReportSlaveId(sock, tid++, unit, per_host_timeout_ms, request_retries, slave_raw) && slave_id_raw.empty()) {
                 slave_id_raw = slave_raw;
                 // ? VALID REPORT SLAVE ID RESPONSE = MODBUS DEVICE ALIVE!
-                LOG_INFOF(TAG_MB, "?? MODBUS DEVICE ALIVE: %s unit %u - Report Slave ID successful (data_len=%zu)!",
+                LOG_INFOF(TAG_MB, "📇 MODBUS DEVICE ALIVE: %s unit %u - Report Slave ID successful (data_len=%zu)!",
                          ip.c_str(), (unsigned)unit, slave_raw.length());
             }
         }
 
         // 3.5) Standard Modbus Tests: Read Coils and Read Holding Registers for discovered units
-        LOG_WARNINGF(TAG_MB, "?? HEAVY_LOG: Starting standard Read Coils/Holding Registers tests for %s", ip.c_str());
+        LOG_WARNINGF(TAG_MB, "📚 HEAVY_LOG: Starting standard Read Coils/Holding Registers tests for %s", ip.c_str());
         for (uint8_t unit : units_to_try) {
             // Test Read Coils (FC=0x01) - address 0, quantity 2 (covers both 0-based and 1-based addressing)
             auto coils_req = makeReadCoilsReq(tid++, unit, 0, 2);
             psram_vector<uint8_t> coils_resp;
-            LOG_WARNINGF(TAG_MB, "?? HEAVY_LOG: Testing Read Coils (0-1) for %s unit %u", ip.c_str(), (unsigned)unit);
+            LOG_WARNINGF(TAG_MB, "📚 HEAVY_LOG: Testing Read Coils (0-1) for %s unit %u", ip.c_str(), (unsigned)unit);
             if (sendRequestWithRetry(sock, coils_req, coils_resp, per_host_timeout_ms, request_retries)) {
                 bool coils_exception = (coils_resp.size() >= 8) && ((coils_resp[7] & 0x80) == 0x80);
                 if (coils_exception) {
                     uint8_t exception_code = (coils_resp.size() >= 9) ? coils_resp[8] : 0;
-                    LOG_INFOF(TAG_MB, "?? MODBUS DEVICE ALIVE: %s unit %u - Read Coils (0-1) exception response (code=0x%02X), server is responding!",
+                    LOG_INFOF(TAG_MB, "📇 MODBUS DEVICE ALIVE: %s unit %u - Read Coils (0-1) exception response (code=0x%02X), server is responding!",
                              ip.c_str(), (unsigned)unit, exception_code);
                 } else if (coils_resp.size() >= 9) { // 7 MBAP + 1 FC + 1 byte_count + 1 data_byte (2 coils)
                     uint8_t coil_data = (coils_resp.size() >= 10) ? coils_resp[9] : 0;
@@ -1487,25 +1487,25 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
                         reading_data.successful_coils_unit = (int)unit;
                     }
 
-                    LOG_INFOF(TAG_MB, "?? MODBUS DEVICE ALIVE: %s unit %u - Read Coils (0-1) successful! Data=0x%02X (coil0=%d, coil1=%d)",
+                    LOG_INFOF(TAG_MB, "📇 MODBUS DEVICE ALIVE: %s unit %u - Read Coils (0-1) successful! Data=0x%02X (coil0=%d, coil1=%d)",
                              ip.c_str(), (unsigned)unit, coil_data, (coil_data & 0x01) ? 1 : 0, (coil_data & 0x02) ? 1 : 0);
                 }
                 // Add to discovered units if not already present
                 if (std::find(discovered_units.begin(), discovered_units.end(), (int)unit) == discovered_units.end()) {
                     discovered_units.push_back((int)unit);
-                    LOG_INFOF(TAG_MB, "?? Added unit %u to discovered_units via Read Coils test", (unsigned)unit);
+                    LOG_INFOF(TAG_MB, "📇 Added unit %u to discovered_units via Read Coils test", (unsigned)unit);
                 }
             }
 
             // Test Read Holding Registers (FC=0x03) - address 0, quantity 2 (covers both 0-based and 1-based addressing)
             auto holding_req = makeReadHoldingRegistersReq(tid++, unit, 0, 2);
             psram_vector<uint8_t> holding_resp;
-            LOG_WARNINGF(TAG_MB, "?? HEAVY_LOG: Testing Read Holding Registers (0-1) for %s unit %u", ip.c_str(), (unsigned)unit);
+            LOG_WARNINGF(TAG_MB, "📚 HEAVY_LOG: Testing Read Holding Registers (0-1) for %s unit %u", ip.c_str(), (unsigned)unit);
             if (sendRequestWithRetry(sock, holding_req, holding_resp, per_host_timeout_ms, request_retries)) {
                 bool holding_exception = (holding_resp.size() >= 8) && ((holding_resp[7] & 0x80) == 0x80);
                 if (holding_exception) {
                     uint8_t exception_code = (holding_resp.size() >= 9) ? holding_resp[8] : 0;
-                    LOG_INFOF(TAG_MB, "?? MODBUS DEVICE ALIVE: %s unit %u - Read Holding Registers (0-1) exception response (code=0x%02X), server is responding!",
+                    LOG_INFOF(TAG_MB, "📇 MODBUS DEVICE ALIVE: %s unit %u - Read Holding Registers (0-1) exception response (code=0x%02X), server is responding!",
                              ip.c_str(), (unsigned)unit, exception_code);
                 } else if (holding_resp.size() >= 13) { // 7 MBAP + 1 FC + 1 byte_count + 4 register_data (2 registers)
                     uint16_t reg0 = (holding_resp.size() >= 11) ? ((uint16_t)holding_resp[9] << 8) | holding_resp[10] : 0;
@@ -1519,17 +1519,17 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
                         reading_data.successful_holding_unit = (int)unit;
                     }
 
-                    LOG_INFOF(TAG_MB, "?? MODBUS DEVICE ALIVE: %s unit %u - Read Holding Registers (0-1) successful! Reg0=%u, Reg1=%u",
+                    LOG_INFOF(TAG_MB, "📇 MODBUS DEVICE ALIVE: %s unit %u - Read Holding Registers (0-1) successful! Reg0=%u, Reg1=%u",
                              ip.c_str(), (unsigned)unit, reg0, reg1);
                 }
                 // Add to discovered units if not already present
                 if (std::find(discovered_units.begin(), discovered_units.end(), (int)unit) == discovered_units.end()) {
                     discovered_units.push_back((int)unit);
-                    LOG_INFOF(TAG_MB, "?? Added unit %u to discovered_units via Read Holding Registers test", (unsigned)unit);
+                    LOG_INFOF(TAG_MB, "📇 Added unit %u to discovered_units via Read Holding Registers test", (unsigned)unit);
                 }
             }
         }
-        LOG_WARNINGF(TAG_MB, "?? HEAVY_LOG: Completed standard Read tests for %s - discovered_units now has %zu units", ip.c_str(), discovered_units.size());
+        LOG_WARNINGF(TAG_MB, "📚 HEAVY_LOG: Completed standard Read tests for %s - discovered_units now has %zu units", ip.c_str(), discovered_units.size());
 
         // 4) (Optional) UnitID 1..247 enumeration for gateways (brief, with short timeouts)
         psram_vector<int> gateway_units;
@@ -1543,13 +1543,13 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
                 }
                 if (resp.size() >= 8 && ((resp[7] & 0x80) == 0x80)) {
                     uint8_t exception_code = (resp.size() >= 9) ? resp[8] : 0;
-                    LOG_INFOF(TAG_MB, "?? MODBUS DEVICE ALIVE: %s gateway unit %u - MEI exception response (code=0x%02X), server is responding!",
+                    LOG_INFOF(TAG_MB, "📇 MODBUS DEVICE ALIVE: %s gateway unit %u - MEI exception response (code=0x%02X), server is responding!",
                              ip.c_str(), u, exception_code);
                     gateway_units.push_back(u);
                     continue;
                 }
                 if (resp.size() >= 9 && resp[7] == 0x2B && resp[8] == 0x0E) {
-                    LOG_INFOF(TAG_MB, "?? MODBUS DEVICE ALIVE: %s gateway unit %u - MEI Read Device ID successful!",
+                    LOG_INFOF(TAG_MB, "📇 MODBUS DEVICE ALIVE: %s gateway unit %u - MEI Read Device ID successful!",
                              ip.c_str(), u);
                     gateway_units.push_back(u);
                 }
@@ -1572,7 +1572,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
                 if (coil_exception || r.size() >= 9) {
                     if (coil_exception) {
                         uint8_t exception_code = (r.size() >= 9) ? r[8] : 0;
-                        LOG_INFOF(TAG_MB, "?? MODBUS DEVICE ALIVE: %s unit %u - Fallback Read Coils (0-1) exception response (code=0x%02X), server is responding!",
+                        LOG_INFOF(TAG_MB, "📇 MODBUS DEVICE ALIVE: %s unit %u - Fallback Read Coils (0-1) exception response (code=0x%02X), server is responding!",
                                  ip.c_str(), uid, exception_code);
                     } else {
                         uint8_t coil_data = (r.size() >= 10) ? r[9] : 0;
@@ -1584,7 +1584,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
                             reading_data.successful_coils_unit = uid;
                         }
 
-                        LOG_INFOF(TAG_MB, "?? MODBUS DEVICE ALIVE: %s unit %u - Fallback Read Coils (0-1) successful! Data=0x%02X (coil0=%d, coil1=%d)",
+                        LOG_INFOF(TAG_MB, "📇 MODBUS DEVICE ALIVE: %s unit %u - Fallback Read Coils (0-1) successful! Data=0x%02X (coil0=%d, coil1=%d)",
                                  ip.c_str(), uid, coil_data, (coil_data & 0x01) ? 1 : 0, (coil_data & 0x02) ? 1 : 0);
                     }
                     if (std::find(discovered_units.begin(), discovered_units.end(), uid) == discovered_units.end()) {
@@ -1669,7 +1669,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
             cJSON* reading_data_json = cJSON_CreateObject();
             cJSON_AddItemToObject(device_entry, "reading_data", reading_data_json);
 
-            LOG_INFOF(TAG_MB, "?? %s: TCP responsive but no Modbus responses - still a discovered device!", ip.c_str());
+            LOG_INFOF(TAG_MB, "📇 %s: TCP responsive but no Modbus responses - still a discovered device!", ip.c_str());
         }
 
         // Small delay between individual hosts within batch
@@ -1685,7 +1685,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
 
             // Force garbage collection and socket cleanup
             size_t free_heap = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-            LOG_INFOF(TAG_MB, "?? Memory status: %u bytes free internal RAM, continuing batch %zu/%zu",
+            LOG_INFOF(TAG_MB, "📇 Memory status: %u bytes free internal RAM, continuing batch %zu/%zu",
                       (unsigned)free_heap, (batch_start/BATCH_SIZE) + 2, (ips_to_scan.size() + BATCH_SIZE - 1) / BATCH_SIZE);
         }
     }
@@ -1728,7 +1728,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
     if (json) free(json);
     // Also notify progress channel with completed event
     if (rep_) {
-        LOG_INFOF(TAG_MB, "?? Sending final discovery completion event (WDT reset)");
+        LOG_INFOF(TAG_MB, "📇 Sending final discovery completion event (WDT reset)");
         cJSON* ev = cJSON_CreateObject();
         cJSON_AddStringToObject(ev, "event", "completed");
         cJSON_AddStringToObject(ev, "target", target_network.c_str());
@@ -1855,7 +1855,7 @@ bool ModbusTCPPlugin::isWriteFunction(uint8_t func) const {
 // ======== Fuzzing Methods (consolidated from ModbusFuzzTarget) ========
 
 bool ModbusTCPPlugin::generateSeedCorpus(const FuzzJob& job, std::vector<FuzzTestCase>& out) {
-    LOG_INFOF(TAG_MB, "?? MODBUS FUZZER: Generating seed corpus for job %lu, profile: %s",
+    LOG_INFOF(TAG_MB, "📇 MODBUS FUZZER: Generating seed corpus for job %lu, profile: %s",
              (unsigned long)job.id, job.profile.empty() ? "default" : job.profile.c_str());
 
     // Check if specialized attack profile is requested
