@@ -55,26 +55,15 @@ void AnomalyDetectionEngine::analyzePacket(const PacketAnomalyFeatures& features
 }
 
 void AnomalyDetectionEngine::analyzeFlow(const FlowAnomalyFeatures& features,
-                                         ProtocolBaselineManager& baseline,
+                                         ProtocolBaselineManager& /*baseline*/,
                                          psram_vector<AnomalyDetection>& out) const {
     if (features.endpoint_ip.empty()) {
         return;
     }
 
-    // Baseline detection
-    psram_vector<AnomalyDetection> baseline_findings;
-    baseline.detectAnomalies(features.endpoint_ip,
-                             features.packets_per_second,
-                             features.error_rate,
-                             features.last_operation,
-                             features.state,
-                             features.peer_ip,
-                             baseline_findings);
-    for (auto& finding : baseline_findings) {
-        out.push_back(finding);
-    }
-
-    appendStateViolation(features, out);
+    // Baseline comparison already occurs in analyzePacket() for the same packet.
+    // Keep this path exclusively for flow-aggregate findings, otherwise the same
+    // endpoint/type condition is emitted once as a packet and once as a flow.
     appendMalformedFlowAnomaly(features, out);
     appendFloodingIndicators(features, out);
     appendSequenceAnomaly(features, out);

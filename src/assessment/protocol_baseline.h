@@ -282,6 +282,13 @@ public:
 
 private:
     ProtocolBaseline baseline_;
+    psram_map<psram_string, uint64_t> last_anomaly_emit_ms_;
+
+    // Repeat suppression is runtime-only: a persistent condition is reported
+    // once immediately, then at most once per cooldown interval.
+    bool shouldEmitAnomaly(const psram_string& endpoint_ip,
+                           AnomalyType type,
+                           uint64_t now_ms);
 
     // Helper for computing the operation sequence hash
     uint32_t hashOperationSequence(const psram_vector<psram_string>& ops) const;

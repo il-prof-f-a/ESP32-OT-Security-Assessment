@@ -10,6 +10,7 @@ extern "C" {
 }
 
 static const char* TAG = "BaselineMgr";
+static constexpr uint64_t kAnomalyRepeatCooldownMs = 60000;
 
 // Helper for anomaly type names
 static const char* getAnomalyTypeName(AnomalyType type) {
@@ -34,6 +35,8 @@ static const char* getAnomalyTypeName(AnomalyType type) {
 }
 
 ProtocolBaselineManager::ProtocolBaselineManager() {
+    PSRAMAllocator<char> alloc;
+    last_anomaly_emit_ms_ = psram_map<psram_string, uint64_t>(alloc);
 }
 
 bool ProtocolBaselineManager::initialize(ProtocolType protocol) {
@@ -425,6 +428,13 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
     }
 
     uint64_t now_ms = esp_timer_get_time() / 1000;
+    auto appendIfFresh = [&](const AnomalyDetection& anomaly) {
+        if (!shouldEmitAnomaly(endpoint_ip, anomaly.type, now_ms)) {
+            return;
+        }
+        anomalies.push_back(anomaly);
+        detected++;
+    };
 
     // 1. Anomaly: Unusual traffic rate
     if (ep.avg_pps > 0) {
@@ -445,8 +455,7 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
             anomaly.evidence = psram_string(evidence, alloc);
             anomaly.timestamp_ms = now_ms;
 
-            anomalies.push_back(anomaly);
-            detected++;
+            appendIfFresh(anomaly);
         } else if (current_pps < threshold_low && current_pps > 0.1f) {
             // Rate too low could indicate DoS or device compromise
             AnomalyDetection anomaly;
@@ -462,8 +471,7 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
             anomaly.evidence = psram_string(evidence, alloc);
             anomaly.timestamp_ms = now_ms;
 
-            anomalies.push_back(anomaly);
-            detected++;
+            appendIfFresh(anomaly);
         }
     }
 
@@ -482,8 +490,7 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
         anomaly.evidence = psram_string(evidence, alloc);
         anomaly.timestamp_ms = now_ms;
 
-        anomalies.push_back(anomaly);
-        detected++;
+        appendIfFresh(anomaly);
     }
 
     // 3. Anomaly: WRITE operation from unauthorized device
@@ -497,8 +504,7 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
         anomaly.evidence = psram_string("endpoint has never performed write operations in baseline", alloc);
         anomaly.timestamp_ms = now_ms;
 
-        anomalies.push_back(anomaly);
-        detected++;
+        appendIfFresh(anomaly);
     }
 
     // 4. Anomaly: Unknown peer
@@ -529,8 +535,7 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
                 anomaly.evidence = psram_string(evidence, alloc);
                 anomaly.timestamp_ms = now_ms;
 
-                anomalies.push_back(anomaly);
-                detected++;
+                appendIfFresh(anomaly);
             }
         }
     }
@@ -551,8 +556,7 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
             anomaly.evidence = psram_string(evidence, alloc);
             anomaly.timestamp_ms = now_ms;
 
-            anomalies.push_back(anomaly);
-            detected++;
+            appendIfFresh(anomaly);
         }
     }
 
@@ -562,6 +566,27 @@ uint32_t ProtocolBaselineManager::detectAnomalies(const psram_string& endpoint_i
     }
 
     return detected;
+}
+
+bool ProtocolBaselineManager::shouldEmitAnomaly(const psram_string& endpoint_ip,
+                                                AnomalyType type,
+                                                uint64_t now_ms) {
+    PSRAMAllocator<char> alloc;
+    char key_buffer[96];
+    snprintf(key_buffer, sizeof(key_buffer), "%s|%s",
+             PSRAMUtils::fromPSRAMString(endpoint_ip).c_str(),
+             getAnomalyTypeName(type));
+    psram_string key(key_buffer, alloc);
+
+    auto existing = last_anomaly_emit_ms_.find(key);
+    if (existing != last_anomaly_emit_ms_.end() &&
+        now_ms >= existing->second &&
+        now_ms - existing->second < kAnomalyRepeatCooldownMs) {
+        return false;
+    }
+
+    last_anomaly_emit_ms_[key] = now_ms;
+    return true;
 }
 
 bool ProtocolBaselineManager::isLearning(const psram_string& endpoint_ip) const {
@@ -585,6 +610,7 @@ void ProtocolBaselineManager::resetBaseline() {
     baseline_.endpoints.clear();
     baseline_.normal_state_transitions.clear();
     baseline_.operation_sequences.clear();
+    last_anomaly_emit_ms_.clear();
     baseline_.total_flows = 0;
     baseline_.total_packets = 0;
 
