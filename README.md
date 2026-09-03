@@ -3,7 +3,7 @@
 [![CI](https://github.com/il-prof-f-a/ESP32-OT-Security-Assessment/actions/workflows/host-tests.yml/badge.svg)](https://github.com/il-prof-f-a/ESP32-OT-Security-Assessment/actions/workflows/host-tests.yml)
 [![Release](https://github.com/il-prof-f-a/ESP32-OT-Security-Assessment/actions/workflows/release.yml/badge.svg)](https://github.com/il-prof-f-a/ESP32-OT-Security-Assessment/actions/workflows/release.yml)
 
-> **Latest release:** [v0.1.3 (prerelease) — firmware downloads, manifests and checksums](https://github.com/il-prof-f-a/ESP32-OT-Security-Assessment/releases/tag/v0.1.3)
+> **Latest release:** [v0.1.5 (prerelease) — firmware downloads, manifests and checksums](https://github.com/il-prof-f-a/ESP32-OT-Security-Assessment/releases/tag/v0.1.5)
 
 Experimental ESP32 firmware for passive observation and authorized security assessment of operational-technology protocols. The project combines Ethernet/Wi-Fi connectivity, a management web interface, protocol discovery, passive IDS functions, controlled vulnerability checks and reporting for Modbus TCP, S7, PROFINET, OPC UA and EtherNet/IP.
 
