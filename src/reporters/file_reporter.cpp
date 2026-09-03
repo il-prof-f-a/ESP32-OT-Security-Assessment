@@ -71,6 +71,12 @@ static inline bool containsIgnoreCase(const std::string& haystack, const std::st
     return false;
 }
 
+// Keep diagnostics cheap and bounded: report the first failures, powers of two,
+// and every 64th failure thereafter.  The payload itself is never logged.
+static inline bool should_log_append_failure(uint32_t count) {
+    return count <= 4 || (count != 0 && (count & (count - 1U)) == 0U) || (count % 64U) == 0U;
+}
+
 std::string FileReporter::determineLogFile(const psram_string& payload) {
     if (multi_mode_) {
         return determineLogFileMulti(payload);
@@ -207,7 +213,16 @@ bool FileReporter::append(const psram_string& payload){
     PSRAMUtils::ScopedBuffer payload_buf(total_len);
     char* ps_buf = payload_buf.get();
     if (!ps_buf) {
-        LOG_ERROR("FileReporter", "Failed to allocate PSRAM buffer for log append");
+        const uint32_t failure_count = ++append_failure_count_;
+        if (should_log_append_failure(failure_count)) {
+            LOG_ERRORF("FileReporter",
+                       "File append failed: path=%s stage=psram_alloc payload_bytes=%u failure_count=%u free_psram=%u largest_psram=%u",
+                       target_file.c_str(),
+                       (unsigned)payload.size(),
+                       (unsigned)failure_count,
+                       (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+                       (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
+        }
         return false;
     }
 
@@ -217,6 +232,21 @@ bool FileReporter::append(const psram_string& payload){
     ps_buf[payload_len] = '\n';
 
     esp_err_t err = AsyncStorage::Global::appendFileRaw(target_file, ps_buf, total_len);
+
+    if (err != ESP_OK) {
+        const uint32_t failure_count = ++append_failure_count_;
+        if (should_log_append_failure(failure_count)) {
+            LOG_ERRORF("FileReporter",
+                       "File append failed: path=%s stage=appendFileRaw payload_bytes=%u failure_count=%u err=%d(%s) free_psram=%u largest_psram=%u",
+                       target_file.c_str(),
+                       (unsigned)payload.size(),
+                       (unsigned)failure_count,
+                       (int)err,
+                       esp_err_to_name(err),
+                       (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+                       (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
+        }
+    }
 
     // Special case: duplicate SESSION tag into network.log as well (only for plain logs)
     if (err == ESP_OK && (payload.empty() || payload.front() != '{')) {

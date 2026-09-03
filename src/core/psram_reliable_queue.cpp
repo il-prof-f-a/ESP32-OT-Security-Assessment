@@ -162,9 +162,12 @@ uint32_t PSRAMReliableQueue::flush(
                     (it->attempts % 64U) == 0U;
                 if (should_log) {
                     LOG_WARNINGF(TAG,
-                                 "Event delivery failed: channel=%s retry_in=%ums attempt=%u id=%s",
+                                 "Event delivery failed: channel=%s retry_in=%ums attempt=%u id=%s event_bytes=%u queue=%u/%u",
                                  it->channel.c_str(), backoff_ms, it->attempts,
-                                 it->id.c_str());
+                                 it->id.c_str(),
+                                 (unsigned)it->payload.size(),
+                                 (unsigned)events_.size(),
+                                 (unsigned)cfg_.max_items);
                 }
                 ++it;
             }

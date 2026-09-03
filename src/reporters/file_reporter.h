@@ -35,6 +35,9 @@ private:
     FileConfigMap multi_configs_;  // Multi-file configurations
     mutable std::mutex mtx_;
     bool multi_mode_ = false;
+    // Cumulative append failures are sampled in diagnostics so a persistent
+    // filesystem outage cannot flood the serial monitor.
+    uint32_t append_failure_count_ = 0;
 
     bool rotate_if_needed();
 
