@@ -416,14 +416,30 @@ bool ReportingEngine::trySend(const psram_string& ch, const psram_string& payloa
     return false;
 }
 
+QueueDeliveryResult ReportingEngine::tryDeliverQueuedEvent(const QueuedEvent& event) {
+    // A channel can be registered later in the boot sequence (notably email
+    // after the network becomes available) or after a live configuration save.
+    // Hold durable records in that state without treating it as a transport
+    // failure.  They remain available for the next configured sender.
+    auto it = chans_.find(event.channel);
+    if (it == chans_.end() || !it->second.cfg.enabled ||
+        (!it->second.send && !it->second.send_raw)) {
+        return QueueDeliveryResult::DEFERRED;
+    }
+
+    return trySend(event.channel, event.payload)
+        ? QueueDeliveryResult::DELIVERED
+        : QueueDeliveryResult::RETRY;
+}
+
 uint32_t ReportingEngine::flushNow() {
     if (!queue_) return 0;
     uint64_t now = (uint64_t)(esp_timer_get_time()/1000ULL);
 
     // Cleanup moved to workerLoop() with separate timing to avoid delegate spam
 
-    return queue_->flush(now, [&](const QueuedEvent& ev)->bool{
-        return trySend(ev.channel, ev.payload);
+    return queue_->flush(now, [&](const QueuedEvent& ev)->QueueDeliveryResult{
+        return tryDeliverQueuedEvent(ev);
     });
 }
 

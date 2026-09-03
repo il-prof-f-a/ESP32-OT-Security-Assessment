@@ -2,12 +2,17 @@
 #include <cstring>
 
 bool WebhookReporter::init(const WebhookConfig& c){
+    std::lock_guard<std::mutex> lk(mtx_);
     cfg_ = c; return true;
 }
 
 bool WebhookReporter::post(const std::string& payload){
+    return post(payload.data(), payload.size());
+}
+
+bool WebhookReporter::post(const char* payload, size_t length){
     std::lock_guard<std::mutex> lk(mtx_);
-    if (cfg_.url.empty()) return false;
+    if (cfg_.url.empty() || (!payload && length > 0)) return false;
     esp_http_client_config_t cc = {};
     cc.url = cfg_.url.c_str();
     cc.timeout_ms = cfg_.timeout_ms;
@@ -26,7 +31,12 @@ bool WebhookReporter::post(const std::string& payload){
             esp_http_client_set_header(h, k.c_str(), v.c_str());
         }
     }
-    esp_http_client_set_post_field(h, payload.c_str(), (int)payload.size());
+    for (const auto& header : cfg_.headers) {
+        if (!header.first.empty()) {
+            esp_http_client_set_header(h, header.first.c_str(), header.second.c_str());
+        }
+    }
+    esp_http_client_set_post_field(h, payload, (int)length);
     esp_err_t e = esp_http_client_perform(h);
     int status = esp_http_client_get_status_code(h);
     esp_http_client_cleanup(h);

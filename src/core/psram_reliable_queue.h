@@ -65,7 +65,7 @@ public:
     bool enqueue_psram(const psram_string& channel, const psram_string& payload);
 
     // Process queue and execute send function for ready events
-    uint32_t flush(uint64_t now_ms, const std::function<bool(const QueuedEvent&)>& send_fn);
+    uint32_t flush(uint64_t now_ms, const std::function<QueueDeliveryResult(const QueuedEvent&)>& send_fn);
 
     // Get current queue size
     uint32_t size() const;

@@ -5,6 +5,7 @@
 #include "../reporters/file_reporter.h"
 #include "../reporters/mqtt_reporter.h"
 #include "../reporters/email_reporter.h"
+#include "../reporters/webhook_reporter.h"
 
 #include <string>
 #include <vector>
@@ -20,6 +21,7 @@ namespace ReportingConfig {
 namespace {
     LogFileManager log_file_manager_instance;
     FileReporter file_reporter_instance;
+    WebhookReporter webhook_reporter_instance;
     bool log_file_manager_ready = false;
     bool email_reporter_registered = false;
 }
@@ -487,29 +489,45 @@ void registerNetworkEndpoints(ConfigurationManager* cfg, ReportingEngine* rep) {
             // Parse filters
             ReportingEngine::populateChannelFiltersFromJSON(webhook, webhook_cfg);
 
-            // Parse webhook configuration
-            std::string webhook_url;
-            int timeout_ms = 5000;
+            // Parse webhook configuration.  A real WebhookReporter already
+            // exists in the project; using it here prevents every enabled
+            // webhook event from becoming a permanent PSRAM retry.
+            WebhookConfig webhook_config;
+            webhook_config.content_type = "application/json";
 
             cJSON* config_obj = cJSON_GetObjectItem(webhook, "configuration");
             if (config_obj && cJSON_IsObject(config_obj)) {
                 cJSON* url = cJSON_GetObjectItem(config_obj, "url");
-                if (url && cJSON_IsString(url)) webhook_url = url->valuestring;
+                if (url && cJSON_IsString(url)) webhook_config.url = url->valuestring;
 
                 cJSON* timeout = cJSON_GetObjectItem(config_obj, "timeout_ms");
-                if (timeout && cJSON_IsNumber(timeout)) timeout_ms = timeout->valueint;
+                if (timeout && cJSON_IsNumber(timeout)) webhook_config.timeout_ms = timeout->valueint;
+
+                cJSON* headers = cJSON_GetObjectItem(config_obj, "headers");
+                if (headers && cJSON_IsObject(headers)) {
+                    cJSON* item = nullptr;
+                    cJSON_ArrayForEach(item, headers) {
+                        if (item->string && cJSON_IsString(item) && item->valuestring) {
+                            webhook_config.headers.emplace_back(item->string, item->valuestring);
+                        }
+                    }
+                }
             }
 
-            // Create webhook sender function (placeholder - actual implementation would use HTTP client)
-            auto webhook_sender = [webhook_url, timeout_ms](const char* data, size_t len) -> bool {
-                // TODO: Implement actual HTTP client functionality
-                // For now, log what would be sent
-                LOG_INFOF("WEBHOOK", "Would POST to %s (timeout=%dms): %.*s", webhook_url.c_str(), timeout_ms, (int)len, data ? data : "");
-                return false; // Disabled for now - return true when implemented
-            };
-
-            rep->setChannelRaw(PSRAMUtils::createPSRAMString("webhook"), webhook_cfg, webhook_sender);
-            LOG_INFOF("REPORTING", "Webhook reporter configured: %s", webhook_url.c_str());
+            if (webhook_config.url.empty()) {
+                // No endpoint means no channel registration, no delivery and
+                // no queue retry.  This intentionally stays silent: an empty
+                // optional endpoint is a normal configuration state.
+            } else if (!webhook_reporter_instance.init(webhook_config)) {
+                LOG_ERROR("REPORTING", "Webhook reporter initialization failed");
+            } else {
+                WebhookReporter* webhook_reporter_ptr = &webhook_reporter_instance;
+                auto webhook_sender = [webhook_reporter_ptr](const char* data, size_t len) -> bool {
+                    return webhook_reporter_ptr->post(data, len);
+                };
+                rep->setChannelRaw(PSRAMUtils::createPSRAMString("webhook"), webhook_cfg, webhook_sender);
+                LOG_INFOF("REPORTING", "Webhook reporter configured: timeout=%dms", webhook_config.timeout_ms);
+            }
         }
     }
 

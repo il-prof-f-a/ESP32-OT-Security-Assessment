@@ -114,7 +114,9 @@ bool PSRAMReliableQueue::enqueue_psram(const psram_string& channel, const psram_
     return true;
 }
 
-uint32_t PSRAMReliableQueue::flush(uint64_t now_ms, const std::function<bool(const QueuedEvent&)>& send_fn) {
+uint32_t PSRAMReliableQueue::flush(
+    uint64_t now_ms,
+    const std::function<QueueDeliveryResult(const QueuedEvent&)>& send_fn) {
     if (!initialized_) {
         return 0;
     }
@@ -127,12 +129,21 @@ uint32_t PSRAMReliableQueue::flush(uint64_t now_ms, const std::function<bool(con
     auto it = events_.begin();
     while (it != events_.end()) {
         if (it->next_attempt_ms <= now_ms) {
-            bool success = send_fn(*it);
+            const QueueDeliveryResult result = send_fn(*it);
             processed++;
 
-            if (success) {
+            if (result == QueueDeliveryResult::DELIVERED) {
                 it = events_.erase(it);
                 queue_changed = true;
+            } else if (result == QueueDeliveryResult::DEFERRED) {
+                // The event is still durable, but the destination is not ready
+                // (for example Wi-Fi/email registration after boot).  Do not
+                // inflate the failure counter or emit a retry/deferred log.
+                // Fresh events are never queued for an absent channel; this
+                // branch only protects records persisted before a channel was
+                // disabled or before its network sender is ready.
+                it->next_attempt_ms = now_ms + cfg_.backoff_max_ms;
+                ++it;
             } else {
                 // Increment attempts and schedule retry with exponential backoff
                 it->attempts++;
@@ -143,8 +154,18 @@ uint32_t PSRAMReliableQueue::flush(uint64_t now_ms, const std::function<bool(con
                 );
                 it->next_attempt_ms = now_ms + backoff_ms;
 
-                LOG_DEBUGF(TAG, "Event failed, retry in %ums (attempt %u) id=%s",
-                           backoff_ms, it->attempts, it->id.c_str());
+                // Retry diagnostics identify the actual destination and are
+                // sampled after the first attempts to keep a persistent outage
+                // from obscuring the serial monitor.
+                const bool should_log = it->attempts <= 4 ||
+                    (it->attempts & (it->attempts - 1U)) == 0U ||
+                    (it->attempts % 64U) == 0U;
+                if (should_log) {
+                    LOG_WARNINGF(TAG,
+                                 "Event delivery failed: channel=%s retry_in=%ums attempt=%u id=%s",
+                                 it->channel.c_str(), backoff_ms, it->attempts,
+                                 it->id.c_str());
+                }
                 ++it;
             }
         } else {

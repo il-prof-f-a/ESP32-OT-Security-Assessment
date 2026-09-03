@@ -380,6 +380,7 @@ private:
     static void workerThunk(void* arg);
     void workerLoop();
     bool trySend(const psram_string& ch, const psram_string& payload);
+    QueueDeliveryResult tryDeliverQueuedEvent(const QueuedEvent& event);
     psram_string formatEventDirect(const psram_string& channel,
                                    const psram_string& type,
                                    const psram_string& raw_json,
