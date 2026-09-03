@@ -7709,7 +7709,7 @@ bool WebServer::startWithTask(uint16_t port, esp_netif_t* netif) {
     WebTaskArgs* args = new (raw_args) WebTaskArgs(this, port, netif, started);
 
     LOG_INFOF(TAG_WEB, "startWithTask: passing semaphore %p to task args=%p", (void*)started, (void*)args);
-    LOG_INFOF(TAG_WEB, "?? WebServer task allocation: %s",
+    LOG_INFOF(TAG_WEB, "🔗 WebServer task allocation: %s",
               (TaskConfig::NetworkTasks::WEB_SERVER_ALLOC == TaskConfig::AllocType::INTERNAL_RAM) ? "INTERNAL_RAM" : "PSRAM");
 
     TaskHandle_t hWeb = TaskConfig::createTask(
