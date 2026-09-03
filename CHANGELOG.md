@@ -4,6 +4,64 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.1.5] - 2026-09-03
+
+### Added
+
+- Retain selectable discovery results
+
+### Documentation
+
+- Document panic-path safety validation
+
+### Fixed
+
+- Honor main task monitoring configuration
+
+- Activate crash coredump inspection
+
+- Tolerate legacy coredump profiles
+
+- Make startup task lifetime safe
+
+- Include FreeRTOS headers in startup task contract
+
+- Respect configured management port
+
+- Preserve LittleFS data on boot
+
+- Remove dead L2 queue allocation
+
+- Rollback startup services on initialization failure
+
+- Report actual operational service states
+
+- Support startup without PSRAM
+
+- Harden log streaming and watchdog visibility
+
+- Align persistent P4 flash profile
+
+- Make startup sequence testable
+
+- Stop retrying unavailable endpoints
+
+- Unify full-width layouts across monitoring pages
+
+- Label scanner jobs with protocol names
+
+### Other
+
+- Update web_server.cpp
+
+- Update modbus_tcp_plugin.cpp
+
+- Update modbus_tcp_plugin.cpp
+
+- Enforce single volatile web session
+
+- Expose file delivery failure details
+
 ## [0.1.4] - 2026-08-31
 
 ### Added
@@ -61,6 +119,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Miscellaneous
 
 - Checkpoint before file rotation fix
+
+- Release v0.1.4
 
 ### Other
 
