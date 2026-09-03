@@ -859,7 +859,7 @@ static bool recvFully(int sock, psram_vector<uint8_t>& out, int timeout_ms) {
         // Check timeout within host MEI loop to avoid infinite loops
         uint64_t host_loop_elapsed_ms = (uint64_t)(esp_timer_get_time() / 1000ULL) - host_loop_start_ms;
         if (host_loop_elapsed_ms > 250) { // 250 milliseconds timeout for MEI loop
-            LOG_WARNINGF(TAG_MB, "? recvFully loop timeout after %llu ms",
+            LOG_WARNINGF(TAG_MB, "🚩 recvFully loop timeout after %llu ms",
                         host_loop_elapsed_ms);
             return false;
         }
@@ -944,7 +944,7 @@ static bool sendRequestWithRetry(int sock, const std::vector<uint8_t>& request, 
         // Check timeout within host MEI loop to avoid infinite loops
         uint64_t host_loop_elapsed_ms = (uint64_t)(esp_timer_get_time() / 1000ULL) - host_loop_start_ms;
         if (host_loop_elapsed_ms > 5000) { // 5 seconds timeout for MEI loop
-            LOG_WARNINGF(TAG_MB, "? sendRequestWithRetry loop timeout after %llu ms",
+            LOG_WARNINGF(TAG_MB, "🚩 sendRequestWithRetry loop timeout after %llu ms",
                         host_loop_elapsed_ms);
             return false;
         }
@@ -1222,7 +1222,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
         // Check global timeout - but preserve results already collected
         uint64_t elapsed_ms = (uint64_t)(esp_timer_get_time() / 1000ULL) - t0_ms;
         if (elapsed_ms > discovery_timeout_ms) {
-            LOG_WARNINGF(TAG_MB, "? Discovery timeout reached after %llu ms, stopping at batch %zu/%zu (preserving %d devices found)",
+            LOG_WARNINGF(TAG_MB, "🚩 Discovery timeout reached after %llu ms, stopping at batch %zu/%zu (preserving %d devices found)",
                         elapsed_ms, (batch_start / BATCH_SIZE) + 1, (ips_to_scan.size() + BATCH_SIZE - 1) / BATCH_SIZE, devices_found);
             break;
         }
@@ -1392,7 +1392,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
             // Check per-host timeout
             uint64_t host_elapsed_ms = (uint64_t)(esp_timer_get_time() / 1000ULL) - host_start_ms;
             if (host_elapsed_ms > 20000) { // 20 seconds timeout per host
-                LOG_WARNINGF(TAG_MB, "? Host timeout after %llu ms for %s, skipping to next host (preserving %d devices found)",
+                LOG_WARNINGF(TAG_MB, "🚩 Host timeout after %llu ms for %s, skipping to next host (preserving %d devices found)",
                             host_elapsed_ms, ip.c_str(), devices_found);
                 continue; // Skip to next unit
             }
@@ -1407,7 +1407,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
                     // Check timeout within host MEI loop to avoid infinite loops
                     uint64_t host_loop_elapsed_ms = (uint64_t)(esp_timer_get_time() / 1000ULL) - host_loop_start_ms;
                     if (host_loop_elapsed_ms > 20000) { // 20 seconds timeout for MEI loop
-                        LOG_WARNINGF(TAG_MB, "? MEI loop timeout after %llu ms for host %s unit %u, skipping to next",
+                        LOG_WARNINGF(TAG_MB, "🚩 MEI loop timeout after %llu ms for host %s unit %u, skipping to next",
                                     host_loop_elapsed_ms, ip.c_str(), (unsigned)unit);
                         break;
                     }
@@ -1658,7 +1658,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
             }
             cJSON_AddItemToObject(device_entry, "reading_data", reading_data_json);
 
-            LOG_INFOF(TAG_MB, "? Enhanced %s: vendor=%s product=%s rev=%s units=%zu gw_units=%zu | ReadData: coils=%s(0x%02X) holding=%s(%u,%u)",
+            LOG_INFOF(TAG_MB, "📇 Enhanced %s: vendor=%s product=%s rev=%s units=%zu gw_units=%zu | ReadData: coils=%s(0x%02X) holding=%s(%u,%u)",
                       ip.c_str(),
                       vendor.c_str(), product.c_str(), revision.c_str(),
                       discovered_units.size(), gateway_units.size(),
@@ -1680,7 +1680,7 @@ std::string ModbusTCPPlugin::legacyDoNetworkDiscovery(const std::string& target_
         // Delay between batches for memory recovery and socket pool cleanup
         if (batch_end < ips_to_scan.size()) {
 
-            LOG_INFOF(TAG_MB, "? Batch completed, waiting %dms for socket cleanup (WDT reset)...", BATCH_DELAY_MS);
+            LOG_INFOF(TAG_MB, "📇 Batch completed, waiting %dms for socket cleanup (WDT reset)...", BATCH_DELAY_MS);
             vTaskDelay(pdMS_TO_TICKS(BATCH_DELAY_MS));
 
             // Force garbage collection and socket cleanup
